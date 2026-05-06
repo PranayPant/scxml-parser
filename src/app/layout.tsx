@@ -38,6 +38,7 @@ export default function RootLayout({
     onReady:function(cb){q.ready.push(cb);},
     registerCommand:function(o){q.commands.push(o);},
     showFeedback:function(m,l){q.feedback.push([m,l]);},
+    setChannels:function(c){q.channels=c;},
     loadScxml:function(){},
     getScxml:function(){return'';}
   };

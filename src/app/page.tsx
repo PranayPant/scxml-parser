@@ -272,18 +272,20 @@ export default function Home() {
       getScxml: () => contentRef.current,
       registerCommand,
       showFeedback,
+      setChannels: (channels: string[]) => useHostAPIStore.getState().setChannels(channels),
     };
 
     if (stub?._q) {
       // Upgrade the stub object in place so any host reference already captured
       // (e.g. `var api = iframe.contentWindow.ScxmlEditorAPI` in a load handler)
       // automatically gets the real methods without needing to re-read the property.
-      const queue = stub._q as { ready: (() => void)[]; commands: any[]; feedback: [string, any][] };
+      const queue = stub._q as { ready: (() => void)[]; commands: any[]; feedback: [string, any][]; channels?: string[] };
       Object.assign(stub, realApi);
       delete stub._q;
       queue.ready.forEach(cb => onReady(cb));
       queue.commands.forEach(o => registerCommand(o));
       queue.feedback.forEach(([m, l]) => showFeedback(m, l));
+      if (queue.channels) useHostAPIStore.getState().setChannels(queue.channels);
     } else {
       window.ScxmlEditorAPI = realApi;
     }

@@ -1,6 +1,7 @@
 import { Position } from 'reactflow';
 import type * as monaco from 'monaco-editor';
 import { extractStateIdsFromXML } from '@/lib/utils/state-id-extractor';
+import { useHostAPIStore } from '@/stores/host-api-store';
 
 /**
  * SCXML Elements organized by category
@@ -834,18 +835,41 @@ function createAttributeValueSuggestions(
       });
     }
   } else {
-    // Use static values for other attributes
-    const validValues = ATTRIBUTE_VALUES[context.currentAttribute] || [];
+    // Channel completions for cond, location, expr, and channel attributes
+    const CHANNEL_ATTRIBUTES: Record<string, string[]> = {
+      assign:     ['location'],
+      transition: ['cond'],
+    };
+    const channelAttrs = context.currentElement
+      ? (CHANNEL_ATTRIBUTES[context.currentElement] ?? [])
+      : [];
 
-    for (const value of validValues) {
-      suggestions.push({
-        label: value,
-        kind: monaco.languages.CompletionItemKind.Value,
-        insertText: value,
-        documentation: `Valid value for ${context.currentAttribute} attribute`,
-        detail: 'Attribute Value',
-        range: undefined as any, // Let Monaco handle the range
-      });
+    if (context.currentAttribute && channelAttrs.includes(context.currentAttribute)) {
+      const channels = useHostAPIStore.getState().channels;
+      for (const ch of channels) {
+        suggestions.push({
+          label: ch,
+          kind: monaco.languages.CompletionItemKind.Variable,
+          insertText: ch,
+          detail: 'Channel',
+          documentation: 'System channel',
+          range: undefined as any,
+        });
+      }
+    } else {
+      // Use static values for other attributes
+      const validValues = ATTRIBUTE_VALUES[context.currentAttribute] || [];
+
+      for (const value of validValues) {
+        suggestions.push({
+          label: value,
+          kind: monaco.languages.CompletionItemKind.Value,
+          insertText: value,
+          documentation: `Valid value for ${context.currentAttribute} attribute`,
+          detail: 'Attribute Value',
+          range: undefined as any, // Let Monaco handle the range
+        });
+      }
     }
   }
 

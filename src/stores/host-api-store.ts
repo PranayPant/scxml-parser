@@ -7,6 +7,7 @@ interface HostAPIState {
   isReady: boolean;
   readyCallbacks: (() => void)[];
   feedbackQueue: FeedbackItem[];
+  channels: string[];
 }
 
 interface HostAPIActions {
@@ -16,6 +17,7 @@ interface HostAPIActions {
   executeCommand: (id: string) => Promise<void>;
   showFeedback: (message: string, level?: FeedbackItem['level']) => void;
   dismissFeedback: (id: string) => void;
+  setChannels: (channels: string[]) => void;
 }
 
 export const useHostAPIStore = create<HostAPIState & HostAPIActions>((set, get) => ({
@@ -23,6 +25,7 @@ export const useHostAPIStore = create<HostAPIState & HostAPIActions>((set, get) 
   isReady: false,
   readyCallbacks: [],
   feedbackQueue: [],
+  channels: [],
 
   markReady: () => {
     const { readyCallbacks } = get();
@@ -87,4 +90,6 @@ export const useHostAPIStore = create<HostAPIState & HostAPIActions>((set, get) 
       feedbackQueue: state.feedbackQueue.filter(f => f.id !== id),
     }));
   },
+
+  setChannels: (channels: string[]) => set({ channels }),
 }));
