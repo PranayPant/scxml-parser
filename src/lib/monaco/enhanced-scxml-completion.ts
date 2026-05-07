@@ -1,6 +1,7 @@
 import { Position } from 'reactflow';
 import type * as monaco from 'monaco-editor';
 import { extractStateIdsFromXML } from '@/lib/utils/state-id-extractor';
+import { extractDatamodelVariables } from '@/lib/utils/datamodel-extractor';
 import { useHostAPIStore } from '@/stores/host-api-store';
 
 /**
@@ -33,6 +34,15 @@ const SCXML_ELEMENTS = {
   dataModel: ['datamodel', 'data', 'donedata', 'content', 'param'],
   entryExit: ['onentry', 'onexit'],
 };
+
+/**
+ * Attributes that accept ECMAScript expressions — datamodel variables are
+ * valid completions in all of these.
+ */
+const EXPRESSION_ATTRIBUTES = new Set([
+  'cond', 'expr', 'location', 'delayexpr',
+  'eventexpr', 'targetexpr', 'typeexpr', 'srcexpr', 'array',
+]);
 
 /**
  * Valid attributes for each SCXML element
@@ -447,6 +457,7 @@ interface CompletionContext {
   parentElement?: string;
   currentElement?: string;
   currentAttribute?: string;
+  currentAttributeValue?: string;
   existingAttributes?: string[];
   isInTag: boolean;
   textBeforeCursor: string;
@@ -527,12 +538,14 @@ function analyzeContext(
         // Inside attribute value (incomplete quote)
         context.type = 'attributeValue';
         context.currentAttribute = lastAttrMatch[1];
+        context.currentAttributeValue = lastAttrMatch[3];
       } else {
         // Check if we're after an equals sign
         const equalsMatch = attrPart.match(/(\w+)\s*=\s*$/);
         if (equalsMatch) {
           context.type = 'attributeValue';
           context.currentAttribute = equalsMatch[1];
+          context.currentAttributeValue = '';
         } else {
           // Typing attribute name
           context.type = 'attribute';
@@ -776,6 +789,13 @@ function createAttributeValueSuggestions(
   if (!context.currentAttribute) return [];
 
   const suggestions: monaco.languages.CompletionItem[] = [];
+  const typedPrefix = context.currentAttributeValue ?? '';
+  const replaceRange = {
+    startLineNumber: position.lineNumber,
+    startColumn: position.column - typedPrefix.length,
+    endLineNumber: position.lineNumber,
+    endColumn: position.column,
+  };
 
   // Handle state ID references for target, initial, and default attributes
   if (
@@ -802,9 +822,11 @@ function createAttributeValueSuggestions(
     stateIdInfos = stateIdInfos.filter(
       (i) => i.parent === parentIdOfCurrentParent?.parent
     );
-    // Create suggestions for each state ID
+
+    // Create suggestions for each state ID, filtered by typed prefix
     for (const stateInfo of stateIdInfos) {
-      // Create a descriptive label showing the state hierarchy
+      if (typedPrefix && !stateInfo.id.startsWith(typedPrefix)) continue;
+
       const pathLabel =
         stateInfo.path.length > 1
           ? stateInfo.path.slice(0, -1).join(' > ') + ' > '
@@ -818,8 +840,8 @@ function createAttributeValueSuggestions(
           stateInfo.type.charAt(0).toUpperCase() + stateInfo.type.slice(1)
         } state${stateInfo.parent ? ` in ${stateInfo.parent}` : ''}`,
         detail: `${pathLabel}${stateInfo.id} (${stateInfo.type})`,
-        sortText: stateInfo.id, // Sort alphabetically by ID
-        range: undefined as any, // Let Monaco handle the range
+        sortText: stateInfo.id,
+        range: replaceRange,
       });
     }
 
@@ -831,11 +853,39 @@ function createAttributeValueSuggestions(
         insertText: '',
         documentation: 'Define states in your SCXML document first',
         detail: 'No available state IDs',
-        range: undefined as any,
+        range: replaceRange,
       });
     }
-  } else {
-    // Channel completions for cond, location, expr, and channel attributes
+  } else if (context.currentElement === 'data' && context.currentAttribute === 'id') {
+    // Variable name suggestions when defining/editing a <data id="..."> element
+    const xmlContent = model.getValue();
+    for (const varName of extractDatamodelVariables(xmlContent)) {
+      if (typedPrefix && !varName.startsWith(typedPrefix)) continue;
+      suggestions.push({
+        label: varName,
+        kind: monaco.languages.CompletionItemKind.Variable,
+        insertText: varName,
+        detail: 'Datamodel variable',
+        documentation: 'Declared in <datamodel>',
+        range: replaceRange,
+      });
+    }
+  } else if (context.currentAttribute && EXPRESSION_ATTRIBUTES.has(context.currentAttribute)) {
+    // Datamodel variables — valid in all ECMAScript expression attributes
+    const xmlContent = model.getValue();
+    for (const varName of extractDatamodelVariables(xmlContent)) {
+      if (typedPrefix && !varName.startsWith(typedPrefix)) continue;
+      suggestions.push({
+        label: varName,
+        kind: monaco.languages.CompletionItemKind.Variable,
+        insertText: varName,
+        detail: 'Datamodel variable',
+        documentation: 'Declared in <datamodel>',
+        range: replaceRange,
+      });
+    }
+
+    // Channels — scoped to assign.location and transition.cond (existing behaviour)
     const CHANNEL_ATTRIBUTES: Record<string, string[]> = {
       assign:     ['location'],
       transition: ['cond'],
@@ -843,33 +893,59 @@ function createAttributeValueSuggestions(
     const channelAttrs = context.currentElement
       ? (CHANNEL_ATTRIBUTES[context.currentElement] ?? [])
       : [];
-
-    if (context.currentAttribute && channelAttrs.includes(context.currentAttribute)) {
+    if (channelAttrs.includes(context.currentAttribute)) {
       const channels = useHostAPIStore.getState().channels;
       for (const ch of channels) {
+        if (typedPrefix && !ch.startsWith(typedPrefix)) continue;
         suggestions.push({
           label: ch,
           kind: monaco.languages.CompletionItemKind.Variable,
           insertText: ch,
           detail: 'Channel',
           documentation: 'System channel',
-          range: undefined as any,
+          range: replaceRange,
         });
       }
-    } else {
-      // Use static values for other attributes
-      const validValues = ATTRIBUTE_VALUES[context.currentAttribute] || [];
+    }
 
-      for (const value of validValues) {
-        suggestions.push({
-          label: value,
-          kind: monaco.languages.CompletionItemKind.Value,
-          insertText: value,
-          documentation: `Valid value for ${context.currentAttribute} attribute`,
-          detail: 'Attribute Value',
-          range: undefined as any, // Let Monaco handle the range
-        });
-      }
+    // New channel hint — shown only when nothing matched and prefix looks like a channel name
+    if (suggestions.length === 0 && typedPrefix.startsWith('this_')) {
+      suggestions.push({
+        label: 'Not declared in datamodel',
+        kind: monaco.languages.CompletionItemKind.Text,
+        insertText: typedPrefix,
+        filterText: typedPrefix,
+        detail: 'Info',
+        sortText: '\x00',
+        range: replaceRange,
+      });
+      suggestions.push({
+        label: {
+          label: typedPrefix,
+          detail: ' (Creates a new channel)',
+        },
+        kind: monaco.languages.CompletionItemKind.Event,
+        insertText: typedPrefix,
+        filterText: typedPrefix,
+        detail: 'New channel',
+        documentation: `'${typedPrefix}' is not declared in the datamodel. It will be treated as a new channel.`,
+        range: replaceRange,
+        preselect: true,
+      });
+    }
+  } else {
+    // Static values for non-expression attributes
+    const validValues = ATTRIBUTE_VALUES[context.currentAttribute] || [];
+    for (const value of validValues) {
+      if (typedPrefix && !value.startsWith(typedPrefix)) continue;
+      suggestions.push({
+        label: value,
+        kind: monaco.languages.CompletionItemKind.Value,
+        insertText: value,
+        documentation: `Valid value for ${context.currentAttribute} attribute`,
+        detail: 'Attribute Value',
+        range: replaceRange,
+      });
     }
   }
 
@@ -883,7 +959,7 @@ export function createEnhancedSCXMLCompletionProvider(
   monaco: typeof import('monaco-editor')
 ): monaco.languages.CompletionItemProvider {
   return {
-    triggerCharacters: ['<', ' ', '=', '"', "'"],
+    triggerCharacters: ['<', ' ', '=', '"', "'", '_'],
 
     provideCompletionItems: (model, position, context, token) => {
       const completionContext = analyzeContext(model, position);
@@ -897,13 +973,15 @@ export function createEnhancedSCXMLCompletionProvider(
           suggestions = createAttributeSuggestions(monaco, completionContext);
           break;
         case 'attributeValue':
-          suggestions = createAttributeValueSuggestions(
-            monaco,
-            completionContext,
-            model,
-            position
-          );
-          break;
+          return {
+            suggestions: createAttributeValueSuggestions(
+              monaco,
+              completionContext,
+              model,
+              position
+            ),
+            incomplete: true,
+          };
         case 'text':
           // If we're outside tags and have a parent, suggest valid children
           if (completionContext.parentElement) {
