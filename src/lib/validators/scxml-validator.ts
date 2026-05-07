@@ -3,11 +3,13 @@ import type { ValidationError } from '@/types/common';
 import {
   parseElementPositions,
   deduplicateErrors,
+  findDataIdPositions,
 } from './validator-utils';
 import {
   collectStateIds,
   buildStateHierarchy,
   findDuplicateIds,
+  findDuplicateDataIds,
   validateCompoundStates,
   findReachableStates,
 } from './state-validator';
@@ -222,6 +224,19 @@ export class SCXMLValidator {
       errors.push({
         message: `Duplicate state ID '${id}'`,
         severity: 'error',
+      });
+    });
+
+    // Check for duplicate data element IDs
+    const duplicateDataIds = findDuplicateDataIds(scxml);
+    duplicateDataIds.forEach((id) => {
+      const positions = this.xmlContent ? findDataIdPositions(id, this.xmlContent) : [];
+      const last = positions[positions.length - 1];
+      errors.push({
+        message: `Duplicate datamodel variable ID '${id}'. Each <data> element must have a unique 'id' attribute.`,
+        severity: 'error',
+        line: last?.line,
+        column: last?.column,
       });
     });
 

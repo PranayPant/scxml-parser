@@ -14,6 +14,7 @@ import type {
   ParallelElement,
   FinalElement,
   HistoryElement,
+  DataModelElement,
 } from '@/types/scxml';
 import type { ValidationError } from '@/types/common';
 
@@ -353,6 +354,45 @@ export function findDuplicateIds(scxml: SCXMLElement): string[] {
   });
 
   return duplicates;
+}
+
+/**
+ * Find duplicate data element IDs across all datamodels in the SCXML document
+ */
+export function findDuplicateDataIds(scxml: SCXMLElement): string[] {
+  const idCounts = new Map<string, number>();
+
+  const collectDataIds = (datamodel: DataModelElement) => {
+    if (!datamodel.data) return;
+    const dataElements = Array.isArray(datamodel.data) ? datamodel.data : [datamodel.data];
+    dataElements.forEach((data) => {
+      if (data['@_id']) {
+        idCounts.set(data['@_id'], (idCounts.get(data['@_id']) || 0) + 1);
+      }
+    });
+  };
+
+  const traverse = (element: SCXMLElement | StateElement | ParallelElement) => {
+    if ((element as StateElement | ParallelElement).datamodel) {
+      collectDataIds((element as StateElement | ParallelElement).datamodel as DataModelElement);
+    }
+
+    if (element.state) {
+      const states = Array.isArray(element.state) ? element.state : [element.state];
+      states.forEach((state) => traverse(state));
+    }
+
+    if (element.parallel) {
+      const parallels = Array.isArray(element.parallel) ? element.parallel : [element.parallel];
+      parallels.forEach((parallel) => traverse(parallel));
+    }
+  };
+
+  traverse(scxml);
+
+  return Array.from(idCounts.entries())
+    .filter(([, count]) => count > 1)
+    .map(([id]) => id);
 }
 
 /**

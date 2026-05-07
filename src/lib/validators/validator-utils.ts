@@ -199,6 +199,26 @@ export function createFriendlyLogErrorMessage(
 }
 
 /**
+ * Find all line/column positions of <data> elements with a specific id in the XML
+ */
+export function findDataIdPositions(
+  id: string,
+  xmlContent: string
+): Array<{ line: number; column: number }> {
+  const positions: Array<{ line: number; column: number }> = [];
+  const lines = xmlContent.split('\n');
+
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const line = lines[lineIndex];
+    if (line.includes('<data') && line.includes(`id="${id}"`)) {
+      positions.push({ line: lineIndex + 1, column: line.indexOf('<data') + 1 });
+    }
+  }
+
+  return positions;
+}
+
+/**
  * Find the line/column position of a specific transition in the XML
  */
 export function findTransitionPosition(
