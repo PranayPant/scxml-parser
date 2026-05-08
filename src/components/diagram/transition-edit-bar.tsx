@@ -41,6 +41,13 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
   const [rawValue, setRawValue] = React.useState(event ?? cond ?? '');
   const [activeIndex, setActiveIndex] = React.useState(-1);
   const [isOpen, setIsOpen] = React.useState(false);
+  const blurTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (blurTimerRef.current !== null) clearTimeout(blurTimerRef.current);
+    };
+  }, []);
 
   const channels = useHostAPIStore((state) => state.channels);
 
@@ -152,7 +159,9 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
             setActiveIndex(-1);
           }}
           onKeyDown={handleKeyDown}
-          onBlur={() => setTimeout(() => setIsOpen(false), 100)}
+          onBlur={() => {
+            blurTimerRef.current = setTimeout(() => setIsOpen(false), 100);
+          }}
           className='w-full px-3 py-1.5 text-sm text-gray-800 border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
           placeholder={editingField === 'cond' ? 'Enter condition' : 'Enter event'}
           autoFocus
