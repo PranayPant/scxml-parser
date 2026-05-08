@@ -2109,6 +2109,24 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
           <span className='text-sm font-medium text-gray-700'>
             Edit Transition:
           </span>
+          <select
+            value={selectedEdgeForEdit.editingField}
+            onChange={(e) => {
+              const newField = e.target.value as 'event' | 'cond';
+              setSelectedEdgeForEdit({
+                ...selectedEdgeForEdit,
+                editingField: newField,
+                rawValue:
+                  newField === 'cond'
+                    ? selectedEdgeForEdit.cond || ''
+                    : selectedEdgeForEdit.event || '',
+              });
+            }}
+            className='px-2 py-1.5 text-sm text-gray-800 bg-white border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500'
+          >
+            <option value='event'>event</option>
+            <option value='cond'>cond</option>
+          </select>
           <input
             type='text'
             value={selectedEdgeForEdit.rawValue || ''}
