@@ -2098,6 +2098,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
       {/* Transition Label Editor - Overlays the diagram */}
       {selectedEdgeForEdit && (
         <TransitionEditBar
+          key={selectedEdgeForEdit.id}
           edgeId={selectedEdgeForEdit.id}
           source={selectedEdgeForEdit.source}
           target={selectedEdgeForEdit.target}

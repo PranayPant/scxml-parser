@@ -53,13 +53,6 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
 
   const suggestions: Suggestion[] = React.useMemo(() => {
     const prefix = rawValue.toLowerCase();
-
-    if (editingField === 'event') {
-      return channels
-        .filter((ch) => ch.toLowerCase().startsWith(prefix))
-        .map((ch) => ({ label: ch, kind: 'regular' as const }));
-    }
-
     const vars = extractDatamodelVariables(scxmlContent);
     const combined = Array.from(new Set([...vars, ...channels]));
     const filtered = combined.filter((item) =>
@@ -71,7 +64,7 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
     }
 
     return filtered.map((item) => ({ label: item, kind: 'regular' as const }));
-  }, [editingField, rawValue, channels, scxmlContent]);
+  }, [rawValue, channels, scxmlContent]);
 
   const showSuggestions = isOpen && suggestions.length > 0;
 
@@ -158,6 +151,7 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
             setIsOpen(true);
             setActiveIndex(-1);
           }}
+          onFocus={() => setIsOpen(true)}
           onKeyDown={handleKeyDown}
           onBlur={() => {
             blurTimerRef.current = setTimeout(() => setIsOpen(false), 100);
