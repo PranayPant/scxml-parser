@@ -47,6 +47,7 @@ import 'reactflow/dist/style.css';
 import { SCXMLTransitionEdge } from './edges/scxml-transition-edge';
 import { HistoryWrapperNode } from './nodes/history-wrapper-node';
 import { SCXMLStateNode } from './nodes/scxml-state-node';
+import { TransitionEditBar } from './transition-edit-bar';
 
 // ==================== TYPES & INTERFACES ====================
 interface VisualDiagramProps {
@@ -191,8 +192,6 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
     target: string;
     event?: string;
     cond?: string;
-    rawValue?: string;
-    editingField: 'event' | 'cond';
   } | null>(null);
 
   // State for editing onentry/onexit actions
@@ -1268,19 +1267,12 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
           newTransitions.clear();
           newTransitions.add(edge.id);
           // Set the selected edge for editing
-          const hasEvent = !!edge.data?.event;
-          const hasCond = !!edge.data?.condition;
-          const initialValue =
-            (hasEvent ? edge.data.event : hasCond ? edge.data.condition : '') ||
-            '';
           setSelectedEdgeForEdit({
             id: edge.id,
             source: edge.source,
             target: edge.target,
             event: edge.data?.event,
             cond: edge.data?.condition,
-            rawValue: initialValue,
-            editingField: hasEvent ? 'event' : 'cond',
           });
         }
         return newTransitions;
@@ -2105,77 +2097,19 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
 
       {/* Transition Label Editor - Overlays the diagram */}
       {selectedEdgeForEdit && (
-        <div className='absolute top-[49px] left-0 right-0 z-10 flex items-center gap-3 px-4 py-2 bg-blue-50 border-b shadow-md'>
-          <span className='text-sm font-medium text-gray-700'>
-            Edit Transition:
-          </span>
-          <select
-            value={selectedEdgeForEdit.editingField}
-            onChange={(e) => {
-              const newField = e.target.value === 'cond' ? 'cond' as const : 'event' as const;
-              setSelectedEdgeForEdit({
-                ...selectedEdgeForEdit,
-                editingField: newField,
-                rawValue:
-                  newField === 'cond'
-                    ? selectedEdgeForEdit.cond || ''
-                    : selectedEdgeForEdit.event || '',
-              });
-            }}
-            className='px-2 py-1.5 text-sm text-gray-800 bg-white border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500'
-          >
-            <option value='event'>event</option>
-            <option value='cond'>cond</option>
-          </select>
-          <input
-            type='text'
-            value={selectedEdgeForEdit.rawValue || ''}
-            onChange={(e) => {
-              const newValue = e.target.value;
-              setSelectedEdgeForEdit({
-                ...selectedEdgeForEdit,
-                rawValue: newValue,
-              });
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                const newLabel = selectedEdgeForEdit.rawValue || '';
-                if (newLabel) {
-                  handleTransitionLabelChange(
-                    selectedEdgeForEdit.source,
-                    selectedEdgeForEdit.target,
-                    selectedEdgeForEdit.event,
-                    selectedEdgeForEdit.cond,
-                    newLabel,
-                    selectedEdgeForEdit.editingField,
-                    selectedEdgeForEdit.id
-                  );
-                }
-                setSelectedEdgeForEdit(null);
-                setSelectedTransitions(new Set());
-              } else if (e.key === 'Escape') {
-                setSelectedEdgeForEdit(null);
-                setSelectedTransitions(new Set());
-              }
-            }}
-            className='flex-1 px-3 py-1.5 text-sm text-gray-800 border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-            placeholder={
-              selectedEdgeForEdit.editingField === 'cond'
-                ? 'Enter condition'
-                : 'Enter event'
-            }
-            autoFocus
-          />
-          <button
-            onClick={() => {
-              setSelectedEdgeForEdit(null);
-              setSelectedTransitions(new Set());
-            }}
-            className='text-sm text-gray-600 hover:text-gray-900 px-2'
-          >
-            Cancel
-          </button>
-        </div>
+        <TransitionEditBar
+          edgeId={selectedEdgeForEdit.id}
+          source={selectedEdgeForEdit.source}
+          target={selectedEdgeForEdit.target}
+          event={selectedEdgeForEdit.event}
+          cond={selectedEdgeForEdit.cond}
+          scxmlContent={scxmlContent}
+          onCommit={handleTransitionLabelChange}
+          onCancel={() => {
+            setSelectedEdgeForEdit(null);
+            setSelectedTransitions(new Set());
+          }}
+        />
       )}
 
       {/* State Actions Editor (onentry/onexit with assign) - Overlays the diagram */}
