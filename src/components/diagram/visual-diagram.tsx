@@ -2112,7 +2112,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
           <select
             value={selectedEdgeForEdit.editingField}
             onChange={(e) => {
-              const newField = e.target.value as 'event' | 'cond';
+              const newField = e.target.value === 'cond' ? 'cond' as const : 'event' as const;
               setSelectedEdgeForEdit({
                 ...selectedEdgeForEdit,
                 editingField: newField,
