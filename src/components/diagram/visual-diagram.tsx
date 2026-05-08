@@ -476,6 +476,44 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
     [scxmlContent, onSCXMLChange]
   );
 
+  const handleNewChannel = React.useCallback(
+    (
+      channelName: string,
+      source: string,
+      target: string,
+      originalEvent: string | undefined,
+      originalCond: string | undefined,
+      editingField: 'event' | 'cond',
+      edgeId: string
+    ) => {
+      if (!onSCXMLChange || !scxmlContent) return;
+      try {
+        const { AddDataCommand, UpdateTransitionCommand } = require('@/lib/commands');
+        const { parseTransitionIndexFromEdgeId } = require('@/lib/converters/converter-modules');
+
+        // Step 1: insert <data> element
+        const addResult = new AddDataCommand(channelName).execute(scxmlContent);
+        const base = addResult.success ? addResult.newContent : scxmlContent;
+
+        // Step 2: update the transition cond/event on the already-modified content
+        const transitionIndex = parseTransitionIndexFromEdgeId(edgeId);
+        const updateResult = new UpdateTransitionCommand(
+          source, target, originalEvent, originalCond,
+          channelName, editingField, transitionIndex
+        ).execute(base);
+
+        if (updateResult.success) {
+          onSCXMLChange(updateResult.newContent, 'structure');
+        } else {
+          console.error('Failed to update transition after adding channel:', updateResult.error);
+        }
+      } catch (error) {
+        console.error('Failed to add channel:', error);
+      }
+    },
+    [scxmlContent, onSCXMLChange]
+  );
+
   const handleEdgeMouseEnter = useCallback(
     (event: React.MouseEvent, edge: Edge) => {
       if (edge.data?.fullLabel) {
@@ -2106,6 +2144,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
           cond={selectedEdgeForEdit.cond}
           scxmlContent={scxmlContent}
           onCommit={handleTransitionLabelChange}
+          onNewChannel={handleNewChannel}
           onCancel={() => {
             setSelectedEdgeForEdit(null);
             setSelectedTransitions(new Set());

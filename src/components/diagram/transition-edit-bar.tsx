@@ -20,6 +20,15 @@ interface TransitionEditBarProps {
     editingField: 'event' | 'cond',
     edgeId: string
   ) => void;
+  onNewChannel?: (
+    channelName: string,
+    source: string,
+    target: string,
+    originalEvent: string | undefined,
+    originalCond: string | undefined,
+    editingField: 'event' | 'cond',
+    edgeId: string
+  ) => void;
   onCancel: () => void;
 }
 
@@ -33,6 +42,7 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
   cond,
   scxmlContent,
   onCommit,
+  onNewChannel,
   onCancel,
 }) => {
   const [editingField, setEditingField] = React.useState<'event' | 'cond'>(
@@ -68,8 +78,10 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
 
   const showSuggestions = isOpen && suggestions.length > 0;
 
-  const commit = (value: string) => {
-    if (value) {
+  const commit = (value: string, kind: Suggestion['kind'] = 'regular') => {
+    if (kind === 'new-channel' && onNewChannel) {
+      onNewChannel(value, source, target, event, cond, editingField, edgeId);
+    } else if (value) {
       onCommit(source, target, event, cond, value, editingField, edgeId);
     }
     onCancel();
@@ -96,7 +108,14 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
       }
       if (e.key === 'Enter') {
         e.preventDefault();
-        commit(activeIndex >= 0 ? suggestions[activeIndex].label : rawValue);
+        let enterIndex = -1;
+        if(rawValue.startsWith('this_')){
+          enterIndex = 0;
+        }else{
+          enterIndex = activeIndex
+        }
+        const active = enterIndex >= 0 ? suggestions[enterIndex] : null;
+        commit(active?.label ?? rawValue, active?.kind ?? 'regular');
         return;
       }
       if (e.key === 'Escape') {
@@ -145,7 +164,7 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
       <div className='relative flex-1'>
         <input
           type='text'
-          value={rawValue}
+          value={activeIndex >= 0 && suggestions[activeIndex] ? suggestions[activeIndex].label : rawValue}
           onChange={(e) => {
             setRawValue(e.target.value);
             setIsOpen(true);
@@ -165,7 +184,7 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
             {suggestions.map((suggestion, index) => (
               <div
                 key={suggestion.label}
-                onMouseDown={() => commit(suggestion.label)}
+                onMouseDown={() => commit(suggestion.label, suggestion.kind)}
                 className={`px-3 py-1.5 text-sm cursor-pointer ${
                   suggestion.kind === 'new-channel'
                     ? 'bg-amber-50 text-amber-800 border-l-2 border-amber-400'

@@ -909,7 +909,7 @@ function createAttributeValueSuggestions(
     }
 
     // New channel hint — shown only when nothing matched and prefix looks like a channel name
-    if (suggestions.length === 0 && typedPrefix.startsWith('this_')) {
+    if (suggestions.length === 0 && typedPrefix.startsWith('this_') && context.currentAttribute === 'cond') {
       suggestions.push({
         label: 'Not declared in datamodel',
         kind: monaco.languages.CompletionItemKind.Text,
