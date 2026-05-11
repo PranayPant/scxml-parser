@@ -47,6 +47,7 @@ import 'reactflow/dist/style.css';
 import { SCXMLTransitionEdge } from './edges/scxml-transition-edge';
 import { HistoryWrapperNode } from './nodes/history-wrapper-node';
 import { SCXMLStateNode } from './nodes/scxml-state-node';
+import { StateActionsEditBar } from './state-actions-edit-bar';
 import { TransitionEditBar } from './transition-edit-bar';
 
 // ==================== TYPES & INTERFACES ====================
@@ -2154,128 +2155,22 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
 
       {/* State Actions Editor (onentry/onexit with assign) - Overlays the diagram */}
       {selectedStateForActions && (
-        <div className='absolute top-[49px] left-0 right-0 z-10 flex items-center gap-3 px-4 py-2 bg-green-50 border-b shadow-md'>
-          <span className='text-xs font-medium text-gray-700'>
-            Edit onentry for {selectedStateForActions.id}:
-          </span>
-
-          {selectedStateForActions.entryActions.length === 0 ? (
-            <button
-              onClick={() => {
-                setSelectedStateForActions({
-                  ...selectedStateForActions,
-                  entryActions: [{ location: '', expr: '' }],
-                });
-              }}
-              className='text-xs text-green-600 hover:text-green-800 font-medium px-2 py-1 border border-green-300 rounded hover:bg-green-100'
-            >
-              + Add Assign
-            </button>
-          ) : (
-            <>
-              <input
-                type='text'
-                value={selectedStateForActions.entryActions[0].location}
-                onChange={(e) => {
-                  const updated = [...selectedStateForActions.entryActions];
-                  updated[0] = { ...updated[0], location: e.target.value };
-                  setSelectedStateForActions({
-                    ...selectedStateForActions,
-                    entryActions: updated,
-                  });
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    const entryActions = selectedStateForActions.entryActions
-                      .filter((a) => a.location || a.expr)
-                      .map((a) => `assign|${a.location}|${a.expr}`);
-                    const exitActions = selectedStateForActions.exitActions
-                      .filter((a) => a.location || a.expr)
-                      .map((a) => `assign|${a.location}|${a.expr}`);
-                    handleNodeActionsChange(
-                      selectedStateForActions.id,
-                      entryActions,
-                      exitActions
-                    );
-                    setSelectedStateForActions(null);
-                    setActiveStates(new Set());
-                  } else if (e.key === 'Escape') {
-                    setSelectedStateForActions(null);
-                    setActiveStates(new Set());
-                  }
-                }}
-                className='w-32 px-2 py-1 text-xs border text-gray-800 border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500'
-                placeholder='location'
-              />
-              <input
-                type='text'
-                value={selectedStateForActions.entryActions[0].expr}
-                onChange={(e) => {
-                  const updated = [...selectedStateForActions.entryActions];
-                  updated[0] = { ...updated[0], expr: e.target.value };
-                  setSelectedStateForActions({
-                    ...selectedStateForActions,
-                    entryActions: updated,
-                  });
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    const entryActions = selectedStateForActions.entryActions
-                      .filter((a) => a.location || a.expr)
-                      .map((a) => `assign|${a.location}|${a.expr}`);
-                    const exitActions = selectedStateForActions.exitActions
-                      .filter((a) => a.location || a.expr)
-                      .map((a) => `assign|${a.location}|${a.expr}`);
-                    handleNodeActionsChange(
-                      selectedStateForActions.id,
-                      entryActions,
-                      exitActions
-                    );
-                    setSelectedStateForActions(null);
-                    setActiveStates(new Set());
-                  } else if (e.key === 'Escape') {
-                    setSelectedStateForActions(null);
-                    setActiveStates(new Set());
-                  }
-                }}
-                className='flex-1 px-2 py-1 text-xs border text-gray-800 border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500'
-                placeholder='expr'
-              />
-              <button
-                onClick={() => {
-                  // Convert back to action format and save
-                  const entryActions = selectedStateForActions.entryActions
-                    .filter((a) => a.location || a.expr)
-                    .map((a) => `assign|${a.location}|${a.expr}`);
-                  const exitActions = selectedStateForActions.exitActions
-                    .filter((a) => a.location || a.expr)
-                    .map((a) => `assign|${a.location}|${a.expr}`);
-
-                  handleNodeActionsChange(
-                    selectedStateForActions.id,
-                    entryActions,
-                    exitActions
-                  );
-                  setSelectedStateForActions(null);
-                  setActiveStates(new Set());
-                }}
-                className='px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700'
-              >
-                Save
-              </button>
-            </>
-          )}
-
-          <button
-            onClick={() => {
-              setSelectedStateForActions(null);
-              setActiveStates(new Set());
-            }}
-            className='text-xs text-gray-600 hover:text-gray-900 ml-auto'
-          >
-            Cancel
-          </button>
-        </div>
+        <StateActionsEditBar
+          key={selectedStateForActions.id}
+          stateId={selectedStateForActions.id}
+          entryActions={selectedStateForActions.entryActions}
+          exitActions={selectedStateForActions.exitActions}
+          scxmlContent={scxmlContent}
+          onSave={(entryActions, exitActions) => {
+            handleNodeActionsChange(selectedStateForActions.id, entryActions, exitActions);
+            setSelectedStateForActions(null);
+            setActiveStates(new Set());
+          }}
+          onCancel={() => {
+            setSelectedStateForActions(null);
+            setActiveStates(new Set());
+          }}
+        />
       )}
 
       <div className='flex-1'>

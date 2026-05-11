@@ -157,7 +157,7 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
                 : 'bg-white text-gray-600 hover:bg-blue-50'
             }`}
           >
-            {field}
+            {field === 'cond' ? 'condition' : field}
           </button>
         ))}
       </div>
