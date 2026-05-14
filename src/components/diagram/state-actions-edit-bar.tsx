@@ -131,7 +131,7 @@ export const StateActionsEditBar: React.FC<StateActionsEditBarProps> = ({
       </div>
 
       {/* location input with autocomplete */}
-      <div className='relative w-40'>
+      <div className='relative w-64'>
         <input
           type='text'
           value={activeIndex >= 0 ? suggestions[activeIndex] : locationValue}

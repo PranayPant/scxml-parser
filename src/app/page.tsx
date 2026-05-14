@@ -9,7 +9,7 @@ import {
 import { TwoTabLayout, type TabType } from '@/components/layout';
 import { VisualDiagram } from '@/components/diagram';
 import { Upload } from 'lucide-react';
-import { ErrorBoundary, ValidationPanel, UndoRedoControls } from '@/components/ui';
+import { ConfigPanel, ErrorBoundary, ValidationPanel, UndoRedoControls } from '@/components/ui';
 import { SCXMLParser, SCXMLValidator } from '@/lib';
 import { hasVisualMetadata } from '@/lib/utils';
 import { useEditorStore } from '@/stores/editor-store';
@@ -45,6 +45,8 @@ export default function Home() {
   useEffect(() => { contentRef.current = content; }, [content]);
   const [isUpdatingFromHistory, setIsUpdatingFromHistory] = React.useState(false);
   const [currentHistoryActionType, setCurrentHistoryActionType] = React.useState<ActionType | undefined>(undefined);
+  const [isConfigPanelVisible, setConfigPanelVisible] = React.useState(false);
+
 
   const validateContent = useCallback(
     (xmlContent: string) => {
@@ -104,6 +106,7 @@ export default function Home() {
       }));
       setErrors(errors);
       setValidationPanelVisible(true);
+      setConfigPanelVisible(false);
     },
     [setErrors, setValidationPanelVisible]
   );
@@ -204,6 +207,7 @@ export default function Home() {
           ];
           setErrors(errors);
           setValidationPanelVisible(true);
+          setConfigPanelVisible(false);
           return;
         }
 
@@ -216,6 +220,7 @@ export default function Home() {
           ];
           setErrors(errors);
           setValidationPanelVisible(true);
+          setConfigPanelVisible(false);
           return;
         }
 
@@ -246,6 +251,7 @@ export default function Home() {
           ];
           setErrors(errors);
           setValidationPanelVisible(true);
+          setConfigPanelVisible(false);
         };
 
         reader.readAsText(file);
@@ -273,6 +279,10 @@ export default function Home() {
       registerCommand,
       showFeedback,
       setChannels: (channels: string[]) => useHostAPIStore.getState().setChannels(channels),
+      toggleConfigPanel: () => setConfigPanelVisible(v => {
+        if (!v) setValidationPanelVisible(false);
+        return !v;
+      }),
     };
 
     if (stub?._q) {
@@ -320,6 +330,21 @@ export default function Home() {
           isVisible={isValidationPanelVisible}
           onClose={() => setValidationPanelVisible(false)}
           onErrorClick={handleErrorClick}
+        />
+        <ConfigPanel
+          isVisible={isConfigPanelVisible}
+          onClose={() => setConfigPanelVisible(false)}
+          scxmlContent={content}
+          onAddField={(name, defaultValue) => {
+            const node = `\n    <data id="conf_${name}" expr="${defaultValue}"/>`;
+            let next: string;
+            if (content.includes('</datamodel>')) {
+              next = content.replace('</datamodel>', `${node}\n  </datamodel>`);
+            } else {
+              next = content.replace('</scxml>', `\n  <datamodel>${node}\n  </datamodel>\n</scxml>`);
+            }
+            handleContentChange(next);
+          }}
         />
       </div>
     </div>
@@ -375,11 +400,10 @@ export default function Home() {
 
       <button
         onClick={() => {
-          // If on visual tab, switch to code editor tab
-          if (activeTab === "visual") {
-            setActiveTab("code");
-          }
-          setValidationPanelVisible(!isValidationPanelVisible);
+          if (activeTab === "visual") setActiveTab("code");
+          const opening = !isValidationPanelVisible;
+          setValidationPanelVisible(opening);
+          if (opening) setConfigPanelVisible(false);
         }}
         className={`cursor-pointer text-sm px-3 py-2 rounded-md transition-colors ${
           hasErrors
@@ -395,6 +419,7 @@ export default function Home() {
               errors.filter((e) => e.severity === "warning").length
             } warnings`}
       </button>
+
 
       <VisualMetadataExport
         scxmlContent={content}

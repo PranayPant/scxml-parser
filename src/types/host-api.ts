@@ -31,6 +31,8 @@ export interface ScxmlEditorAPI {
   showFeedback: (message: string, level?: FeedbackItem['level']) => void;
   /** Provides channel names for autocompletion in cond, location, expr, and channel attributes. */
   setChannels: (channels: string[]) => void;
+  /** Toggles the conf_ config values panel open/closed. */
+  toggleConfigPanel: () => void;
 }
 
 declare global {
