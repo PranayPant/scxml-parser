@@ -40,7 +40,7 @@ const SCXML_ELEMENTS = {
  * valid completions in all of these.
  */
 const EXPRESSION_ATTRIBUTES = new Set([
-  'cond', 'expr', 'location', 'delayexpr',
+  'cond', 'event', 'expr', 'location', 'delayexpr',
   'eventexpr', 'targetexpr', 'typeexpr', 'srcexpr', 'array',
 ]);
 
@@ -885,10 +885,10 @@ function createAttributeValueSuggestions(
       });
     }
 
-    // Channels — scoped to assign.location and transition.cond (existing behaviour)
+    // Channels — scoped to assign.location, transition.cond and transition.event
     const CHANNEL_ATTRIBUTES: Record<string, string[]> = {
       assign:     ['location'],
-      transition: ['cond'],
+      transition: ['cond', 'event'],
     };
     const channelAttrs = context.currentElement
       ? (CHANNEL_ATTRIBUTES[context.currentElement] ?? [])
@@ -909,7 +909,7 @@ function createAttributeValueSuggestions(
     }
 
     // New channel hint — shown only when nothing matched and prefix looks like a channel name
-    if (suggestions.length === 0 && typedPrefix.startsWith('this_')) {
+    if (suggestions.length === 0 && typedPrefix.startsWith('this_') && context.currentAttribute === 'cond') {
       suggestions.push({
         label: 'Not declared in datamodel',
         kind: monaco.languages.CompletionItemKind.Text,

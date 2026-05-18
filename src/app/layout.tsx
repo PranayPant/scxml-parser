@@ -40,7 +40,8 @@ export default function RootLayout({
     showFeedback:function(m,l){q.feedback.push([m,l]);},
     setChannels:function(c){q.channels=c;},
     loadScxml:function(){},
-    getScxml:function(){return'';}
+    getScxml:function(){return'';},
+    toggleConfigPanel:function(){}
   };
 })();` }} />
         {children}

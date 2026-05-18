@@ -67,6 +67,17 @@ export const TwoTabLayout: React.FC<TwoTabLayoutProps> = ({
       ),
     },
     {
+      tab: "both" as const,
+      content: (
+        <>
+        You can create a new channel by using {" "} 
+          <kbd className='px-1.5 py-0.5 bg-gray-200 rounded text-gray-700 font-mono'>
+            this_
+          </kbd>{" "}prefix
+        </>
+      ),
+    },
+    {
       tab: "visual" as const,
       content: (
         <>

@@ -19,3 +19,4 @@ export { UpdateActionsCommand } from './update-actions-command';
 export { ChangeStateTypeCommand } from './change-state-type-command';
 export { DeleteNodeCommand } from './delete-node-command';
 export { ReconnectTransitionCommand } from './reconnect-transition-command';
+export { AddDataCommand } from './add-data-command';

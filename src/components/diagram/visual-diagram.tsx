@@ -47,6 +47,8 @@ import 'reactflow/dist/style.css';
 import { SCXMLTransitionEdge } from './edges/scxml-transition-edge';
 import { HistoryWrapperNode } from './nodes/history-wrapper-node';
 import { SCXMLStateNode } from './nodes/scxml-state-node';
+import { StateActionsEditBar } from './state-actions-edit-bar';
+import { TransitionEditBar } from './transition-edit-bar';
 
 // ==================== TYPES & INTERFACES ====================
 interface VisualDiagramProps {
@@ -191,8 +193,6 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
     target: string;
     event?: string;
     cond?: string;
-    rawValue?: string;
-    editingField: 'event' | 'cond';
   } | null>(null);
 
   // State for editing onentry/onexit actions
@@ -472,6 +472,44 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
         }
       } catch (error) {
         console.error('Failed to update transition label:', error);
+      }
+    },
+    [scxmlContent, onSCXMLChange]
+  );
+
+  const handleNewChannel = React.useCallback(
+    (
+      channelName: string,
+      source: string,
+      target: string,
+      originalEvent: string | undefined,
+      originalCond: string | undefined,
+      editingField: 'event' | 'cond',
+      edgeId: string
+    ) => {
+      if (!onSCXMLChange || !scxmlContent) return;
+      try {
+        const { AddDataCommand, UpdateTransitionCommand } = require('@/lib/commands');
+        const { parseTransitionIndexFromEdgeId } = require('@/lib/converters/converter-modules');
+
+        // Step 1: insert <data> element
+        const addResult = new AddDataCommand(channelName).execute(scxmlContent);
+        const base = addResult.success ? addResult.newContent : scxmlContent;
+
+        // Step 2: update the transition cond/event on the already-modified content
+        const transitionIndex = parseTransitionIndexFromEdgeId(edgeId);
+        const updateResult = new UpdateTransitionCommand(
+          source, target, originalEvent, originalCond,
+          channelName, editingField, transitionIndex
+        ).execute(base);
+
+        if (updateResult.success) {
+          onSCXMLChange(updateResult.newContent, 'structure');
+        } else {
+          console.error('Failed to update transition after adding channel:', updateResult.error);
+        }
+      } catch (error) {
+        console.error('Failed to add channel:', error);
       }
     },
     [scxmlContent, onSCXMLChange]
@@ -1268,19 +1306,12 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
           newTransitions.clear();
           newTransitions.add(edge.id);
           // Set the selected edge for editing
-          const hasEvent = !!edge.data?.event;
-          const hasCond = !!edge.data?.condition;
-          const initialValue =
-            (hasEvent ? edge.data.event : hasCond ? edge.data.condition : '') ||
-            '';
           setSelectedEdgeForEdit({
             id: edge.id,
             source: edge.source,
             target: edge.target,
             event: edge.data?.event,
             cond: edge.data?.condition,
-            rawValue: initialValue,
-            editingField: hasEvent ? 'event' : 'cond',
           });
         }
         return newTransitions;
@@ -2105,185 +2136,41 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
 
       {/* Transition Label Editor - Overlays the diagram */}
       {selectedEdgeForEdit && (
-        <div className='absolute top-[49px] left-0 right-0 z-10 flex items-center gap-3 px-4 py-2 bg-blue-50 border-b shadow-md'>
-          <span className='text-sm font-medium text-gray-700'>
-            Edit Transition:
-          </span>
-          <input
-            type='text'
-            value={selectedEdgeForEdit.rawValue || ''}
-            onChange={(e) => {
-              const newValue = e.target.value;
-              setSelectedEdgeForEdit({
-                ...selectedEdgeForEdit,
-                rawValue: newValue,
-              });
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                const newLabel = selectedEdgeForEdit.rawValue || '';
-                if (newLabel) {
-                  handleTransitionLabelChange(
-                    selectedEdgeForEdit.source,
-                    selectedEdgeForEdit.target,
-                    selectedEdgeForEdit.event,
-                    selectedEdgeForEdit.cond,
-                    newLabel,
-                    selectedEdgeForEdit.editingField,
-                    selectedEdgeForEdit.id
-                  );
-                }
-                setSelectedEdgeForEdit(null);
-                setSelectedTransitions(new Set());
-              } else if (e.key === 'Escape') {
-                setSelectedEdgeForEdit(null);
-                setSelectedTransitions(new Set());
-              }
-            }}
-            className='flex-1 px-3 py-1.5 text-sm text-gray-800 border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-            placeholder={
-              selectedEdgeForEdit.editingField === 'cond'
-                ? 'Enter condition'
-                : 'Enter event'
-            }
-            autoFocus
-          />
-          <button
-            onClick={() => {
-              setSelectedEdgeForEdit(null);
-              setSelectedTransitions(new Set());
-            }}
-            className='text-sm text-gray-600 hover:text-gray-900 px-2'
-          >
-            Cancel
-          </button>
-        </div>
+        <TransitionEditBar
+          key={selectedEdgeForEdit.id}
+          edgeId={selectedEdgeForEdit.id}
+          source={selectedEdgeForEdit.source}
+          target={selectedEdgeForEdit.target}
+          event={selectedEdgeForEdit.event}
+          cond={selectedEdgeForEdit.cond}
+          scxmlContent={scxmlContent}
+          onCommit={handleTransitionLabelChange}
+          onNewChannel={handleNewChannel}
+          onCancel={() => {
+            setSelectedEdgeForEdit(null);
+            setSelectedTransitions(new Set());
+          }}
+        />
       )}
 
       {/* State Actions Editor (onentry/onexit with assign) - Overlays the diagram */}
       {selectedStateForActions && (
-        <div className='absolute top-[49px] left-0 right-0 z-10 flex items-center gap-3 px-4 py-2 bg-green-50 border-b shadow-md'>
-          <span className='text-xs font-medium text-gray-700'>
-            Edit onentry for {selectedStateForActions.id}:
-          </span>
-
-          {selectedStateForActions.entryActions.length === 0 ? (
-            <button
-              onClick={() => {
-                setSelectedStateForActions({
-                  ...selectedStateForActions,
-                  entryActions: [{ location: '', expr: '' }],
-                });
-              }}
-              className='text-xs text-green-600 hover:text-green-800 font-medium px-2 py-1 border border-green-300 rounded hover:bg-green-100'
-            >
-              + Add Assign
-            </button>
-          ) : (
-            <>
-              <input
-                type='text'
-                value={selectedStateForActions.entryActions[0].location}
-                onChange={(e) => {
-                  const updated = [...selectedStateForActions.entryActions];
-                  updated[0] = { ...updated[0], location: e.target.value };
-                  setSelectedStateForActions({
-                    ...selectedStateForActions,
-                    entryActions: updated,
-                  });
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    const entryActions = selectedStateForActions.entryActions
-                      .filter((a) => a.location || a.expr)
-                      .map((a) => `assign|${a.location}|${a.expr}`);
-                    const exitActions = selectedStateForActions.exitActions
-                      .filter((a) => a.location || a.expr)
-                      .map((a) => `assign|${a.location}|${a.expr}`);
-                    handleNodeActionsChange(
-                      selectedStateForActions.id,
-                      entryActions,
-                      exitActions
-                    );
-                    setSelectedStateForActions(null);
-                    setActiveStates(new Set());
-                  } else if (e.key === 'Escape') {
-                    setSelectedStateForActions(null);
-                    setActiveStates(new Set());
-                  }
-                }}
-                className='w-32 px-2 py-1 text-xs border text-gray-800 border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500'
-                placeholder='location'
-              />
-              <input
-                type='text'
-                value={selectedStateForActions.entryActions[0].expr}
-                onChange={(e) => {
-                  const updated = [...selectedStateForActions.entryActions];
-                  updated[0] = { ...updated[0], expr: e.target.value };
-                  setSelectedStateForActions({
-                    ...selectedStateForActions,
-                    entryActions: updated,
-                  });
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    const entryActions = selectedStateForActions.entryActions
-                      .filter((a) => a.location || a.expr)
-                      .map((a) => `assign|${a.location}|${a.expr}`);
-                    const exitActions = selectedStateForActions.exitActions
-                      .filter((a) => a.location || a.expr)
-                      .map((a) => `assign|${a.location}|${a.expr}`);
-                    handleNodeActionsChange(
-                      selectedStateForActions.id,
-                      entryActions,
-                      exitActions
-                    );
-                    setSelectedStateForActions(null);
-                    setActiveStates(new Set());
-                  } else if (e.key === 'Escape') {
-                    setSelectedStateForActions(null);
-                    setActiveStates(new Set());
-                  }
-                }}
-                className='flex-1 px-2 py-1 text-xs border text-gray-800 border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500'
-                placeholder='expr'
-              />
-              <button
-                onClick={() => {
-                  // Convert back to action format and save
-                  const entryActions = selectedStateForActions.entryActions
-                    .filter((a) => a.location || a.expr)
-                    .map((a) => `assign|${a.location}|${a.expr}`);
-                  const exitActions = selectedStateForActions.exitActions
-                    .filter((a) => a.location || a.expr)
-                    .map((a) => `assign|${a.location}|${a.expr}`);
-
-                  handleNodeActionsChange(
-                    selectedStateForActions.id,
-                    entryActions,
-                    exitActions
-                  );
-                  setSelectedStateForActions(null);
-                  setActiveStates(new Set());
-                }}
-                className='px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700'
-              >
-                Save
-              </button>
-            </>
-          )}
-
-          <button
-            onClick={() => {
-              setSelectedStateForActions(null);
-              setActiveStates(new Set());
-            }}
-            className='text-xs text-gray-600 hover:text-gray-900 ml-auto'
-          >
-            Cancel
-          </button>
-        </div>
+        <StateActionsEditBar
+          key={selectedStateForActions.id}
+          stateId={selectedStateForActions.id}
+          entryActions={selectedStateForActions.entryActions}
+          exitActions={selectedStateForActions.exitActions}
+          scxmlContent={scxmlContent}
+          onSave={(entryActions, exitActions) => {
+            handleNodeActionsChange(selectedStateForActions.id, entryActions, exitActions);
+            setSelectedStateForActions(null);
+            setActiveStates(new Set());
+          }}
+          onCancel={() => {
+            setSelectedStateForActions(null);
+            setActiveStates(new Set());
+          }}
+        />
       )}
 
       <div className='flex-1'>

@@ -9,6 +9,10 @@ import React, {
 import Editor from '@monaco-editor/react';
 import type { ValidationError } from '@/types/common';
 
+// Module-level guard: Monaco's language registry is a page-level singleton.
+// Registering the completion provider more than once causes duplicate suggestions.
+let scxmlCompletionRegistered = false;
+
 interface XMLEditorProps {
   value: string;
   onChange: (value: string) => void;
@@ -123,19 +127,6 @@ export const XMLEditor = forwardRef<XMLEditorRef, XMLEditorProps>(
       if (typeof window !== 'undefined') {
         import('monaco-editor').then(async (monaco) => {
           try {
-            // Enhanced completion provider already registered in beforeMount
-            // No need to register again to avoid duplicates
-
-            // Store reference to beforeMount disposable for cleanup
-            const beforeMountDisposable = (window as any)
-              .__scxmlBeforeMountDisposable;
-            const disposables = beforeMountDisposable
-              ? [beforeMountDisposable]
-              : [];
-
-            // Store disposables on editor for cleanup
-            (editor as any)._scxmlDisposables = disposables;
-
             // Ensure the model is set to XML language
             const model = editor.getModel();
             if (model) {
@@ -209,23 +200,20 @@ export const XMLEditor = forwardRef<XMLEditorRef, XMLEditorProps>(
         );
         setupSCXMLLanguageSupport(monaco);
 
-        // Register enhanced completion provider once in beforeMount
-        const { createEnhancedSCXMLCompletionProvider } = await import(
-          '@/lib/monaco/enhanced-scxml-completion'
-        );
-
-        const beforeMountProvider =
-          createEnhancedSCXMLCompletionProvider(monaco);
-
-        // Register only for XML language to avoid duplicates
-        const beforeXmlDisposable =
+        // Register enhanced completion provider once per page load.
+        // beforeMount is async so onMount fires before registration completes,
+        // making the dispose-on-unmount approach unreliable. A module-level
+        // flag ensures we register exactly once even across tab switches.
+        if (!scxmlCompletionRegistered) {
+          const { createEnhancedSCXMLCompletionProvider } = await import(
+            '@/lib/monaco/enhanced-scxml-completion'
+          );
           monaco.languages.registerCompletionItemProvider(
             'xml',
-            beforeMountProvider
+            createEnhancedSCXMLCompletionProvider(monaco)
           );
-
-        // Store for cleanup
-        (window as any).__scxmlBeforeMountDisposable = beforeXmlDisposable;
+          scxmlCompletionRegistered = true;
+        }
       } catch (error) {
         console.error('❌ Error in beforeMount:', error);
       }
