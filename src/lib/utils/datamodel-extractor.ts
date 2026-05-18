@@ -1,4 +1,4 @@
-import { XMLParser } from "fast-xml-parser";
+import { XMLBuilder, XMLParser } from "fast-xml-parser";
 
 const xmlParser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_" });
 
@@ -60,4 +60,52 @@ export function extractConfigFields(xmlContent: string): ConfigField[] {
       return { name, type: inferType(defaultValue), defaultValue };
     });
     return res;
+}
+
+const updateParser = new XMLParser({
+  ignoreAttributes: false,
+  attributeNamePrefix: "@_",
+  parseAttributeValue: false,
+  trimValues: false,
+  preserveOrder: true,
+  commentPropName: "#comment",
+  cdataPropName: "#cdata",
+});
+
+const updateBuilder = new XMLBuilder({
+  ignoreAttributes: false,
+  attributeNamePrefix: "@_",
+  preserveOrder: true,
+  commentPropName: "#comment",
+  cdataPropName: "#cdata",
+  suppressEmptyNode: true,
+});
+
+export function updateConfigFieldExpr(xmlContent: string, name: string, newValue: string): string {
+  let doc: unknown[];
+  try {
+    doc = updateParser.parse(xmlContent) as unknown[];
+  } catch {
+    return xmlContent;
+  }
+
+  const targetId = `conf_${name}`;
+
+  function walk(nodes: unknown[]): void {
+    for (const node of nodes) {
+      if (!node || typeof node !== "object") continue;
+      const nodeObj = node as Record<string, unknown>;
+      if ("data" in nodeObj) {
+        const attrs = nodeObj[":@"] as Record<string, string> | undefined;
+        if (attrs?.["@_id"] === targetId) attrs["@_expr"] = newValue;
+      } else {
+        for (const [key, val] of Object.entries(nodeObj)) {
+          if (key !== ":@" && Array.isArray(val)) walk(val);
+        }
+      }
+    }
+  }
+
+  walk(doc);
+  return updateBuilder.build(doc);
 }

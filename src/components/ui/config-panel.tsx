@@ -3,13 +3,15 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Check, Plus, X } from 'lucide-react';
 import { extractConfigFields, type ConfigField } from '@/lib/utils/datamodel-extractor';
-import { useHostAPIStore } from '@/stores/host-api-store';
+import type { ConfigValue } from '@/types/host-api';
 
 interface ConfigPanelProps {
   isVisible: boolean;
   onClose: () => void;
   scxmlContent: string;
   onAddField: (name: string, defaultValue: string) => void;
+  onFieldChange: (name: string, newDefaultValue: string) => void;
+  onEntriesChange?: (values: ConfigValue[]) => void;
 }
 
 interface OverrideEntry {
@@ -17,14 +19,11 @@ interface OverrideEntry {
   override: string;
 }
 
-export function ConfigPanel({ isVisible, onClose, scxmlContent, onAddField }: ConfigPanelProps) {
+export function ConfigPanel({ isVisible, onClose, scxmlContent, onAddField, onFieldChange, onEntriesChange }: ConfigPanelProps) {
   const [entries, setEntries] = useState<OverrideEntry[]>([]);
-  const [isSaving, setIsSaving] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDefault, setNewDefault] = useState('');
-  const { showFeedback } = useHostAPIStore();
-
   const fetchOverrides = useCallback(async (fields: ConfigField[]) => {
     if (fields.length === 0) {
       setEntries([]);
@@ -46,23 +45,14 @@ export function ConfigPanel({ isVisible, onClose, scxmlContent, onAddField }: Co
     fetchOverrides(fields);
   }, [scxmlContent, fetchOverrides]);
 
-  const handleSave = async () => {
-    setIsSaving(true);
-    try {
-      const body = Object.fromEntries(entries.map(e => [e.field.name, e.override]));
-      const res = await fetch('/scxml-editor/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      showFeedback(data.message, res.ok ? 'info' : 'error');
-    } catch (err) {
-      showFeedback(`Failed to save config: ${err}`, 'error');
-    } finally {
-      setIsSaving(false);
-    }
-  };
+  useEffect(() => {
+    onEntriesChange?.(entries.map(e => ({
+      name: e.field.name,
+      type: e.field.type,
+      defaultValue: e.field.defaultValue,
+      override: e.override,
+    })));
+  }, [entries, onEntriesChange]);
 
   const handleConfirmAdd = () => {
     const trimmed = newName.trim();
@@ -125,8 +115,23 @@ export function ConfigPanel({ isVisible, onClose, scxmlContent, onAddField }: Co
                     <input
                       type='text'
                       value={field.defaultValue}
-                      readOnly
-                      className='w-full border rounded px-2 py-1 text-xs bg-gray-50 text-gray-500 cursor-default focus:outline-none'
+                      onChange={e => {
+                        const newVal = e.target.value;
+                        setEntries(prev =>
+                          prev.map(en =>
+                            en.field.name === field.name
+                              ? { ...en, field: { ...en.field, defaultValue: newVal } }
+                              : en,
+                          ),
+                        );
+                      }}
+                      onBlur={e => onFieldChange(field.name, e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          e.currentTarget.blur();
+                        }
+                      }}
+                      className='w-full border rounded px-2 py-1 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-400'
                     />
                   </td>
                   <td className='px-3 py-2'>
@@ -208,15 +213,6 @@ export function ConfigPanel({ isVisible, onClose, scxmlContent, onAddField }: Co
           >
             <Plus className='h-3 w-3' />
             Add config
-          </button>
-        )}
-        {entries.length > 0 && (
-          <button
-            onClick={handleSave}
-            disabled={isSaving}
-            className='flex-1 text-xs px-3 py-1.5 rounded bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
-          >
-            {isSaving ? 'Saving…' : 'Save & Restart'}
           </button>
         )}
       </div>

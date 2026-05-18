@@ -19,6 +19,15 @@ export interface RegisteredCommand extends CommandOptions {
   isExecuting: boolean;
 }
 
+export interface ConfigValue {
+  name: string;
+  type: 'string' | 'double' | 'bool' | 'int';
+  /** Value from the SCXML datamodel (the expr attribute). */
+  defaultValue: string;
+  /** Override value from IO.Conf column. */
+  override: string;
+}
+
 export interface ScxmlEditorAPI {
   onReady: (callback: () => void) => void;
   /**
@@ -27,6 +36,8 @@ export interface ScxmlEditorAPI {
    */
   loadScxml: (content: string) => void;
   getScxml: () => string;
+  /** Returns the current conf_ config field values including any IO.Conf overrides. */
+  getConfigValues: () => ConfigValue[];
   registerCommand: (options: CommandOptions) => void;
   showFeedback: (message: string, level?: FeedbackItem['level']) => void;
   /** Provides channel names for autocompletion in cond, location, expr, and channel attributes. */

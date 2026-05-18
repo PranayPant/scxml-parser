@@ -11,6 +11,7 @@ import { VisualDiagram } from '@/components/diagram';
 import { Upload } from 'lucide-react';
 import { ConfigPanel, ErrorBoundary, ValidationPanel, UndoRedoControls } from '@/components/ui';
 import { SCXMLParser, SCXMLValidator } from '@/lib';
+import { updateConfigFieldExpr } from '@/lib/utils/datamodel-extractor';
 import { hasVisualMetadata } from '@/lib/utils';
 import { useEditorStore } from '@/stores/editor-store';
 import { HistoryManager } from '@/lib/history/history-manager';
@@ -18,7 +19,7 @@ import type { FileInfo, ValidationError } from '@/types/common';
 import type { ActionType } from '@/types/history';
 import { DEFAULT_SCXML_TEMPLATE } from '@/lib/consts/default_scxml_template';
 import { useHostAPIStore } from '@/stores/host-api-store';
-import type { ScxmlEditorAPI } from '@/types/host-api';
+import type { ConfigValue, ScxmlEditorAPI } from '@/types/host-api';
 
 export default function Home() {
   const {
@@ -43,6 +44,7 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const contentRef = useRef(content);
   useEffect(() => { contentRef.current = content; }, [content]);
+  const configValuesRef = useRef<ConfigValue[]>([]);
   const [isUpdatingFromHistory, setIsUpdatingFromHistory] = React.useState(false);
   const [currentHistoryActionType, setCurrentHistoryActionType] = React.useState<ActionType | undefined>(undefined);
   const [isConfigPanelVisible, setConfigPanelVisible] = React.useState(false);
@@ -276,6 +278,7 @@ export default function Home() {
         navigateToRoot();
       },
       getScxml: () => contentRef.current,
+      getConfigValues: () => configValuesRef.current,
       registerCommand,
       showFeedback,
       setChannels: (channels: string[]) => useHostAPIStore.getState().setChannels(channels),
@@ -335,6 +338,10 @@ export default function Home() {
           isVisible={isConfigPanelVisible}
           onClose={() => setConfigPanelVisible(false)}
           scxmlContent={content}
+          onEntriesChange={(values) => { configValuesRef.current = values; }}
+          onFieldChange={(name, newValue) => {
+            handleContentChange(updateConfigFieldExpr(content, name, newValue));
+          }}
           onAddField={(name, defaultValue) => {
             const node = `\n    <data id="conf_${name}" expr="${defaultValue}"/>`;
             let next: string;
