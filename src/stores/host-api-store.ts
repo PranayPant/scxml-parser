@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
-import type { CommandOptions, FeedbackItem, RegisteredCommand } from '@/types/host-api';
+import type { ChannelMapping, CommandOptions, FeedbackItem, RegisteredCommand } from '@/types/host-api';
 
 interface HostAPIState {
   commands: RegisteredCommand[];
@@ -8,6 +8,7 @@ interface HostAPIState {
   readyCallbacks: (() => void)[];
   feedbackQueue: FeedbackItem[];
   channels: string[];
+  channelMappings: ChannelMapping[];
 }
 
 interface HostAPIActions {
@@ -18,6 +19,8 @@ interface HostAPIActions {
   showFeedback: (message: string, level?: FeedbackItem['level']) => void;
   dismissFeedback: (id: string) => void;
   setChannels: (channels: string[]) => void;
+  setChannelMappings: (mappings: ChannelMapping[]) => void;
+  updateChannelMapping: (scxmlRef: string, mappedChannel: string) => void;
 }
 
 export const useHostAPIStore = create<HostAPIState & HostAPIActions>((set, get) => ({
@@ -26,6 +29,7 @@ export const useHostAPIStore = create<HostAPIState & HostAPIActions>((set, get) 
   readyCallbacks: [],
   feedbackQueue: [],
   channels: [],
+  channelMappings: [],
 
   markReady: () => {
     const { readyCallbacks } = get();
@@ -92,4 +96,18 @@ export const useHostAPIStore = create<HostAPIState & HostAPIActions>((set, get) 
   },
 
   setChannels: (channels: string[]) => set({ channels }),
+
+  setChannelMappings: (mappings: ChannelMapping[]) => set({ channelMappings: mappings }),
+
+  updateChannelMapping: (scxmlRef: string, mappedChannel: string) =>
+    set(state => {
+      if (!mappedChannel) {
+        return { channelMappings: state.channelMappings.filter(m => m.scxmlRef !== scxmlRef) };
+      }
+      const exists = state.channelMappings.some(m => m.scxmlRef === scxmlRef);
+      if (exists) {
+        return { channelMappings: state.channelMappings.map(m => m.scxmlRef === scxmlRef ? { scxmlRef, mappedChannel } : m) };
+      }
+      return { channelMappings: [...state.channelMappings, { scxmlRef, mappedChannel }] };
+    }),
 }));

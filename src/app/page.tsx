@@ -9,7 +9,7 @@ import {
 import { TwoTabLayout, type TabType } from '@/components/layout';
 import { VisualDiagram } from '@/components/diagram';
 import { Upload } from 'lucide-react';
-import { ConfigPanel, ErrorBoundary, ValidationPanel, UndoRedoControls } from '@/components/ui';
+import { ChannelMappingPanel, ConfigPanel, ErrorBoundary, ValidationPanel, UndoRedoControls } from '@/components/ui';
 import { SCXMLParser, SCXMLValidator } from '@/lib';
 import { updateConfigFieldExpr } from '@/lib/utils/datamodel-extractor';
 import { hasVisualMetadata } from '@/lib/utils';
@@ -19,7 +19,7 @@ import type { FileInfo, ValidationError } from '@/types/common';
 import type { ActionType } from '@/types/history';
 import { DEFAULT_SCXML_TEMPLATE } from '@/lib/consts/default_scxml_template';
 import { useHostAPIStore } from '@/stores/host-api-store';
-import type { ConfigValue, ScxmlEditorAPI } from '@/types/host-api';
+import type { ChannelMapping, ConfigValue, ScxmlEditorAPI } from '@/types/host-api';
 
 export default function Home() {
   const {
@@ -45,9 +45,13 @@ export default function Home() {
   const contentRef = useRef(content);
   useEffect(() => { contentRef.current = content; }, [content]);
   const configValuesRef = useRef<ConfigValue[]>([]);
+  const channelMappingsRef = useRef<ChannelMapping[]>([]);
+  const storeChannelMappings = useHostAPIStore(state => state.channelMappings);
+  useEffect(() => { channelMappingsRef.current = storeChannelMappings; }, [storeChannelMappings]);
   const [isUpdatingFromHistory, setIsUpdatingFromHistory] = React.useState(false);
   const [currentHistoryActionType, setCurrentHistoryActionType] = React.useState<ActionType | undefined>(undefined);
   const [isConfigPanelVisible, setConfigPanelVisible] = React.useState(false);
+  const [isChannelMappingPanelVisible, setChannelMappingPanelVisible] = React.useState(false);
 
 
   const validateContent = useCallback(
@@ -73,6 +77,20 @@ export default function Home() {
     },
     [parser, validator, setErrors]
   );
+
+  // Auto-load main.scxml on mount when served via LoopControl
+  useEffect(() => {
+    fetch('/scxml-editor/program')
+      .then(r => r.ok ? r.text() : null)
+      .then(xml => {
+        if (!xml) return;
+        setContent(xml);
+        setErrors([]);
+        historyManager.initialize(xml, 'Auto-loaded');
+        navigateToRoot();
+      })
+      .catch(() => {});
+  }, []);
 
   // Initialize history on mount if there's existing content
   useEffect(() => {
@@ -283,7 +301,13 @@ export default function Home() {
       showFeedback,
       setChannels: (channels: string[]) => useHostAPIStore.getState().setChannels(channels),
       toggleConfigPanel: () => setConfigPanelVisible(v => {
-        if (!v) setValidationPanelVisible(false);
+        if (!v) { setValidationPanelVisible(false); setChannelMappingPanelVisible(false); }
+        return !v;
+      }),
+      getChannelMappings: () => channelMappingsRef.current,
+      setChannelMappings: (mappings) => useHostAPIStore.getState().setChannelMappings(mappings),
+      toggleChannelMappingPanel: () => setChannelMappingPanelVisible(v => {
+        if (!v) { setValidationPanelVisible(false); setConfigPanelVisible(false); }
         return !v;
       }),
     };
@@ -292,13 +316,14 @@ export default function Home() {
       // Upgrade the stub object in place so any host reference already captured
       // (e.g. `var api = iframe.contentWindow.ScxmlEditorAPI` in a load handler)
       // automatically gets the real methods without needing to re-read the property.
-      const queue = stub._q as { ready: (() => void)[]; commands: any[]; feedback: [string, any][]; channels?: string[] };
+      const queue = stub._q as { ready: (() => void)[]; commands: any[]; feedback: [string, any][]; channels?: string[]; channelMappings?: ChannelMapping[] };
       Object.assign(stub, realApi);
       delete stub._q;
       queue.ready.forEach(cb => onReady(cb));
       queue.commands.forEach(o => registerCommand(o));
       queue.feedback.forEach(([m, l]) => showFeedback(m, l));
       if (queue.channels) useHostAPIStore.getState().setChannels(queue.channels);
+      if (queue.channelMappings) useHostAPIStore.getState().setChannelMappings(queue.channelMappings);
     } else {
       window.ScxmlEditorAPI = realApi;
     }
@@ -352,6 +377,11 @@ export default function Home() {
             }
             handleContentChange(next);
           }}
+        />
+        <ChannelMappingPanel
+          isVisible={isChannelMappingPanelVisible}
+          onClose={() => setChannelMappingPanelVisible(false)}
+          scxmlContent={content}
         />
       </div>
     </div>

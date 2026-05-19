@@ -1,4 +1,5 @@
 import { XMLBuilder, XMLParser } from "fast-xml-parser";
+import { ConditionEvaluator } from "@/lib/scxml/condition-evaluator";
 
 const xmlParser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_" });
 
@@ -108,4 +109,44 @@ export function updateConfigFieldExpr(xmlContent: string, name: string, newValue
 
   walk(doc);
   return updateBuilder.build(doc);
+}
+
+const SCXML_EXPR_ATTRS = new Set(['@_cond', '@_expr', '@_location', '@_namelist', '@_targetexpr', '@_srcexpr']);
+
+/**
+ * Returns variable names referenced in SCXML expressions/conditions that are not
+ * declared in the datamodel, not reserved (this_* or conf_* prefixes), and not
+ * already present as a physical channel in IO.conf.
+ * These are "unresolved channel references" that need to be mapped to physical channels.
+ */
+export function extractUnresolvedChannelRefs(xmlContent: string, channels: string[]): string[] {
+  const channelSet = new Set(channels);
+  const refs = new Set<string>();
+
+  let parsed: unknown;
+  try {
+    parsed = xmlParser.parse(xmlContent);
+  } catch {
+    return [];
+  }
+
+  function walk(node: unknown): void {
+    if (!node || typeof node !== 'object') return;
+    for (const [key, val] of Object.entries(node as Record<string, unknown>)) {
+      if (SCXML_EXPR_ATTRS.has(key) && typeof val === 'string') {
+        for (const v of ConditionEvaluator.extractVariables(val)) {
+          refs.add(v);
+        }
+      } else if (key !== ':@') {
+        if (Array.isArray(val)) val.forEach(walk);
+        else walk(val);
+      }
+    }
+  }
+
+  walk(parsed);
+
+  return Array.from(refs)
+    .filter(r => !r.startsWith('this_') && !r.startsWith('conf_') && !channelSet.has(r))
+    .sort();
 }

@@ -28,6 +28,13 @@ export interface ConfigValue {
   override: string;
 }
 
+export interface ChannelMapping {
+  /** The unresolved variable name referenced in the SCXML. */
+  scxmlRef: string;
+  /** The physical channel name (from the host's setChannels() list) it maps to. */
+  mappedChannel: string;
+}
+
 export interface ScxmlEditorAPI {
   onReady: (callback: () => void) => void;
   /**
@@ -44,6 +51,12 @@ export interface ScxmlEditorAPI {
   setChannels: (channels: string[]) => void;
   /** Toggles the conf_ config values panel open/closed. */
   toggleConfigPanel: () => void;
+  /** Returns current channel mappings (unresolved SCXML refs → physical channels). */
+  getChannelMappings: () => ChannelMapping[];
+  /** Re-injects persisted mappings (call after loadScxml to restore saved state). */
+  setChannelMappings: (mappings: ChannelMapping[]) => void;
+  /** Toggles the channel mapping panel open/closed. */
+  toggleChannelMappingPanel: () => void;
 }
 
 declare global {
