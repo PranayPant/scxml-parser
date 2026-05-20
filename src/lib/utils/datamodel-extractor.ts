@@ -130,16 +130,18 @@ export function extractUnresolvedChannelRefs(xmlContent: string, channels: strin
     return [];
   }
 
-  function walk(node: unknown): void {
+  function walk(node: unknown, parentKey?: string): void {
     if (!node || typeof node !== 'object') return;
     for (const [key, val] of Object.entries(node as Record<string, unknown>)) {
       if (SCXML_EXPR_ATTRS.has(key) && typeof val === 'string') {
+        // <data> expr initializes variables with literal/computed values, not channel refs
+        if (key === '@_expr' && parentKey === 'data') continue;
         for (const v of ConditionEvaluator.extractVariables(val)) {
           refs.add(v);
         }
       } else if (key !== ':@') {
-        if (Array.isArray(val)) val.forEach(walk);
-        else walk(val);
+        if (Array.isArray(val)) val.forEach(item => walk(item, key));
+        else walk(val, key);
       }
     }
   }
