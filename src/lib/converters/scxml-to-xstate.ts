@@ -400,18 +400,24 @@ export class SCXMLToXStateConverter {
       visualMetadata.width !== undefined &&
       visualMetadata.height !== undefined
     ) {
+      // If isInitial was added after the node was sized, the stored width may not
+      // have room for the "Initial" badge — expand it to the minimum required.
+      const effectiveWidth = isInitial
+        ? Math.max(visualMetadata.width, nodeDimensionCalculator.calculateWidth(stateId, stateType, true))
+        : visualMetadata.width;
+
       // Top-level dimensions (required by NodeResizer)
-      (node as any).width = visualMetadata.width;
+      (node as any).width = effectiveWidth;
       (node as any).height = visualMetadata.height;
 
       // Style-level dimensions
       (node as any).style = {
-        width: visualMetadata.width,
+        width: effectiveWidth,
         height: visualMetadata.height,
       };
 
       // Data-level dimensions (for component access)
-      (node.data as any).width = visualMetadata.width;
+      (node.data as any).width = effectiveWidth;
       (node.data as any).height = visualMetadata.height;
     }
 
