@@ -78,6 +78,12 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
 
   const showSuggestions = isOpen && suggestions.length > 0;
 
+  const acceptSuggestion = (label: string) => {
+    setRawValue(label);
+    setIsOpen(false);
+    setActiveIndex(-1);
+  };
+
   const commit = (value: string, kind: Suggestion['kind'] = 'regular') => {
     if (kind === 'new-channel' && onNewChannel) {
       onNewChannel(value, source, target, event, cond, editingField, edgeId);
@@ -114,8 +120,11 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
         }else{
           enterIndex = activeIndex
         }
-        const active = enterIndex >= 0 ? suggestions[enterIndex] : null;
-        commit(active?.label ?? rawValue, active?.kind ?? 'regular');
+        if (enterIndex >= 0 && suggestions[enterIndex]) {
+          acceptSuggestion(suggestions[enterIndex].label);
+        } else {
+          commit(rawValue);
+        }
         return;
       }
       if (e.key === 'Escape') {
@@ -184,7 +193,7 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
             {suggestions.map((suggestion, index) => (
               <div
                 key={suggestion.label}
-                onMouseDown={() => commit(suggestion.label, suggestion.kind)}
+                onMouseDown={() => acceptSuggestion(suggestion.label)}
                 className={`px-3 py-1.5 text-sm cursor-pointer ${
                   suggestion.kind === 'new-channel'
                     ? 'bg-amber-50 text-amber-800 border-l-2 border-amber-400'
