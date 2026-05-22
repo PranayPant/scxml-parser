@@ -4,6 +4,7 @@ import React, { useMemo } from 'react';
 import { X } from 'lucide-react';
 import { extractDatamodelVariables, extractUnresolvedChannelRefs } from '@/lib/utils/datamodel-extractor';
 import { useHostAPIStore } from '@/stores/host-api-store';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 
 interface ChannelMappingPanelProps {
   isVisible: boolean;
@@ -50,31 +51,26 @@ export function ChannelMappingPanel({ isVisible, onClose, scxmlContent }: Channe
             </p>
           </div>
         ) : (
-          <table className='w-full text-xs'>
+          <table className='w-full text-xs table-fixed'>
             <thead>
               <tr className='bg-gray-50 border-b'>
-                <th className='text-left px-3 py-2 text-gray-600 font-medium'>SCXML Ref</th>
-                <th className='text-left px-3 py-2 text-gray-600 font-medium'>Physical Channel</th>
+                <th className='text-left px-3 py-2 text-gray-600 font-medium w-2/5'>SCXML Ref</th>
+                <th className='text-left px-3 py-2 text-gray-600 font-medium w-3/5'>Physical Channel</th>
               </tr>
             </thead>
             <tbody>
               {unresolvedRefs.map(ref => (
                 <tr key={ref} className='border-b hover:bg-gray-50'>
-                  <td className='px-3 py-2 font-mono text-gray-800'>{ref}</td>
+                  <td className='px-3 py-2 font-mono text-gray-800 truncate max-w-0' title={ref}>{ref}</td>
                   <td className='px-3 py-2'>
                     {availableOptions.length === 0 ? (
                       <span className='text-gray-400 italic'>No channels available</span>
                     ) : (
-                      <select
+                      <SearchableSelect
                         value={getMapped(ref)}
-                        onChange={e => updateChannelMapping(ref, e.target.value)}
-                        className='w-full border rounded px-2 py-1 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white'
-                      >
-                        <option value=''>—</option>
-                        {availableOptions.map(ch => (
-                          <option key={ch} value={ch}>{ch}</option>
-                        ))}
-                      </select>
+                        options={availableOptions}
+                        onChange={v => updateChannelMapping(ref, v)}
+                      />
                     )}
                   </td>
                 </tr>
