@@ -346,6 +346,32 @@ export default function Home() {
   const hasErrors = errors.filter((e) => e.severity === 'error').length > 0;
   const hasWarnings = errors.filter((e) => e.severity === 'warning').length > 0;
 
+  const renderSidePanels = () => (
+    <>
+      <ConfigPanel
+        isVisible={isConfigPanelVisible}
+        onClose={() => setConfigPanelVisible(false)}
+        scxmlContent={content}
+        onEntriesChange={(values) => { configValuesRef.current = values; }}
+        onFieldChange={(name, newValue) => {
+          handleContentChange(updateConfigFieldExpr(content, name, newValue));
+        }}
+        onAddField={(name, defaultValue) => {
+          const node = `\n    <data id="conf_${name}" expr="${defaultValue}"/>`;
+          const next = content.includes('</datamodel>')
+            ? content.replace('</datamodel>', `${node}\n  </datamodel>`)
+            : content.replace('</scxml>', `\n  <datamodel>${node}\n  </datamodel>\n</scxml>`);
+          handleContentChange(next);
+        }}
+      />
+      <ChannelMappingPanel
+        isVisible={isChannelMappingPanelVisible}
+        onClose={() => setChannelMappingPanelVisible(false)}
+        scxmlContent={content}
+      />
+    </>
+  );
+
   const renderCodeEditor = () => (
     <div className='flex gap-4 h-[calc(100vh-200px)]'>
       <div className='flex-1'>
@@ -365,36 +391,13 @@ export default function Home() {
           onClose={() => setValidationPanelVisible(false)}
           onErrorClick={handleErrorClick}
         />
-        <ConfigPanel
-          isVisible={isConfigPanelVisible}
-          onClose={() => setConfigPanelVisible(false)}
-          scxmlContent={content}
-          onEntriesChange={(values) => { configValuesRef.current = values; }}
-          onFieldChange={(name, newValue) => {
-            handleContentChange(updateConfigFieldExpr(content, name, newValue));
-          }}
-          onAddField={(name, defaultValue) => {
-            const node = `\n    <data id="conf_${name}" expr="${defaultValue}"/>`;
-            let next: string;
-            if (content.includes('</datamodel>')) {
-              next = content.replace('</datamodel>', `${node}\n  </datamodel>`);
-            } else {
-              next = content.replace('</scxml>', `\n  <datamodel>${node}\n  </datamodel>\n</scxml>`);
-            }
-            handleContentChange(next);
-          }}
-        />
-        <ChannelMappingPanel
-          isVisible={isChannelMappingPanelVisible}
-          onClose={() => setChannelMappingPanelVisible(false)}
-          scxmlContent={content}
-        />
+        {renderSidePanels()}
       </div>
     </div>
   );
 
   const renderVisualDiagram = () => (
-    <div className='h-full'>
+    <div className='h-full relative'>
       <VisualDiagram
         scxmlContent={content}
         onNodeChange={(nodes) => {
@@ -407,6 +410,11 @@ export default function Home() {
         isUpdatingFromHistory={isUpdatingFromHistory}
         historyActionType={currentHistoryActionType}
       />
+      <div className='absolute right-0 top-0 h-full flex pointer-events-none z-20'>
+        <div className='pointer-events-auto h-full flex'>
+          {renderSidePanels()}
+        </div>
+      </div>
     </div>
   );
 
