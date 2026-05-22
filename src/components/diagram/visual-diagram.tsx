@@ -1374,15 +1374,29 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
             const vizWidth = visualMetadata?.layout?.width;
             const vizHeight = visualMetadata?.layout?.height;
 
+            // If this node became initial after it was sized, the stored width may be
+            // too narrow for the "Initial" badge — expand to the minimum required.
+            const effectiveVizWidth =
+              nodeUpdate.data?.isInitial && vizWidth
+                ? Math.max(
+                    vizWidth,
+                    nodeDimensionCalculator.calculateWidth(
+                      node.id,
+                      nodeUpdate.data?.stateType || 'simple',
+                      true
+                    )
+                  )
+                : vizWidth;
+
             // Set dimensions at multiple levels for React Flow compatibility
             nodeUpdate.width =
-              vizWidth ?? nodeUpdate.width ?? nodeUpdate.style?.width;
+              effectiveVizWidth ?? nodeUpdate.width ?? nodeUpdate.style?.width;
             nodeUpdate.height =
               vizHeight ?? nodeUpdate.height ?? nodeUpdate.style?.height;
 
             nodeUpdate.style = {
               ...nodeUpdate.style,
-              width: vizWidth ?? nodeUpdate.style?.width,
+              width: effectiveVizWidth ?? nodeUpdate.style?.width,
               height: vizHeight ?? nodeUpdate.style?.height,
             };
 
@@ -1417,7 +1431,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
                 nodeUpdate.type === 'scxmlHistory' &&
                 node.data?.isHistoryWrapper
                   ? nodeUpdate.style?.width || (node.data as any).width
-                  : visualMetadata?.layout?.width ?? nodeUpdate.style?.width,
+                  : effectiveVizWidth ?? nodeUpdate.style?.width,
               height:
                 nodeUpdate.type === 'scxmlHistory' &&
                 node.data?.isHistoryWrapper
