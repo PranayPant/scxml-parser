@@ -57,6 +57,8 @@ export interface ScxmlEditorAPI {
   setChannelMappings: (mappings: ChannelMapping[]) => void;
   /** Toggles the channel mapping panel open/closed. */
   toggleChannelMappingPanel: () => void;
+  /** Switches the active tab. */
+  setActiveTab: (tab: 'code' | 'visual') => void;
 }
 
 declare global {

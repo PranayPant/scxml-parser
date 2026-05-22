@@ -48,6 +48,7 @@ export default function Home() {
   const channelMappingsRef = useRef<ChannelMapping[]>([]);
   const storeChannelMappings = useHostAPIStore(state => state.channelMappings);
   useEffect(() => { channelMappingsRef.current = storeChannelMappings; }, [storeChannelMappings]);
+  const [isInitialLoading, setIsInitialLoading] = React.useState(true);
   const [isUpdatingFromHistory, setIsUpdatingFromHistory] = React.useState(false);
   const [currentHistoryActionType, setCurrentHistoryActionType] = React.useState<ActionType | undefined>(undefined);
   const [isConfigPanelVisible, setConfigPanelVisible] = React.useState(false);
@@ -89,7 +90,8 @@ export default function Home() {
         historyManager.initialize(xml, 'Auto-loaded');
         navigateToRoot();
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setIsInitialLoading(false));
   }, []);
 
   // Initialize history on mount if there's existing content
@@ -310,6 +312,7 @@ export default function Home() {
         if (!v) { setValidationPanelVisible(false); setConfigPanelVisible(false); }
         return !v;
       }),
+      setActiveTab: (tab) => useHostAPIStore.getState().setRequestedTab(tab),
     };
 
     if (stub?._q) {
@@ -327,6 +330,10 @@ export default function Home() {
     } else {
       window.ScxmlEditorAPI = realApi;
     }
+    // Fire onReady callbacks now — before TwoTabLayout renders (which waits for the
+    // async auto-load fetch). This lets the host's onReady callback set requestedTab
+    // so TwoTabLayout can read it via its useState lazy initializer on first render.
+    markReady();
   }, []);
 
   const getDownloadFilename = () => {
@@ -348,7 +355,6 @@ export default function Home() {
           onChange={handleContentChange}
           errors={errors}
           height='80vh'
-          onMount={markReady}
         />
       </div>
 
@@ -470,7 +476,11 @@ export default function Home() {
   return (
     <ErrorBoundary>
       <div className='min-h-screen bg-gray-50 overflow-hidden'>
-        {!content ? (
+        {isInitialLoading ? (
+          <div className='flex items-center justify-center h-screen bg-gray-50'>
+            <div className='h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin' />
+          </div>
+        ) : !content ? (
           <div className='container mx-auto px-4 py-8'>
             <div className='mb-8'>
               <h1 className='text-3xl font-bold text-gray-900 mb-2'>

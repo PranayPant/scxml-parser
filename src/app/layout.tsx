@@ -41,7 +41,8 @@ export default function RootLayout({
     setChannels:function(c){q.channels=c;},
     loadScxml:function(){},
     getScxml:function(){return'';},
-    toggleConfigPanel:function(){}
+    toggleConfigPanel:function(){},
+    setActiveTab:function(){}
   };
 })();` }} />
         {children}

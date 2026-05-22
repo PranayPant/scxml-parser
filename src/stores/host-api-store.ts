@@ -9,6 +9,7 @@ interface HostAPIState {
   feedbackQueue: FeedbackItem[];
   channels: string[];
   channelMappings: ChannelMapping[];
+  requestedTab: 'code' | 'visual' | null;
 }
 
 interface HostAPIActions {
@@ -21,6 +22,7 @@ interface HostAPIActions {
   setChannels: (channels: string[]) => void;
   setChannelMappings: (mappings: ChannelMapping[]) => void;
   updateChannelMapping: (scxmlRef: string, mappedChannel: string) => void;
+  setRequestedTab: (tab: 'code' | 'visual' | null) => void;
 }
 
 export const useHostAPIStore = create<HostAPIState & HostAPIActions>((set, get) => ({
@@ -30,6 +32,7 @@ export const useHostAPIStore = create<HostAPIState & HostAPIActions>((set, get) 
   feedbackQueue: [],
   channels: [],
   channelMappings: [],
+  requestedTab: null,
 
   markReady: () => {
     const { readyCallbacks } = get();
@@ -98,6 +101,8 @@ export const useHostAPIStore = create<HostAPIState & HostAPIActions>((set, get) 
   setChannels: (channels: string[]) => set({ channels }),
 
   setChannelMappings: (mappings: ChannelMapping[]) => set({ channelMappings: mappings }),
+
+  setRequestedTab: (tab) => set({ requestedTab: tab }),
 
   updateChannelMapping: (scxmlRef: string, mappedChannel: string) =>
     set(state => {

@@ -43,3 +43,4 @@ xml/examples/*
 .claude/settings.json
 
 docs/
+deploy.ps1

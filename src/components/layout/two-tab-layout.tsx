@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { Code, FileText, Workflow } from "lucide-react";
 import { InlineTipsCarousel } from "./inline-tips-carousel";
 import { useHostAPIStore } from "@/stores/host-api-store";
@@ -28,9 +28,18 @@ export const TwoTabLayout: React.FC<TwoTabLayoutProps> = ({
   fileInfo,
   actions,
 }) => {
-  const [activeTab, setActiveTab] = useState<TabType>("code");
-  const { commands, feedbackQueue, executeCommand, dismissFeedback } =
+  const [activeTab, setActiveTab] = useState<TabType>(
+    () => useHostAPIStore.getState().requestedTab ?? "code"
+  );
+  const { commands, feedbackQueue, executeCommand, dismissFeedback, requestedTab, setRequestedTab } =
     useHostAPIStore();
+
+  useEffect(() => {
+    if (requestedTab !== null) {
+      setActiveTab(requestedTab);
+      setRequestedTab(null);
+    }
+  }, [requestedTab, setRequestedTab]);
 
   const handleTabChange = useCallback((tab: TabType) => {
     setActiveTab(tab);
