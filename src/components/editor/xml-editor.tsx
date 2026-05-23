@@ -3,11 +3,13 @@
 import React, {
   useRef,
   useEffect,
+  useState,
   useImperativeHandle,
   forwardRef,
 } from 'react';
 import Editor from '@monaco-editor/react';
 import type { ValidationError } from '@/types/common';
+import { ensureMonacoConfigured } from '@/lib/monaco/monaco-setup';
 
 // Module-level guard: Monaco's language registry is a page-level singleton.
 // Registering the completion provider more than once causes duplicate suggestions.
@@ -46,6 +48,12 @@ export const XMLEditor = forwardRef<XMLEditorRef, XMLEditorProps>(
       import('monaco-editor').editor.IStandaloneCodeEditor | null
     >(null);
 
+    const [monacoReady, setMonacoReady] = useState(false);
+
+    useEffect(() => {
+      ensureMonacoConfigured().then(() => setMonacoReady(true));
+    }, []);
+
     useImperativeHandle(
       ref,
       () => ({
@@ -69,31 +77,27 @@ export const XMLEditor = forwardRef<XMLEditorRef, XMLEditorProps>(
     );
 
     useEffect(() => {
-      if (
-        editorRef.current &&
-        errors.length > 0 &&
-        typeof window !== 'undefined'
-      ) {
-        import('monaco-editor').then((monaco) => {
-          const model = editorRef.current?.getModel();
-          if (model) {
-            const markers = errors.map((error) => ({
-              severity:
-                error.severity === 'error'
-                  ? monaco.MarkerSeverity.Error
-                  : monaco.MarkerSeverity.Warning,
-              message: error.message,
-              startLineNumber: error.line || 1,
-              startColumn: error.column || 1,
-              endLineNumber: error.line || 1,
-              endColumn: error.column ? error.column + 10 : 10,
-              code: error.code || undefined,
-            }));
+      if (!editorRef.current || typeof window === 'undefined') return;
 
-            monaco.editor.setModelMarkers(model, 'scxml-parser', markers);
-          }
-        });
-      }
+      import('monaco-editor').then((monaco) => {
+        const model = editorRef.current?.getModel();
+        if (!model) return;
+
+        const markers = errors.map((error) => ({
+          severity:
+            error.severity === 'error'
+              ? monaco.MarkerSeverity.Error
+              : monaco.MarkerSeverity.Warning,
+          message: error.message,
+          startLineNumber: error.line || 1,
+          startColumn: error.column || 1,
+          endLineNumber: error.line || 1,
+          endColumn: error.column ? error.column + 10 : 10,
+          code: error.code || undefined,
+        }));
+
+        monaco.editor.setModelMarkers(model, 'scxml-parser', markers);
+      });
     }, [errors]);
 
     // Cleanup effect for disposables
@@ -218,6 +222,15 @@ export const XMLEditor = forwardRef<XMLEditorRef, XMLEditorProps>(
         console.error('❌ Error in beforeMount:', error);
       }
     };
+
+    if (!monacoReady) {
+      return (
+        <div
+          className='border rounded-lg'
+          style={{ height: typeof height === 'number' ? `${height}px` : height }}
+        />
+      );
+    }
 
     return (
       <div className='border rounded-lg overflow-hidden'>
