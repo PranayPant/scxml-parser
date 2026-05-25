@@ -825,7 +825,7 @@ function createAttributeValueSuggestions(
 
     // Create suggestions for each state ID, filtered by typed prefix
     for (const stateInfo of stateIdInfos) {
-      if (typedPrefix && !stateInfo.id.startsWith(typedPrefix)) continue;
+      if (typedPrefix && !stateInfo.id.includes(typedPrefix)) continue;
 
       const pathLabel =
         stateInfo.path.length > 1
@@ -860,7 +860,7 @@ function createAttributeValueSuggestions(
     // Variable name suggestions when defining/editing a <data id="..."> element
     const xmlContent = model.getValue();
     for (const varName of extractDatamodelVariables(xmlContent)) {
-      if (typedPrefix && !varName.startsWith(typedPrefix)) continue;
+      if (typedPrefix && !varName.includes(typedPrefix)) continue;
       suggestions.push({
         label: varName,
         kind: monaco.languages.CompletionItemKind.Variable,
@@ -874,7 +874,7 @@ function createAttributeValueSuggestions(
     // Datamodel variables — valid in all ECMAScript expression attributes
     const xmlContent = model.getValue();
     for (const varName of extractDatamodelVariables(xmlContent)) {
-      if (typedPrefix && !varName.startsWith(typedPrefix)) continue;
+      if (typedPrefix && !varName.includes(typedPrefix)) continue;
       suggestions.push({
         label: varName,
         kind: monaco.languages.CompletionItemKind.Variable,
@@ -896,7 +896,7 @@ function createAttributeValueSuggestions(
     if (channelAttrs.includes(context.currentAttribute)) {
       const channels = useHostAPIStore.getState().channels;
       for (const ch of channels) {
-        if (typedPrefix && !ch.startsWith(typedPrefix)) continue;
+        if (typedPrefix && !ch.includes(typedPrefix)) continue;
         suggestions.push({
           label: ch,
           kind: monaco.languages.CompletionItemKind.Variable,
@@ -937,7 +937,7 @@ function createAttributeValueSuggestions(
     // Static values for non-expression attributes
     const validValues = ATTRIBUTE_VALUES[context.currentAttribute] || [];
     for (const value of validValues) {
-      if (typedPrefix && !value.startsWith(typedPrefix)) continue;
+      if (typedPrefix && !value.includes(typedPrefix)) continue;
       suggestions.push({
         label: value,
         kind: monaco.languages.CompletionItemKind.Value,

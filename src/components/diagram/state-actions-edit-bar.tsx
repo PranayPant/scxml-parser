@@ -60,10 +60,10 @@ export const StateActionsEditBar: React.FC<StateActionsEditBarProps> = ({
   const suggestions: Suggestion[] = React.useMemo(() => {
     const prefix = locationValue.toLowerCase();
     const varSuggestions: Suggestion[] = dataVars
-      .filter((v) => v.toLowerCase().startsWith(prefix))
+      .filter((v) => v.toLowerCase().includes(prefix))
       .map((v) => ({ label: v, kind: 'variable' }));
     const channelSuggestions: Suggestion[] = channels
-      .filter((c) => c.toLowerCase().startsWith(prefix))
+      .filter((c) => c.toLowerCase().includes(prefix))
       .map((c) => ({ label: c, kind: 'channel' }));
     return [...varSuggestions, ...channelSuggestions];
   }, [locationValue, dataVars, channels]);

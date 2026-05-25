@@ -70,7 +70,7 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
 
     if (editingField !== 'cond') {
       const prefix = rawValue.toLowerCase();
-      const filtered = combined.filter((item) => item.toLowerCase().startsWith(prefix));
+      const filtered = combined.filter((item) => item.toLowerCase().includes(prefix));
       if (filtered.length === 0 && rawValue.startsWith('this_')) {
         return [{ label: rawValue, kind: 'new-channel' as const }];
       }
@@ -93,7 +93,7 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
 
     // Mid-token: filter variables/channels by the current token
     const prefix = lastToken.toLowerCase();
-    const filtered = combined.filter((item) => item.toLowerCase().startsWith(prefix));
+    const filtered = combined.filter((item) => item.toLowerCase().includes(prefix));
     if (filtered.length === 0 && lastToken.startsWith('this_')) {
       return [{ label: lastToken, kind: 'new-channel' as const }];
     }
