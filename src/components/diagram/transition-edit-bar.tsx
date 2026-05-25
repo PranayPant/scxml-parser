@@ -34,6 +34,9 @@ interface TransitionEditBarProps {
 
 type Suggestion = { label: string; kind: 'regular' | 'new-channel' };
 
+const OPERATORS = ['==', '!=', '>=', '<=', '>', '<', '&&', '||'];
+const OPERATOR_SET = new Set([...OPERATORS, '!']);
+
 export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
   edgeId,
   source,
@@ -62,33 +65,63 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
   const channels = useHostAPIStore((state) => state.channels);
 
   const suggestions: Suggestion[] = React.useMemo(() => {
-    const prefix = rawValue.toLowerCase();
     const vars = extractDatamodelVariables(scxmlContent);
     const combined = Array.from(new Set([...vars, ...channels]));
-    const filtered = combined.filter((item) =>
-      item.toLowerCase().startsWith(prefix)
-    );
 
-    if (filtered.length === 0 && rawValue.startsWith('this_')) {
-      return [{ label: rawValue, kind: 'new-channel' as const }];
+    if (editingField !== 'cond') {
+      const prefix = rawValue.toLowerCase();
+      const filtered = combined.filter((item) => item.toLowerCase().startsWith(prefix));
+      if (filtered.length === 0 && rawValue.startsWith('this_')) {
+        return [{ label: rawValue, kind: 'new-channel' as const }];
+      }
+      return filtered.map((item) => ({ label: item, kind: 'regular' as const }));
     }
 
+    // Cond field: token-aware suggestions
+    const endsWithSpace = rawValue.endsWith(' ');
+    const tokens = rawValue.trimEnd().split(/\s+/);
+    const lastToken = endsWithSpace ? '' : (tokens[tokens.length - 1] ?? '');
+    const prevToken = endsWithSpace ? (tokens[tokens.length - 1] ?? '') : (tokens[tokens.length - 2] ?? '');
+
+    if (endsWithSpace) {
+      // After a space: suggest operators or variables depending on context
+      if (OPERATOR_SET.has(prevToken)) {
+        return combined.map((item) => ({ label: item, kind: 'regular' as const }));
+      }
+      return OPERATORS.map((op) => ({ label: op, kind: 'regular' as const }));
+    }
+
+    // Mid-token: filter variables/channels by the current token
+    const prefix = lastToken.toLowerCase();
+    const filtered = combined.filter((item) => item.toLowerCase().startsWith(prefix));
+    if (filtered.length === 0 && lastToken.startsWith('this_')) {
+      return [{ label: lastToken, kind: 'new-channel' as const }];
+    }
     return filtered.map((item) => ({ label: item, kind: 'regular' as const }));
-  }, [rawValue, channels, scxmlContent]);
+  }, [rawValue, channels, scxmlContent, editingField]);
 
   const showSuggestions = isOpen && suggestions.length > 0;
 
+  const buildCondValue = (label: string): string => {
+    const endsWithSpace = rawValue.endsWith(' ');
+    if (endsWithSpace) return rawValue + label;
+    const tokens = rawValue.split(/\s+/);
+    tokens[tokens.length - 1] = label;
+    return tokens.join(' ');
+  };
+
   const acceptSuggestion = (label: string) => {
-    setRawValue(label);
+    setRawValue(editingField === 'cond' ? buildCondValue(label) : label);
     setIsOpen(false);
     setActiveIndex(-1);
   };
 
   const commit = (value: string, kind: Suggestion['kind'] = 'regular') => {
+    const trimmed = value.trim();
     if (kind === 'new-channel' && onNewChannel) {
-      onNewChannel(value, source, target, event, cond, editingField, edgeId);
-    } else if (value) {
-      onCommit(source, target, event, cond, value, editingField, edgeId);
+      onNewChannel(trimmed, source, target, event, cond, editingField, edgeId);
+    } else if (trimmed) {
+      onCommit(source, target, event, cond, trimmed, editingField, edgeId);
     }
     onCancel();
   };
@@ -107,9 +140,7 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
       }
       if (e.key === 'Tab' && activeIndex >= 0) {
         e.preventDefault();
-        setRawValue(suggestions[activeIndex].label);
-        setIsOpen(false);
-        setActiveIndex(-1);
+        acceptSuggestion(suggestions[activeIndex].label);
         return;
       }
       if (e.key === 'Enter') {
@@ -173,7 +204,13 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
       <div className='relative flex-1'>
         <input
           type='text'
-          value={activeIndex >= 0 && suggestions[activeIndex] ? suggestions[activeIndex].label : rawValue}
+          value={
+            activeIndex >= 0 && suggestions[activeIndex]
+              ? (editingField === 'cond'
+                  ? buildCondValue(suggestions[activeIndex].label)
+                  : suggestions[activeIndex].label)
+              : rawValue
+          }
           onChange={(e) => {
             setRawValue(e.target.value);
             setIsOpen(true);
@@ -211,6 +248,12 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
           </div>
         )}
       </div>
+      <button
+        onClick={() => commit(rawValue)}
+        className='text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 px-3 py-1.5 rounded-md'
+      >
+        Save
+      </button>
       <button
         onClick={onCancel}
         className='text-sm text-gray-600 hover:text-gray-900 px-2'
