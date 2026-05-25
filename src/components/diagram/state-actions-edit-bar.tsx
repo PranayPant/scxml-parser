@@ -1,7 +1,10 @@
 'use client';
 
 import { extractDatamodelVariables } from '@/lib/utils/datamodel-extractor';
+import { useHostAPIStore } from '@/stores/host-api-store';
 import React from 'react';
+
+type Suggestion = { label: string; kind: 'channel' | 'variable' };
 
 interface ActionRow {
   location: string;
@@ -45,6 +48,8 @@ export const StateActionsEditBar: React.FC<StateActionsEditBarProps> = ({
   const actions = editingField === 'onentry' ? entryActions : exitActions;
   const setActions = editingField === 'onentry' ? setEntryActions : setExitActions;
 
+  const channels = useHostAPIStore((state) => state.channels);
+
   const dataVars = React.useMemo(
     () => extractDatamodelVariables(scxmlContent),
     [scxmlContent]
@@ -52,17 +57,22 @@ export const StateActionsEditBar: React.FC<StateActionsEditBarProps> = ({
 
   const locationValue = actions[0]?.location ?? '';
 
-  const suggestions = React.useMemo(() => {
+  const suggestions: Suggestion[] = React.useMemo(() => {
     const prefix = locationValue.toLowerCase();
-    if (!prefix) return dataVars;
-    return dataVars.filter((v) => v.toLowerCase().startsWith(prefix));
-  }, [locationValue, dataVars]);
+    const varSuggestions: Suggestion[] = dataVars
+      .filter((v) => v.toLowerCase().startsWith(prefix))
+      .map((v) => ({ label: v, kind: 'variable' }));
+    const channelSuggestions: Suggestion[] = channels
+      .filter((c) => c.toLowerCase().startsWith(prefix))
+      .map((c) => ({ label: c, kind: 'channel' }));
+    return [...varSuggestions, ...channelSuggestions];
+  }, [locationValue, dataVars, channels]);
 
   const showSuggestions = isOpen && suggestions.length > 0;
 
-  const selectSuggestion = (value: string) => {
+  const selectSuggestion = (suggestion: Suggestion) => {
     const updated = actions.length > 0 ? [...actions] : [{ location: '', expr: '' }];
-    updated[0] = { ...updated[0], location: value };
+    updated[0] = { ...updated[0], location: suggestion.label };
     setActions(updated);
     setIsOpen(false);
     setActiveIndex(-1);
@@ -131,10 +141,10 @@ export const StateActionsEditBar: React.FC<StateActionsEditBarProps> = ({
       </div>
 
       {/* location input with autocomplete */}
-      <div className='relative w-64'>
+      <div className='relative w-96'>
         <input
           type='text'
-          value={activeIndex >= 0 ? suggestions[activeIndex] : locationValue}
+          value={activeIndex >= 0 ? suggestions[activeIndex].label : locationValue}
           onChange={(e) => {
             const updated = actions.length > 0 ? [...actions] : [{ location: '', expr: '' }];
             updated[0] = { ...updated[0], location: e.target.value };
@@ -152,13 +162,18 @@ export const StateActionsEditBar: React.FC<StateActionsEditBarProps> = ({
           <div className='absolute top-full left-0 right-0 mt-1 z-50 bg-white border border-green-200 rounded-md shadow-lg max-h-48 overflow-y-auto'>
             {suggestions.map((suggestion, index) => (
               <div
-                key={suggestion}
+                key={suggestion.label}
                 onMouseDown={() => selectSuggestion(suggestion)}
-                className={`px-3 py-1.5 text-sm cursor-pointer ${
+                className={`px-3 py-1.5 text-sm cursor-pointer flex items-center justify-between gap-2 ${
                   index === activeIndex ? 'bg-green-500 text-white' : 'hover:bg-green-100 text-gray-800'
                 }`}
               >
-                {suggestion}
+                <span>{suggestion.label}</span>
+                {suggestion.kind === 'channel' && (
+                  <span className={`text-xs px-1 py-0.5 rounded font-mono ${
+                    index === activeIndex ? 'bg-green-400 text-white' : 'bg-blue-100 text-blue-600'
+                  }`}>ch</span>
+                )}
               </div>
             ))}
           </div>
