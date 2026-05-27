@@ -6,12 +6,19 @@ export interface FeedbackItem {
   level: 'info' | 'warning' | 'error';
 }
 
+/** Persistent host-pushed error shown in the ValidationPanel Host Alerts tab. Unlike FeedbackItem (transient toast), these remain until explicitly dismissed by the user or cleared via clearErrors(). */
+export interface HostErrorItem {
+  id: string;
+  message: string;
+  level: 'info' | 'warning' | 'error';
+}
+
 export interface CommandOptions {
   id: string;
   label: string;
   tooltip?: string;
-  icon?: string;          // Lucide icon name (reserved for future use)
-  order: number;          // Lower = further left in toolbar
+  icon?: string;
+  order: number;
   run: () => void | Promise<void>;
 }
 
@@ -22,43 +29,32 @@ export interface RegisteredCommand extends CommandOptions {
 export interface ConfigValue {
   name: string;
   type: 'string' | 'double' | 'bool' | 'int';
-  /** Value from the SCXML datamodel (the expr attribute). */
   defaultValue: string;
-  /** Override value from IO.Conf column. */
   override: string;
 }
 
 export interface ChannelMapping {
-  /** The unresolved variable name referenced in the SCXML. */
   scxmlRef: string;
-  /** The physical channel name (from the host's setChannels() list) it maps to. */
   mappedChannel: string;
 }
 
 export interface ScxmlEditorAPI {
   onReady: (callback: () => void) => void;
-  /**
-   * Loads SCXML into the editor.
-   * Side effects: initializes undo/redo history, resets hierarchy navigation to root.
-   */
   loadScxml: (content: string) => void;
   getScxml: () => string;
-  /** Returns the current conf_ config field values including any IO.Conf overrides. */
   getConfigValues: () => ConfigValue[];
   registerCommand: (options: CommandOptions) => void;
   showFeedback: (message: string, level?: FeedbackItem['level']) => void;
-  /** Provides channel names for autocompletion in cond, location, expr, and channel attributes. */
   setChannels: (channels: string[]) => void;
-  /** Toggles the conf_ config values panel open/closed. */
   toggleConfigPanel: () => void;
-  /** Returns current channel mappings (unresolved SCXML refs → physical channels). */
   getChannelMappings: () => ChannelMapping[];
-  /** Re-injects persisted mappings (call after loadScxml to restore saved state). */
   setChannelMappings: (mappings: ChannelMapping[]) => void;
-  /** Toggles the channel mapping panel open/closed. */
   toggleChannelMappingPanel: () => void;
-  /** Switches the active tab. */
   setActiveTab: (tab: 'code' | 'visual') => void;
+  /** Push one or more persistent errors into the Host Alerts tab. Panel opens automatically. */
+  showErrors: (errors: Array<{ message: string; level?: 'info' | 'warning' | 'error' }>) => void;
+  /** Remove all host errors from the Host Alerts tab. */
+  clearErrors: () => void;
 }
 
 declare global {

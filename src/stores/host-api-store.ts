@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
-import type { ChannelMapping, CommandOptions, FeedbackItem, RegisteredCommand } from '@/types/host-api';
+import type { ChannelMapping, CommandOptions, FeedbackItem, HostErrorItem, RegisteredCommand } from '@/types/host-api';
 
 interface HostAPIState {
   commands: RegisteredCommand[];
@@ -10,6 +10,8 @@ interface HostAPIState {
   channels: string[];
   channelMappings: ChannelMapping[];
   requestedTab: 'code' | 'visual' | null;
+  hostErrors: HostErrorItem[];
+  requestedValidationTab: 'validation' | 'host-alerts' | null;
 }
 
 interface HostAPIActions {
@@ -23,6 +25,10 @@ interface HostAPIActions {
   setChannelMappings: (mappings: ChannelMapping[]) => void;
   updateChannelMapping: (scxmlRef: string, mappedChannel: string) => void;
   setRequestedTab: (tab: 'code' | 'visual' | null) => void;
+  showErrors: (errors: Array<{ message: string; level?: HostErrorItem['level'] }>) => void;
+  dismissHostError: (id: string) => void;
+  clearHostErrors: () => void;
+  setRequestedValidationTab: (tab: 'validation' | 'host-alerts' | null) => void;
 }
 
 export const useHostAPIStore = create<HostAPIState & HostAPIActions>((set, get) => ({
@@ -33,6 +39,8 @@ export const useHostAPIStore = create<HostAPIState & HostAPIActions>((set, get) 
   channels: [],
   channelMappings: [],
   requestedTab: null,
+  hostErrors: [],
+  requestedValidationTab: null,
 
   markReady: () => {
     const { readyCallbacks } = get();
@@ -115,4 +123,26 @@ export const useHostAPIStore = create<HostAPIState & HostAPIActions>((set, get) 
       }
       return { channelMappings: [...state.channelMappings, { scxmlRef, mappedChannel }] };
     }),
+
+  showErrors: (errors) => {
+    const items: HostErrorItem[] = errors.map(e => ({
+      id: uuidv4(),
+      message: e.message,
+      level: e.level ?? 'error',
+    }));
+    set(state => ({
+      hostErrors: [...state.hostErrors, ...items],
+      requestedValidationTab: 'host-alerts',
+    }));
+  },
+
+  dismissHostError: (id: string) => {
+    set(state => ({
+      hostErrors: state.hostErrors.filter(e => e.id !== id),
+    }));
+  },
+
+  clearHostErrors: () => set({ hostErrors: [] }),
+
+  setRequestedValidationTab: (tab) => set({ requestedValidationTab: tab }),
 }));

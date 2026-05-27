@@ -1,38 +1,42 @@
 'use client';
 
 import React from 'react';
-import { AlertCircle, AlertTriangle, CheckCircle, X } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle, Info, X } from 'lucide-react';
 import type { ValidationError } from '@/types/common';
+import type { HostErrorItem } from '@/types/host-api';
 
 interface ValidationPanelProps {
   errors: ValidationError[];
+  hostErrors: HostErrorItem[];
   isVisible: boolean;
+  activeTab: 'validation' | 'host-alerts';
   onClose: () => void;
+  onTabChange: (tab: 'validation' | 'host-alerts') => void;
   onErrorClick?: (error: ValidationError) => void;
+  onDismissHostError: (id: string) => void;
+  onClearHostErrors: () => void;
 }
 
 export function ValidationPanel({
   errors,
+  hostErrors,
   isVisible,
+  activeTab,
   onClose,
+  onTabChange,
   onErrorClick,
+  onDismissHostError,
+  onClearHostErrors,
 }: ValidationPanelProps) {
   if (!isVisible) return null;
 
-  const errorCount = errors.filter((e) => e.severity === 'error').length;
-  const warningCount = errors.filter((e) => e.severity === 'warning').length;
-
-  // Sort errors first, then warnings
-  const sortedErrors = [...errors].sort((a, b) => {
-    if (a.severity === 'error' && b.severity === 'warning') return -1;
-    if (a.severity === 'warning' && b.severity === 'error') return 1;
-    return 0;
-  });
+  const hostCount = hostErrors.length;
+  const showTabs = hostCount > 0;
 
   return (
     <div className='bg-white border rounded-lg shadow-sm'>
-      <div className='flex items-center justify-between p-4 border-b'>
-        <h3 className='font-medium text-gray-900'>Validation Results</h3>
+      <div className='flex items-center justify-between px-4 pt-4 pb-0'>
+        <h3 className='font-medium text-gray-900'>Errors</h3>
         <button
           onClick={onClose}
           className='text-gray-400 hover:text-gray-600 transition-colors'
@@ -41,48 +45,189 @@ export function ValidationPanel({
         </button>
       </div>
 
-      <div className='p-4'>
-        {errors.length === 0 ? (
-          <div className='flex items-center text-green-600'>
-            <CheckCircle className='h-5 w-5 mr-2' />
-            <span>No validation issues found</span>
-          </div>
-        ) : (
-          <div className='space-y-4'>
-            <div className='flex items-center space-x-4 text-sm'>
-              {errorCount > 0 && (
-                <div className='flex items-center text-red-600'>
-                  <AlertCircle className='h-4 w-4 mr-1' />
-                  <span>
-                    {errorCount} error{errorCount !== 1 ? 's' : ''}
-                  </span>
-                </div>
-              )}
-              {warningCount > 0 && (
-                <div className='flex items-center text-yellow-600'>
-                  <AlertTriangle className='h-4 w-4 mr-1' />
-                  <span>
-                    {warningCount} warning{warningCount !== 1 ? 's' : ''}
-                  </span>
-                </div>
-              )}
-            </div>
+      {showTabs && (
+        <div role='tablist' className='flex border-b mt-3'>
+          <button
+            role='tab'
+            aria-selected={activeTab === 'validation'}
+            aria-label='Validation tab'
+            onClick={() => onTabChange('validation')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'validation'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Validation ({errors.length})
+          </button>
+          <button
+            role='tab'
+            aria-selected={activeTab === 'host-alerts'}
+            aria-label='Host Alerts tab'
+            onClick={() => onTabChange('host-alerts')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'host-alerts'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Host Alerts ({hostCount})
+          </button>
+        </div>
+      )}
 
-            <div className='space-y-2 max-h-96 overflow-y-auto'>
-              {sortedErrors.map((error, index) => (
-                <ValidationErrorItem
-                  key={index}
-                  error={error}
-                  onClick={onErrorClick}
-                />
-              ))}
-            </div>
-          </div>
+      <div className='p-4'>
+        {!showTabs || activeTab === 'validation' ? (
+          <ValidationTab errors={errors} onErrorClick={onErrorClick} />
+        ) : (
+          <HostAlertsTab
+            hostErrors={hostErrors}
+            onDismiss={onDismissHostError}
+            onClearAll={onClearHostErrors}
+          />
         )}
       </div>
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Validation tab
+// ---------------------------------------------------------------------------
+
+interface ValidationTabProps {
+  errors: ValidationError[];
+  onErrorClick?: (error: ValidationError) => void;
+}
+
+function ValidationTab({ errors, onErrorClick }: ValidationTabProps) {
+  const errorCount = errors.filter(e => e.severity === 'error').length;
+  const warningCount = errors.filter(e => e.severity === 'warning').length;
+  const sortedErrors = [...errors].sort((a, b) => {
+    if (a.severity === 'error' && b.severity === 'warning') return -1;
+    if (a.severity === 'warning' && b.severity === 'error') return 1;
+    return 0;
+  });
+
+  if (errors.length === 0) {
+    return (
+      <div className='flex items-center text-green-600'>
+        <CheckCircle className='h-5 w-5 mr-2' />
+        <span>No validation issues found</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className='space-y-4'>
+      <div className='flex items-center space-x-4 text-sm'>
+        {errorCount > 0 && (
+          <div className='flex items-center text-red-600'>
+            <AlertCircle className='h-4 w-4 mr-1' />
+            <span>{errorCount} error{errorCount !== 1 ? 's' : ''}</span>
+          </div>
+        )}
+        {warningCount > 0 && (
+          <div className='flex items-center text-yellow-600'>
+            <AlertTriangle className='h-4 w-4 mr-1' />
+            <span>{warningCount} warning{warningCount !== 1 ? 's' : ''}</span>
+          </div>
+        )}
+      </div>
+      <div className='space-y-2 max-h-96 overflow-y-auto'>
+        {sortedErrors.map((error, index) => (
+          <ValidationErrorItem key={index} error={error} onClick={onErrorClick} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Host Alerts tab
+// ---------------------------------------------------------------------------
+
+interface HostAlertsTabProps {
+  hostErrors: HostErrorItem[];
+  onDismiss: (id: string) => void;
+  onClearAll: () => void;
+}
+
+function HostAlertsTab({ hostErrors, onDismiss, onClearAll }: HostAlertsTabProps) {
+  if (hostErrors.length === 0) {
+    return (
+      <div className='flex items-center text-green-600'>
+        <CheckCircle className='h-5 w-5 mr-2' />
+        <span>No host alerts</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className='space-y-3'>
+      <div className='flex justify-end'>
+        <button
+          onClick={onClearAll}
+          aria-label='Clear all host alerts'
+          className='text-xs text-gray-500 hover:text-gray-700 transition-colors'
+        >
+          Clear all
+        </button>
+      </div>
+      <div className='space-y-2 max-h-96 overflow-y-auto'>
+        {hostErrors.map(item => (
+          <HostErrorCard key={item.id} item={item} onDismiss={onDismiss} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// HostErrorCard
+// ---------------------------------------------------------------------------
+
+interface HostErrorCardProps {
+  item: HostErrorItem;
+  onDismiss: (id: string) => void;
+}
+
+function HostErrorCard({ item, onDismiss }: HostErrorCardProps) {
+  const isError = item.level === 'error';
+  const isWarning = item.level === 'warning';
+
+  const containerClass = isError
+    ? 'bg-red-50 border-red-200'
+    : isWarning
+      ? 'bg-yellow-50 border-yellow-200'
+      : 'bg-blue-50 border-blue-200';
+
+  const textClass = isError ? 'text-red-800' : isWarning ? 'text-yellow-800' : 'text-blue-800';
+  const iconClass = isError ? 'text-red-400' : isWarning ? 'text-yellow-400' : 'text-blue-400';
+  const Icon = isError ? AlertCircle : isWarning ? AlertTriangle : Info;
+
+  return (
+    <div className={`p-3 rounded-md border ${containerClass} flex items-start overflow-hidden`}>
+      <Icon className={`h-5 w-5 flex-shrink-0 mt-0.5 ${iconClass}`} />
+      <div className='ml-3 min-w-0 flex-1'>
+        <p className={`text-sm font-medium whitespace-pre-wrap break-all ${textClass}`}>
+          {item.message}
+        </p>
+      </div>
+      <button
+        onClick={() => onDismiss(item.id)}
+        className='ml-2 flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors'
+        aria-label='Dismiss'
+      >
+        <X className='h-4 w-4' />
+      </button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ValidationErrorItem (unchanged from original)
+// ---------------------------------------------------------------------------
 
 interface ValidationErrorItemProps {
   error: ValidationError;
@@ -125,43 +270,22 @@ function ValidationErrorItem({ error, onClick }: ValidationErrorItemProps) {
             <AlertTriangle className='h-5 w-5 text-yellow-400' />
           )}
         </div>
-
         <div className='ml-3 flex-1 min-w-0'>
-          <p
-            className={`text-sm font-medium break-words ${
-              isError ? 'text-red-800' : 'text-yellow-800'
-            }`}
-          >
+          <p className={`text-sm font-medium break-words ${isError ? 'text-red-800' : 'text-yellow-800'}`}>
             {error.message}
           </p>
-
           {(error.line || error.column) && (
-            <p
-              className={`text-xs mt-1 flex items-center ${
-                isError ? 'text-red-600' : 'text-yellow-600'
-              }`}
-            >
-              <span>
-                Line {error.line || '?'}, Column {error.column || '?'}
-              </span>
+            <p className={`text-xs mt-1 flex items-center ${isError ? 'text-red-600' : 'text-yellow-600'}`}>
+              <span>Line {error.line || '?'}, Column {error.column || '?'}</span>
               {isClickable && (
-                <span
-                  className={`ml-2 text-xs ${
-                    isError ? 'text-red-500' : 'text-yellow-500'
-                  }`}
-                >
+                <span className={`ml-2 text-xs ${isError ? 'text-red-500' : 'text-yellow-500'}`}>
                   (click to navigate)
                 </span>
               )}
             </p>
           )}
-
           {error.code && (
-            <p
-              className={`text-xs mt-1 font-mono ${
-                isError ? 'text-red-500' : 'text-yellow-500'
-              }`}
-            >
+            <p className={`text-xs mt-1 font-mono ${isError ? 'text-red-500' : 'text-yellow-500'}`}>
               Code: {error.code}
             </p>
           )}

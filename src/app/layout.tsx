@@ -32,13 +32,15 @@ export default function RootLayout({
             Queued calls are drained in page.tsx once the real API is ready. */}
         <script dangerouslySetInnerHTML={{ __html: `(function(){
   if(window.ScxmlEditorAPI)return;
-  var q={ready:[],commands:[],feedback:[]};
+  var q={ready:[],commands:[],feedback:[],hostErrors:[]};
   window.ScxmlEditorAPI={
     _q:q,
     onReady:function(cb){q.ready.push(cb);},
     registerCommand:function(o){q.commands.push(o);},
     showFeedback:function(m,l){q.feedback.push([m,l]);},
     setChannels:function(c){q.channels=c;},
+    showErrors:function(errors){errors.forEach(function(e){q.hostErrors.push(e);});},
+    clearErrors:function(){q.clearErrors=true;q.hostErrors=[];},
     loadScxml:function(){},
     getScxml:function(){return'';},
     toggleConfigPanel:function(){},

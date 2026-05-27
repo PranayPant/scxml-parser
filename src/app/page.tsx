@@ -38,7 +38,9 @@ export default function Home() {
   const parser = useMemo(() => new SCXMLParser(), []);
   const validator = useMemo(() => new SCXMLValidator(), []);
   const historyManager = useMemo(() => HistoryManager.getInstance(), []);
-  const { markReady, onReady, registerCommand, showFeedback } = useHostAPIStore();
+  const { markReady, onReady, registerCommand, showFeedback, setRequestedValidationTab, dismissHostError, clearHostErrors } = useHostAPIStore();
+  const hostErrors = useHostAPIStore(state => state.hostErrors);
+  const requestedValidationTab = useHostAPIStore(state => state.requestedValidationTab);
 
   const editorRef = useRef<XMLEditorRef>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -48,11 +50,21 @@ export default function Home() {
   const channelMappingsRef = useRef<ChannelMapping[]>([]);
   const storeChannelMappings = useHostAPIStore(state => state.channelMappings);
   useEffect(() => { channelMappingsRef.current = storeChannelMappings; }, [storeChannelMappings]);
+  useEffect(() => {
+    if (requestedValidationTab !== null) {
+      setValidationPanelTab(requestedValidationTab);
+      setValidationPanelVisible(true);
+      setConfigPanelVisible(false);
+      setRequestedValidationTab(null);
+    }
+  }, [requestedValidationTab, setRequestedValidationTab, setValidationPanelVisible]);
+
   const [isInitialLoading, setIsInitialLoading] = React.useState(true);
   const [isUpdatingFromHistory, setIsUpdatingFromHistory] = React.useState(false);
   const [currentHistoryActionType, setCurrentHistoryActionType] = React.useState<ActionType | undefined>(undefined);
   const [isConfigPanelVisible, setConfigPanelVisible] = React.useState(false);
   const [isChannelMappingPanelVisible, setChannelMappingPanelVisible] = React.useState(false);
+  const [validationPanelTab, setValidationPanelTab] = React.useState<'validation' | 'host-alerts'>('validation');
 
 
   const validateContent = useCallback(
@@ -313,13 +325,15 @@ export default function Home() {
         return !v;
       }),
       setActiveTab: (tab) => useHostAPIStore.getState().setRequestedTab(tab),
+      showErrors: (errors) => useHostAPIStore.getState().showErrors(errors),
+      clearErrors: () => useHostAPIStore.getState().clearHostErrors(),
     };
 
     if (stub?._q) {
       // Upgrade the stub object in place so any host reference already captured
       // (e.g. `var api = iframe.contentWindow.ScxmlEditorAPI` in a load handler)
       // automatically gets the real methods without needing to re-read the property.
-      const queue = stub._q as { ready: (() => void)[]; commands: any[]; feedback: [string, any][]; channels?: string[]; channelMappings?: ChannelMapping[] };
+      const queue = stub._q as { ready: (() => void)[]; commands: any[]; feedback: [string, any][]; channels?: string[]; channelMappings?: ChannelMapping[]; hostErrors?: Array<{ message: string; level?: string }>; clearErrors?: boolean };
       Object.assign(stub, realApi);
       delete stub._q;
       queue.ready.forEach(cb => onReady(cb));
@@ -327,6 +341,8 @@ export default function Home() {
       queue.feedback.forEach(([m, l]) => showFeedback(m, l));
       if (queue.channels) useHostAPIStore.getState().setChannels(queue.channels);
       if (queue.channelMappings) useHostAPIStore.getState().setChannelMappings(queue.channelMappings);
+      if (queue.clearErrors) useHostAPIStore.getState().clearHostErrors();
+      if (queue.hostErrors?.length) useHostAPIStore.getState().showErrors(queue.hostErrors as Array<{ message: string; level?: 'info' | 'warning' | 'error' }>);
     } else {
       window.ScxmlEditorAPI = realApi;
     }
@@ -343,8 +359,10 @@ export default function Home() {
     return 'document.scxml';
   };
 
-  const hasErrors = errors.filter((e) => e.severity === 'error').length > 0;
-  const hasWarnings = errors.filter((e) => e.severity === 'warning').length > 0;
+  const totalErrors = errors.filter(e => e.severity === 'error').length + hostErrors.filter(e => e.level === 'error').length;
+  const totalWarnings = errors.filter(e => e.severity === 'warning').length + hostErrors.filter(e => e.level === 'warning').length;
+  const hasErrors = totalErrors > 0;
+  const hasWarnings = totalWarnings > 0;
 
   const renderSidePanels = () => (
     <>
@@ -387,9 +405,14 @@ export default function Home() {
       <div className='w-80'>
         <ValidationPanel
           errors={errors}
+          hostErrors={hostErrors}
           isVisible={isValidationPanelVisible}
-          onClose={() => setValidationPanelVisible(false)}
+          activeTab={validationPanelTab}
+          onClose={() => { setValidationPanelVisible(false); setValidationPanelTab('validation'); }}
+          onTabChange={setValidationPanelTab}
           onErrorClick={handleErrorClick}
+          onDismissHostError={dismissHostError}
+          onClearHostErrors={clearHostErrors}
         />
         {renderSidePanels()}
       </div>
@@ -454,7 +477,11 @@ export default function Home() {
           if (activeTab === "visual") setActiveTab("code");
           const opening = !isValidationPanelVisible;
           setValidationPanelVisible(opening);
-          if (opening) setConfigPanelVisible(false);
+          if (opening) {
+            setConfigPanelVisible(false);
+          } else {
+            setValidationPanelTab('validation');
+          }
         }}
         className={`cursor-pointer text-sm px-3 py-2 rounded-md transition-colors ${
           hasErrors
@@ -464,11 +491,9 @@ export default function Home() {
               : "bg-green-100 text-green-800 hover:bg-green-200"
         }`}
       >
-        {errors.length === 0
+        {totalErrors === 0 && totalWarnings === 0
           ? "Valid"
-          : `${errors.filter((e) => e.severity === "error").length} errors, ${
-              errors.filter((e) => e.severity === "warning").length
-            } warnings`}
+          : `${totalErrors} error${totalErrors !== 1 ? 's' : ''}, ${totalWarnings} warning${totalWarnings !== 1 ? 's' : ''}`}
       </button>
 
 
