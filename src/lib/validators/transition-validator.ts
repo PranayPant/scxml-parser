@@ -14,7 +14,7 @@ import type {
   TransitionElement,
 } from '@/types/scxml';
 import type { ValidationError } from '@/types/common';
-import { findTransitionPosition } from './validator-utils';
+import { findTransitionPosition, parseStateIdList } from './validator-utils';
 
 /**
  * Validate all transition targets reference existing states
@@ -26,7 +26,7 @@ export function validateStateReferences(
 ): void {
   // Validate initial attribute references
   if (scxml['@_initial']) {
-    const initialStates = scxml['@_initial'].split(/\s+/);
+    const initialStates = parseStateIdList(scxml['@_initial'], stateIds);
     initialStates.forEach((stateId) => {
       if (!stateIds.has(stateId)) {
         errors.push({
@@ -83,7 +83,7 @@ export function validateTransitionsInElement(
       : [element.transition];
     transitions.forEach((transition: TransitionElement) => {
       if (transition['@_target']) {
-        const targets = transition['@_target'].split(/\s+/);
+        const targets = parseStateIdList(transition['@_target'], stateIds);
         targets.forEach((target) => {
           if (!stateIds.has(target)) {
             errors.push({
@@ -109,7 +109,7 @@ export function validateInitialStates(
     const states = Array.isArray(scxml.state) ? scxml.state : [scxml.state];
     states.forEach((state) => {
       if (state['@_initial']) {
-        const initialStates = state['@_initial'].split(/\s+/);
+        const initialStates = parseStateIdList(state['@_initial'], stateIds);
         initialStates.forEach((stateId) => {
           if (!stateIds.has(stateId)) {
             errors.push({
@@ -153,7 +153,7 @@ export function validateTransitionSemantics(
 
         // Internal transitions must not have targets unless they are self-targeting
         if (transition['@_type'] === 'internal' && transition['@_target']) {
-          const targets = transition['@_target'].split(/\s+/);
+          const targets = parseStateIdList(transition['@_target'], stateIds);
           const sourceId = (element as any)['@_id']
             ? (element as any)['@_id']
             : undefined;
@@ -233,7 +233,10 @@ function validateCrossHierarchyInElement(
 
     transitions.forEach((transition: TransitionElement) => {
       if (transition['@_target'] && elementId) {
-        const targets = transition['@_target'].split(/\s+/);
+        const targets = parseStateIdList(
+          transition['@_target'],
+          new Set(stateParentMap.keys())
+        );
 
         targets.forEach((targetId) => {
           // Check if source and target have the same parent
