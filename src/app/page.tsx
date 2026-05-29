@@ -557,18 +557,11 @@ export default function Home() {
               Upload
             </button>
             <button
-              onClick={handleMenuDownload}
-              className='w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors'
-            >
-              <Download className='h-4 w-4 text-gray-500' />
-              Download
-            </button>
-            <button
               onClick={handleMenuDownloadClean}
               className='w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors'
             >
-              <Database className='h-4 w-4 text-gray-500' />
-              Data
+              <Download className='h-4 w-4 text-gray-500' />
+              Clean SCXML
             </button>
             {hasVisualMetadata(content) && (
               <button
