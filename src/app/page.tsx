@@ -2,13 +2,9 @@
 
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { XMLEditor, type XMLEditorRef } from '@/components/editor';
-import {
-  FileUpload,
-  VisualMetadataExport,
-} from '@/components/file-operations';
+import { FileUpload } from '@/components/file-operations';
 import { TwoTabLayout, type TabType } from '@/components/layout';
 import { VisualDiagram } from '@/components/diagram';
-import { Upload } from 'lucide-react';
 import { ChannelMappingPanel, ConfigPanel, ErrorBoundary, ValidationPanel, UndoRedoControls } from '@/components/ui';
 import { SCXMLParser, SCXMLValidator } from '@/lib';
 import { updateConfigFieldExpr } from '@/lib/utils/datamodel-extractor';
@@ -20,6 +16,7 @@ import type { ActionType } from '@/types/history';
 import { DEFAULT_SCXML_TEMPLATE } from '@/lib/consts/default_scxml_template';
 import { useHostAPIStore } from '@/stores/host-api-store';
 import type { ChannelMapping, ConfigValue, ScxmlEditorAPI } from '@/types/host-api';
+import { MoreVertical, Upload as UploadIcon, Download, Database, Eye } from 'lucide-react';
 
 export default function Home() {
   const {
@@ -65,6 +62,8 @@ export default function Home() {
   const [isConfigPanelVisible, setConfigPanelVisible] = React.useState(false);
   const [isChannelMappingPanelVisible, setChannelMappingPanelVisible] = React.useState(false);
   const [validationPanelTab, setValidationPanelTab] = React.useState<'validation' | 'host-alerts'>('validation');
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = React.useState(false);
+  const moreMenuRef = React.useRef<HTMLDivElement>(null);
 
 
   const validateContent = useCallback(
@@ -359,6 +358,57 @@ export default function Home() {
     return 'document.scxml';
   };
 
+  useEffect(() => {
+    if (!isMoreMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
+        setIsMoreMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isMoreMenuOpen]);
+
+  const downloadBlob = useCallback((fileContent: string, fileName: string) => {
+    const blob = new Blob([fileContent], { type: 'application/xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, []);
+
+  const handleMenuDownload = useCallback(() => {
+    downloadBlob(content, getDownloadFilename());
+    setIsMoreMenuOpen(false);
+  }, [content, downloadBlob]);
+
+  const handleMenuDownloadClean = useCallback(async () => {
+    try {
+      const { removeVisualMetadataFromXML } = await import('@/lib/utils/visual-metadata-utils');
+      const { SCXMLParser: Parser } = await import('@/lib/parsers/scxml-parser');
+      const parser = new Parser();
+      const parseResult = parser.parse(content);
+      const cleanName = getDownloadFilename().replace(/\.(scxml|xml)$/i, '-clean.$1');
+      if (parseResult.success && parseResult.data) {
+        downloadBlob(parser.serialize(parseResult.data, false), cleanName);
+      } else {
+        downloadBlob(removeVisualMetadataFromXML(content), cleanName);
+      }
+    } catch {
+      downloadBlob(content, getDownloadFilename());
+    }
+    setIsMoreMenuOpen(false);
+  }, [content, downloadBlob]);
+
+  const handleMenuDownloadWithVisualData = useCallback(() => {
+    downloadBlob(content, getDownloadFilename());
+    setIsMoreMenuOpen(false);
+  }, [content, downloadBlob]);
+
   const totalErrors = errors.filter(e => e.severity === 'error').length + hostErrors.filter(e => e.level === 'error').length;
   const totalWarnings = errors.filter(e => e.severity === 'warning').length + hostErrors.filter(e => e.level === 'warning').length;
   const hasErrors = totalErrors > 0;
@@ -454,27 +504,15 @@ export default function Home() {
         className='hidden'
       />
 
-      <div className='flex-1' />
-
       <UndoRedoControls
         onUndo={handleUndo}
         onRedo={handleRedo}
-        className='mr-2'
       />
 
-      <div className='h-6 w-px bg-gray-300 m-2' />
-
-      <button
-        onClick={handleNewFileUpload}
-        className='cursor-pointer flex items-center space-x-2 text-sm px-3 py-2 rounded-md bg-blue-100 text-blue-800 hover:bg-blue-200 transition-colors'
-      >
-        <Upload className='h-4 w-4' />
-        <span>Load New File</span>
-      </button>
-
+      {/* Validation status dot */}
       <button
         onClick={() => {
-          if (activeTab === "visual") setActiveTab("code");
+          if (activeTab === 'visual') setActiveTab('code');
           const opening = !isValidationPanelVisible;
           setValidationPanelVisible(opening);
           if (opening) {
@@ -483,26 +521,67 @@ export default function Home() {
             setValidationPanelTab('validation');
           }
         }}
-        className={`cursor-pointer text-sm px-3 py-2 rounded-md transition-colors ${
-          hasErrors
-            ? "bg-red-100 text-red-800 hover:bg-red-200"
-            : hasWarnings
-              ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
-              : "bg-green-100 text-green-800 hover:bg-green-200"
-        }`}
+        title={
+          totalErrors === 0 && totalWarnings === 0
+            ? 'No issues'
+            : `${totalErrors} error${totalErrors !== 1 ? 's' : ''}, ${totalWarnings} warning${totalWarnings !== 1 ? 's' : ''}`
+        }
+        className='p-2 rounded-md hover:bg-gray-100 transition-colors'
       >
-        {totalErrors === 0 && totalWarnings === 0
-          ? "Valid"
-          : `${totalErrors} error${totalErrors !== 1 ? 's' : ''}, ${totalWarnings} warning${totalWarnings !== 1 ? 's' : ''}`}
+        <span
+          className={`block w-2.5 h-2.5 rounded-full ${
+            hasErrors ? 'bg-red-500' : hasWarnings ? 'bg-yellow-400' : 'bg-green-500'
+          }`}
+        />
       </button>
 
+      <div className='h-6 w-px bg-gray-200' />
 
-      <VisualMetadataExport
-        scxmlContent={content}
-        filename={getDownloadFilename()}
-        hasVisualMetadata={hasVisualMetadata(content)}
-        onExportComplete={(exportType) => {}}
-      />
+      {/* ⋮ More menu */}
+      <div className='relative' ref={moreMenuRef}>
+        <button
+          onClick={() => setIsMoreMenuOpen((v) => !v)}
+          className='p-2 rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors'
+          title='More options'
+        >
+          <MoreVertical className='h-4 w-4' />
+        </button>
+
+        {isMoreMenuOpen && (
+          <div className='absolute right-0 top-full mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1'>
+            <button
+              onClick={() => { handleNewFileUpload(); setIsMoreMenuOpen(false); }}
+              className='w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors'
+            >
+              <UploadIcon className='h-4 w-4 text-gray-500' />
+              Upload
+            </button>
+            <button
+              onClick={handleMenuDownload}
+              className='w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors'
+            >
+              <Download className='h-4 w-4 text-gray-500' />
+              Download
+            </button>
+            <button
+              onClick={handleMenuDownloadClean}
+              className='w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors'
+            >
+              <Database className='h-4 w-4 text-gray-500' />
+              Data
+            </button>
+            {hasVisualMetadata(content) && (
+              <button
+                onClick={handleMenuDownloadWithVisualData}
+                className='w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors'
+              >
+                <Eye className='h-4 w-4 text-gray-500' />
+                With Visual Data
+              </button>
+            )}
+          </div>
+        )}
+      </div>
     </>
   );
 

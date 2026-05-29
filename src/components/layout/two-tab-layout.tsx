@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useState, useCallback, useEffect } from "react";
-import { Code, FileText, Workflow } from "lucide-react";
+import { Code2, Workflow, ChevronRight, Home } from "lucide-react";
 import { InlineTipsCarousel } from "./inline-tips-carousel";
 import { useHostAPIStore } from "@/stores/host-api-store";
+import { useEditorStore } from "@/stores/editor-store";
 
 interface TwoTabLayoutProps {
   codeEditor: React.ReactNode;
@@ -33,6 +34,10 @@ export const TwoTabLayout: React.FC<TwoTabLayoutProps> = ({
   );
   const { commands, feedbackQueue, executeCommand, dismissFeedback, requestedTab, setRequestedTab } =
     useHostAPIStore();
+  const { hierarchyState, navigateToRoot, navigateUp } = useEditorStore();
+  const currentPath = hierarchyState.currentPath;
+  const visiblePath = currentPath.slice(-2);
+  const hasHiddenSegments = currentPath.length > 2;
 
   useEffect(() => {
     if (requestedTab !== null) {
@@ -45,7 +50,6 @@ export const TwoTabLayout: React.FC<TwoTabLayoutProps> = ({
     setActiveTab(tab);
   }, []);
 
-  // Tips for the carousel
   const editorTips = [
     {
       tab: "code" as const,
@@ -79,7 +83,7 @@ export const TwoTabLayout: React.FC<TwoTabLayoutProps> = ({
       tab: "both" as const,
       content: (
         <>
-        You can create a new channel by using {" "} 
+        You can create a new channel by using {" "}
           <kbd className='px-1.5 py-0.5 bg-gray-200 rounded text-gray-700 font-mono'>
             this_
           </kbd>{" "}prefix
@@ -152,84 +156,109 @@ export const TwoTabLayout: React.FC<TwoTabLayoutProps> = ({
         </div>
       ))}
 
-      {/* Actions toolbar */}
-      <div className='flex items-center justify-between px-4 py-2 border-b bg-white'>
-        <div className='flex flex-1 space-between space-x-3'>
-          {/* Host-registered commands */}
-          {commands.length > 0 ? (
-            <div className='flex gap-2 justify-center items-center'>
-              {commands.map((cmd) => (
-                <button
-                  key={cmd.id}
-                  onClick={() => executeCommand(cmd.id)}
-                  disabled={cmd.isExecuting}
-                  title={cmd.tooltip}
-                  className='cursor-pointer flex items-center space-x-2 text-sm px-3 py-2 rounded-md bg-indigo-100 text-indigo-800 hover:bg-indigo-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
-                >
-                  {cmd.isExecuting && (
-                    <span className='h-4 w-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin inline-block' />
-                  )}
-                  <span>{cmd.label}</span>
-                </button>
-              ))}
-              <div className='h-6 w-px bg-gray-300' />
-            </div>
-          ) : (
-            <div className='flex items-center space-x-3'>
-              <FileText className='h-5 w-5 text-gray-500' />
-              <h2 className='text-lg font-semibold text-gray-900'>
-                {fileInfo?.name || "Untitled Document"}
-              </h2>
-              {fileInfo?.isDirty && (
-                <span className='text-xs text-amber-600 font-medium'>
-                  • Modified
-                </span>
+      {/* Combined toolbar */}
+      <div className='flex items-center gap-1 px-3 py-2 border-b bg-white'>
+        {/* Tab switcher icon buttons */}
+        <button
+          onClick={() => handleTabChange("visual")}
+          title="Visual Diagram"
+          className={`p-2 rounded-md transition-colors ${
+            activeTab === "visual"
+              ? "bg-blue-100 text-blue-700"
+              : "text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+          }`}
+        >
+          <Workflow className='h-4 w-4' />
+        </button>
+        <button
+          onClick={() => handleTabChange("code")}
+          title="Code Editor"
+          className={`p-2 rounded-md transition-colors ${
+            activeTab === "code"
+              ? "bg-blue-100 text-blue-700"
+              : "text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+          }`}
+        >
+          <Code2 className='h-4 w-4' />
+        </button>
+
+        {/* Breadcrumb — visible when navigated into a nested state */}
+        {currentPath.length > 0 && (
+          <>
+            <div className='h-4 w-px bg-gray-200 mx-1' />
+            <div className='flex items-center gap-0.5 text-sm'>
+              <button
+                onClick={navigateToRoot}
+                className='p-0.5 text-gray-400 hover:text-gray-600 transition-colors'
+                title='Navigate to root'
+              >
+                <Home className='h-3.5 w-3.5' />
+              </button>
+              {hasHiddenSegments && (
+                <>
+                  <ChevronRight className='h-3.5 w-3.5 text-gray-400' />
+                  <span className='text-gray-400 px-0.5'>…</span>
+                </>
               )}
+              {visiblePath.map((segment, i) => {
+                const isLast = i === visiblePath.length - 1;
+                const stepsUp = visiblePath.length - 1 - i;
+                return (
+                  <React.Fragment key={i}>
+                    <ChevronRight className='h-3.5 w-3.5 text-gray-400' />
+                    {isLast ? (
+                      <span className='text-gray-700 font-medium'>{segment}</span>
+                    ) : (
+                      <button
+                        onClick={() => { for (let j = 0; j < stepsUp; j++) navigateUp(); }}
+                        className='px-1 text-gray-500 hover:text-gray-700 transition-colors'
+                        title={`Navigate to ${segment}`}
+                      >
+                        {segment}
+                      </button>
+                    )}
+                  </React.Fragment>
+                );
+              })}
             </div>
-          )}
-          {/* Built-in actions */}
-          {actions &&
-            (typeof actions === "function"
-              ? actions(activeTab, setActiveTab)
-              : actions)}
-        </div>
-      </div>
+          </>
+        )}
 
-      {/* Tab Navigation */}
-      <div className='flex items-center justify-between border-b bg-gray-50'>
-        <div className='flex'>
-          <button
-            onClick={() => handleTabChange("code")}
-            className={`px-6 py-3 text-sm font-medium flex items-center space-x-2 border-b-2 transition-colors ${
-              activeTab === "code"
-                ? "border-blue-500 text-blue-600 bg-white"
-                : "border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-            }`}
-          >
-            <Code className='h-4 w-4' />
-            <span>Code Editor</span>
-          </button>
-          <button
-            onClick={() => handleTabChange("visual")}
-            className={`px-6 py-3 text-sm font-medium flex items-center space-x-2 border-b-2 transition-colors ${
-              activeTab === "visual"
-                ? "border-blue-500 text-blue-600 bg-white"
-                : "border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-            }`}
-          >
-            <Workflow className='h-4 w-4' />
-            <span>Visual Diagram</span>
-          </button>
-        </div>
+        {/* Host-registered commands */}
+        {commands.length > 0 && (
+          <>
+            <div className='h-6 w-px bg-gray-200 mx-1' />
+            {commands.map((cmd) => (
+              <button
+                key={cmd.id}
+                onClick={() => executeCommand(cmd.id)}
+                disabled={cmd.isExecuting}
+                title={cmd.tooltip}
+                className='cursor-pointer flex items-center space-x-2 text-sm px-3 py-1.5 rounded-md bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+              >
+                {cmd.isExecuting && (
+                  <span className='h-3.5 w-3.5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin inline-block' />
+                )}
+                <span>{cmd.label}</span>
+              </button>
+            ))}
+          </>
+        )}
 
-        <div className='px-6'>
-          <InlineTipsCarousel
-            tips={editorTips}
-            activeTab={activeTab}
-            autoAdvance={true}
-            autoAdvanceInterval={6000}
-          />
-        </div>
+        <div className='flex-1' />
+
+        <InlineTipsCarousel
+          tips={editorTips}
+          activeTab={activeTab}
+          autoAdvance={true}
+          autoAdvanceInterval={6000}
+        />
+
+        {/* Built-in actions (undo/redo + ⋮ menu from page.tsx) */}
+        {actions &&
+          (typeof actions === "function"
+            ? actions(activeTab, setActiveTab)
+            : actions)}
       </div>
 
       {/* Content Area */}

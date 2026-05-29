@@ -2,6 +2,7 @@
 
 import { extractDatamodelVariables } from '@/lib/utils/datamodel-extractor';
 import { useHostAPIStore } from '@/stores/host-api-store';
+import { Save, X } from 'lucide-react';
 import React from 'react';
 
 type Suggestion = { label: string; kind: 'channel' | 'variable' };
@@ -119,9 +120,7 @@ export const StateActionsEditBar: React.FC<StateActionsEditBarProps> = ({
   };
 
   return (
-    <div className='absolute top-[49px] left-0 right-0 z-10 flex items-center gap-3 px-4 py-2 bg-green-50 border-b shadow-md'>
-      <span className='text-sm font-medium text-gray-700'>Edit {stateId}:</span>
-
+    <div className='absolute top-[0px] left-0 right-0 z-10 flex items-center gap-2 px-4 py-2 bg-white border-b shadow-sm'>
       {/* onentry / onexit switch */}
       <div className='flex rounded-md border border-green-300 overflow-hidden text-sm'>
         {(['onentry', 'onexit'] as const).map((field) => (
@@ -199,15 +198,17 @@ export const StateActionsEditBar: React.FC<StateActionsEditBarProps> = ({
 
       <button
         onClick={saveAll}
-        className='px-3 py-1.5 text-sm bg-green-600 text-white rounded-md hover:bg-green-700'
+        title='Save'
+        className='p-1.5 rounded-md text-green-500 hover:bg-gray-100 hover:text-green-600 transition-colors'
       >
-        Save
+        <Save className='h-4 w-4' />
       </button>
       <button
         onClick={onCancel}
-        className='text-sm text-gray-600 hover:text-gray-900 px-2'
+        title='Cancel'
+        className='p-1.5 rounded-md text-gray-400 hover:bg-gray-100 hover:text-red-700 transition-colors'
       >
-        Cancel
+        <X className='h-4 w-4' />
       </button>
     </div>
   );

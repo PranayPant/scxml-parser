@@ -795,6 +795,8 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
                       });
                   };
 
+                  setSelectedEdgeForEdit(null);
+                  setSelectedTransitions(new Set());
                   setSelectedStateForActions({
                     id: stateId,
                     entryActions: parseActions(node.data.entryActions || []),
@@ -1305,7 +1307,8 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
         } else {
           newTransitions.clear();
           newTransitions.add(edge.id);
-          // Set the selected edge for editing
+          setSelectedStateForActions(null);
+          setActiveStates(new Set());
           setSelectedEdgeForEdit({
             id: edge.id,
             source: edge.source,
@@ -2119,8 +2122,8 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
         </div>
       )}
 
-      {/* Hierarchy Navigation Controls */}
-      <div className='flex items-center gap-2 px-4 py-2 bg-white border-b shadow-sm'>
+      {/* Hierarchy Navigation Controls — hidden; breadcrumb shown in main toolbar */}
+      <div className='hidden'>
         <div className='flex items-center gap-1 flex-1'>
           {breadcrumbPath.map((path, index) => (
             <React.Fragment key={index}>

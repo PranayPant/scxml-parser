@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { Save, X } from 'lucide-react';
 import { useHostAPIStore } from '@/stores/host-api-store';
 import { extractDatamodelVariables } from '@/lib/utils/datamodel-extractor';
 
@@ -183,9 +184,8 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
   };
 
   return (
-    <div className='absolute top-[49px] left-0 right-0 z-10 flex items-center gap-3 px-4 py-2 bg-blue-50 border-b shadow-md'>
-      <span className='text-sm font-medium text-gray-700'>Edit Transition:</span>
-      <div className='flex rounded-md border border-blue-300 overflow-hidden text-sm'>
+    <div className='absolute top-[0px] left-0 right-0 z-10 flex items-center gap-2 px-4 py-2 bg-white border-b shadow-sm'>
+      <div className='flex rounded-md border border-gray-200 overflow-hidden text-sm'>
         {(['event', 'cond'] as const).map((field) => (
           <button
             key={field}
@@ -194,7 +194,7 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
             className={`px-3 py-1.5 font-mono transition-colors ${
               editingField === field
                 ? 'bg-blue-500 text-white'
-                : 'bg-white text-gray-600 hover:bg-blue-50'
+                : 'bg-white text-gray-500 hover:bg-gray-50'
             }`}
           >
             {field === 'cond' ? 'condition' : field}
@@ -221,12 +221,11 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
           onBlur={() => {
             blurTimerRef.current = setTimeout(() => setIsOpen(false), 100);
           }}
-          className='w-full px-3 py-1.5 text-sm text-gray-800 border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+          className='w-full px-3 py-1.5 text-sm text-gray-800 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
           placeholder={editingField === 'cond' ? 'Enter condition' : 'Enter event'}
-          autoFocus
         />
         {showSuggestions && (
-          <div className='absolute top-full left-0 right-0 mt-1 z-50 bg-white border border-blue-200 rounded-md shadow-lg max-h-48 overflow-y-auto'>
+          <div className='absolute top-full left-0 right-0 mt-1 z-50 bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto'>
             {suggestions.map((suggestion, index) => (
               <div
                 key={suggestion.label}
@@ -250,15 +249,17 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
       </div>
       <button
         onClick={() => commit(rawValue)}
-        className='text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 px-3 py-1.5 rounded-md'
+        title='Save'
+        className='p-1.5 rounded-md text-gray-500 hover:bg-gray-100 hover:text-blue-600 transition-colors'
       >
-        Save
+        <Save className='h-4 w-4' />
       </button>
       <button
         onClick={onCancel}
-        className='text-sm text-gray-600 hover:text-gray-900 px-2'
+        title='Cancel'
+        className='p-1.5 rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors'
       >
-        Cancel
+        <X className='h-4 w-4' />
       </button>
     </div>
   );
