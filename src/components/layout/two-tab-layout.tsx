@@ -182,6 +182,27 @@ export const TwoTabLayout: React.FC<TwoTabLayoutProps> = ({
           <Code2 className='h-4 w-4' />
         </button>
 
+        {/* Host-registered commands */}
+        {commands.length > 0 && (
+          <>
+            <div className='h-6 w-px bg-gray-200 mx-1' />
+            {commands.map((cmd) => (
+              <button
+                key={cmd.id}
+                onClick={() => executeCommand(cmd.id)}
+                disabled={cmd.isExecuting}
+                title={cmd.tooltip}
+                className='cursor-pointer flex items-center space-x-2 text-sm px-3 py-1.5 rounded-md bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+              >
+                {cmd.isExecuting && (
+                  <span className='h-3.5 w-3.5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin inline-block' />
+                )}
+                <span>{cmd.label}</span>
+              </button>
+            ))}
+          </>
+        )}
+
         {/* Breadcrumb — visible when navigated into a nested state */}
         {currentPath.length > 0 && (
           <>
@@ -221,27 +242,6 @@ export const TwoTabLayout: React.FC<TwoTabLayoutProps> = ({
                 );
               })}
             </div>
-          </>
-        )}
-
-        {/* Host-registered commands */}
-        {commands.length > 0 && (
-          <>
-            <div className='h-6 w-px bg-gray-200 mx-1' />
-            {commands.map((cmd) => (
-              <button
-                key={cmd.id}
-                onClick={() => executeCommand(cmd.id)}
-                disabled={cmd.isExecuting}
-                title={cmd.tooltip}
-                className='cursor-pointer flex items-center space-x-2 text-sm px-3 py-1.5 rounded-md bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
-              >
-                {cmd.isExecuting && (
-                  <span className='h-3.5 w-3.5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin inline-block' />
-                )}
-                <span>{cmd.label}</span>
-              </button>
-            ))}
           </>
         )}
 
