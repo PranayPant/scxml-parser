@@ -4,6 +4,7 @@ import {
   parseElementPositions,
   deduplicateErrors,
   findDataIdPositions,
+  parseStateIdList,
 } from './validator-utils';
 import {
   collectStateIds,
@@ -192,7 +193,7 @@ export class SCXMLValidator {
 
     // Add initial states to reachable set
     if (scxml['@_initial']) {
-      const initialStates = scxml['@_initial'].split(/\s+/);
+      const initialStates = parseStateIdList(scxml['@_initial'], stateIds);
       initialStates.forEach((id) => reachableStates.add(id));
     }
 
@@ -206,14 +207,14 @@ export class SCXMLValidator {
           ? initial.transition[0]
           : initial.transition;
         if (transition['@_target']) {
-          const targets = transition['@_target'].split(/\s+/);
+          const targets = parseStateIdList(transition['@_target'], stateIds);
           targets.forEach((target: string) => reachableStates.add(target));
         }
       }
     }
 
     // Find states reachable through transitions
-    findReachableStates(scxml, reachableStates, visitedStates);
+    findReachableStates(scxml, reachableStates, visitedStates, stateIds);
 
     // Report unreachable states and other semantic issues
     validateStateMachineSemantics(scxml, stateIds, reachableStates, errors);

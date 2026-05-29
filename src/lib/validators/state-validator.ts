@@ -17,6 +17,7 @@ import type {
   DataModelElement,
 } from '@/types/scxml';
 import type { ValidationError } from '@/types/common';
+import { parseStateIdList } from './validator-utils';
 
 /**
  * Collect all state IDs from the SCXML document
@@ -435,7 +436,8 @@ export function validateCompoundStates(
 export function findReachableStates(
   element: SCXMLElement | StateElement | ParallelElement,
   reachableStates: Set<string>,
-  visitedStates: Set<string>
+  visitedStates: Set<string>,
+  stateIds: Set<string>
 ): void {
   // Process states
   if (element.state) {
@@ -452,7 +454,7 @@ export function findReachableStates(
             : [state.transition];
           transitions.forEach((transition) => {
             if (transition['@_target']) {
-              const targets = transition['@_target'].split(/\s+/);
+              const targets = parseStateIdList(transition['@_target'], stateIds);
               targets.forEach((target) => reachableStates.add(target));
             }
           });
@@ -460,7 +462,7 @@ export function findReachableStates(
 
         // Check initial states in compound states
         if (state['@_initial']) {
-          const initialStates = state['@_initial'].split(/\s+/);
+          const initialStates = parseStateIdList(state['@_initial'], stateIds);
           initialStates.forEach((id) => reachableStates.add(id));
         }
 
@@ -474,14 +476,14 @@ export function findReachableStates(
               ? initial.transition[0]
               : initial.transition;
             if (transition['@_target']) {
-              const targets = transition['@_target'].split(/\s+/);
+              const targets = parseStateIdList(transition['@_target'], stateIds);
               targets.forEach((target: string) => reachableStates.add(target));
             }
           }
         }
 
         // Recursively check nested states
-        findReachableStates(state, reachableStates, visitedStates);
+        findReachableStates(state, reachableStates, visitedStates, stateIds);
       }
     });
   }
@@ -495,7 +497,7 @@ export function findReachableStates(
       const parallelId = parallel['@_id'];
       if (parallelId && !visitedStates.has(parallelId)) {
         visitedStates.add(parallelId);
-        findReachableStates(parallel, reachableStates, visitedStates);
+        findReachableStates(parallel, reachableStates, visitedStates, stateIds);
       }
     });
   }

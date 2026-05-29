@@ -199,6 +199,50 @@ export function createFriendlyLogErrorMessage(
 }
 
 /**
+ * Parse a space-separated list of state IDs, correctly handling IDs that contain spaces.
+ * Uses greedy matching against the known state ID set: longer IDs are tried first so
+ * "main region" is returned as one token rather than ["main", "region"].
+ */
+export function parseStateIdList(value: string, stateIds: Set<string>): string[] {
+  const trimmed = value.trim();
+  if (!trimmed) return [];
+
+  const hasSpacedIds = [...stateIds].some((id) => id.includes(' '));
+  if (!hasSpacedIds) return trimmed.split(/\s+/);
+
+  const sortedIds = [...stateIds].sort((a, b) => b.length - a.length);
+  const result: string[] = [];
+  let remaining = trimmed;
+
+  while (remaining.length > 0) {
+    remaining = remaining.trimStart();
+    if (!remaining) break;
+
+    const matched = sortedIds.find(
+      (id) =>
+        remaining.startsWith(id) &&
+        (remaining.length === id.length || /\s/.test(remaining[id.length]))
+    );
+
+    if (matched) {
+      result.push(matched);
+      remaining = remaining.slice(matched.length);
+    } else {
+      const spaceIdx = remaining.search(/\s/);
+      if (spaceIdx === -1) {
+        result.push(remaining);
+        remaining = '';
+      } else {
+        result.push(remaining.slice(0, spaceIdx));
+        remaining = remaining.slice(spaceIdx);
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
  * Find all line/column positions of <data> elements with a specific id in the XML
  */
 export function findDataIdPositions(
