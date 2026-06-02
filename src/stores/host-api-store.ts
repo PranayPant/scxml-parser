@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
-import type { ChannelMapping, CommandOptions, FeedbackItem, HostErrorItem, RegisteredCommand } from '@/types/host-api';
+import type { ChannelInfo, ChannelMapping, CommandOptions, EventEntry, FeedbackItem, HostErrorItem, RegisteredCommand } from '@/types/host-api';
 
 interface HostAPIState {
   commands: RegisteredCommand[];
@@ -8,7 +8,10 @@ interface HostAPIState {
   readyCallbacks: (() => void)[];
   feedbackQueue: FeedbackItem[];
   channels: string[];
+  hostChannels: string[];
+  channelTypeMap: Record<string, ChannelInfo['type']>;
   channelMappings: ChannelMapping[];
+  events: EventEntry[];
   requestedTab: 'code' | 'visual' | null;
   hostErrors: HostErrorItem[];
   requestedValidationTab: 'validation' | 'host-alerts' | null;
@@ -21,9 +24,10 @@ interface HostAPIActions {
   executeCommand: (id: string) => Promise<void>;
   showFeedback: (message: string, level?: FeedbackItem['level']) => void;
   dismissFeedback: (id: string) => void;
-  setChannels: (channels: string[]) => void;
+  setChannels: (channels: (string | ChannelInfo)[]) => void;
   setChannelMappings: (mappings: ChannelMapping[]) => void;
   updateChannelMapping: (scxmlRef: string, mappedChannel: string) => void;
+  setEvents: (events: EventEntry[]) => void;
   setRequestedTab: (tab: 'code' | 'visual' | null) => void;
   showErrors: (errors: Array<{ message: string; level?: HostErrorItem['level'] }>) => void;
   dismissHostError: (id: string) => void;
@@ -37,7 +41,10 @@ export const useHostAPIStore = create<HostAPIState & HostAPIActions>((set, get) 
   readyCallbacks: [],
   feedbackQueue: [],
   channels: [],
+  hostChannels: [],
+  channelTypeMap: {},
   channelMappings: [],
+  events: [],
   requestedTab: null,
   hostErrors: [],
   requestedValidationTab: null,
@@ -106,9 +113,24 @@ export const useHostAPIStore = create<HostAPIState & HostAPIActions>((set, get) 
     }));
   },
 
-  setChannels: (channels: string[]) => set({ channels }),
+  setChannels: (channels: (string | ChannelInfo)[]) => {
+    const infos: ChannelInfo[] = channels.map(c =>
+      typeof c === 'string' ? { name: c, type: 'ch' as const } : c
+    );
+    const { events } = get();
+    const names = infos.map(i => i.name);
+    const typeMap = Object.fromEntries(infos.map(i => [i.name, i.type]));
+    const eventNames = events.map(e => e.name);
+    set({ hostChannels: names, channelTypeMap: typeMap, channels: [...names, ...eventNames.filter(n => !names.includes(n))] });
+  },
 
   setChannelMappings: (mappings: ChannelMapping[]) => set({ channelMappings: mappings }),
+
+  setEvents: (events: EventEntry[]) => {
+    const { hostChannels } = get();
+    const eventNames = events.map(e => e.name);
+    set({ events, channels: [...hostChannels, ...eventNames.filter(n => !hostChannels.includes(n))] });
+  },
 
   setRequestedTab: (tab) => set({ requestedTab: tab }),
 

@@ -38,6 +38,20 @@ export interface ChannelMapping {
   mappedChannel: string;
 }
 
+export interface ChannelInfo {
+  name: string;
+  type: 'ch' | 'in' | 'out' | 'st';
+}
+
+export interface EventEntry {
+  name: string;
+  hasArgument: boolean;
+  defaultValue?: string;
+  min?: string;
+  max?: string;
+  unit?: string;
+}
+
 export interface ScxmlEditorAPI {
   onReady: (callback: () => void) => void;
   loadScxml: (content: string) => void;
@@ -45,12 +59,15 @@ export interface ScxmlEditorAPI {
   getConfigValues: () => ConfigValue[];
   registerCommand: (options: CommandOptions) => void;
   showFeedback: (message: string, level?: FeedbackItem['level']) => void;
-  setChannels: (channels: string[]) => void;
+  setChannels: (channels: (string | ChannelInfo)[]) => void;
   toggleConfigPanel: () => void;
   getChannelMappings: () => ChannelMapping[];
   setChannelMappings: (mappings: ChannelMapping[]) => void;
   toggleChannelMappingPanel: () => void;
   setActiveTab: (tab: 'code' | 'visual') => void;
+  setEvents: (events: EventEntry[]) => void;
+  getEvents: () => EventEntry[];
+  toggleEventsPanel: () => void;
   /** Push one or more persistent errors into the Host Alerts tab. Panel opens automatically. */
   showErrors: (errors: Array<{ message: string; level?: 'info' | 'warning' | 'error' }>) => void;
   /** Remove all host errors from the Host Alerts tab. */

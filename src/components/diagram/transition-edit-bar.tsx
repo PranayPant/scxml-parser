@@ -4,6 +4,7 @@ import React from 'react';
 import { Save, X } from 'lucide-react';
 import { useHostAPIStore } from '@/stores/host-api-store';
 import { extractDatamodelVariables } from '@/lib/utils/datamodel-extractor';
+import { BADGE_COLORS } from '@/lib';
 
 interface TransitionEditBarProps {
   edgeId: string;
@@ -64,6 +65,7 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
   }, []);
 
   const channels = useHostAPIStore((state) => state.channels);
+  const channelTypeMap = useHostAPIStore((state) => state.channelTypeMap);
 
   const suggestions: Suggestion[] = React.useMemo(() => {
     const vars = extractDatamodelVariables(scxmlContent);
@@ -186,18 +188,18 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
   return (
     <div className='absolute top-[0px] left-0 right-0 z-10 flex items-center gap-2 px-4 py-2 bg-white border-b shadow-sm'>
       <div className='flex rounded-md border border-gray-200 overflow-hidden text-sm'>
-        {(['event', 'cond'] as const).map((field) => (
+        {(["event", "cond"] as const).map((field) => (
           <button
             key={field}
             type='button'
             onClick={() => switchField(field)}
             className={`px-3 py-1.5 font-mono transition-colors ${
               editingField === field
-                ? 'bg-blue-500 text-white'
-                : 'bg-white text-gray-500 hover:bg-gray-50'
+                ? "bg-blue-500 text-white"
+                : "bg-white text-gray-500 hover:bg-gray-50"
             }`}
           >
-            {field === 'cond' ? 'condition' : field}
+            {field === "cond" ? "condition" : field}
           </button>
         ))}
       </div>
@@ -206,9 +208,9 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
           type='text'
           value={
             activeIndex >= 0 && suggestions[activeIndex]
-              ? (editingField === 'cond'
-                  ? buildCondValue(suggestions[activeIndex].label)
-                  : suggestions[activeIndex].label)
+              ? editingField === "cond"
+                ? buildCondValue(suggestions[activeIndex].label)
+                : suggestions[activeIndex].label
               : rawValue
           }
           onChange={(e) => {
@@ -222,7 +224,9 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
             blurTimerRef.current = setTimeout(() => setIsOpen(false), 100);
           }}
           className='w-full px-3 py-1.5 text-sm text-gray-800 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-          placeholder={editingField === 'cond' ? 'Enter condition' : 'Enter event'}
+          placeholder={
+            editingField === "cond" ? "Enter condition" : "Enter event"
+          }
         />
         {showSuggestions && (
           <div className='absolute top-full left-0 right-0 mt-1 z-50 bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto'>
@@ -230,18 +234,28 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
               <div
                 key={suggestion.label}
                 onMouseDown={() => acceptSuggestion(suggestion.label)}
-                className={`px-3 py-1.5 text-sm cursor-pointer ${
-                  suggestion.kind === 'new-channel'
-                    ? 'bg-amber-50 text-amber-800 border-l-2 border-amber-400'
+                className={`px-3 py-1.5 text-sm cursor-pointer flex items-center gap-2 ${
+                  suggestion.kind === "new-channel"
+                    ? "bg-amber-50 text-amber-800 border-l-2 border-amber-400"
                     : index === activeIndex
-                    ? 'bg-blue-500 text-white'
-                    : 'hover:bg-blue-100 text-gray-800'
+                      ? "bg-blue-500 text-white"
+                      : "hover:bg-blue-100 text-gray-800"
                 }`}
               >
-                {suggestion.label}
-                {suggestion.kind === 'new-channel' && (
-                  <span className='ml-2 text-xs text-amber-600'>(new channel)</span>
+                {suggestion.kind === "new-channel" && (
+                  <span className='text-xs text-amber-600'>(new channel)</span>
                 )}
+
+                <span
+                  className='text-xs px-1 py-0.5 rounded font-mono text-black'
+                  style={{
+                    backgroundColor:
+                      BADGE_COLORS[channelTypeMap[suggestion.label] ?? "ch"],
+                  }}
+                >
+                  {channelTypeMap[suggestion.label] ?? "ch"}
+                </span>
+                <span>{suggestion.label}</span>
               </div>
             ))}
           </div>

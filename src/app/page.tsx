@@ -5,7 +5,7 @@ import { XMLEditor, type XMLEditorRef } from '@/components/editor';
 import { FileUpload } from '@/components/file-operations';
 import { TwoTabLayout, type TabType } from '@/components/layout';
 import { VisualDiagram } from '@/components/diagram';
-import { ChannelMappingPanel, ConfigPanel, ErrorBoundary, ValidationPanel, UndoRedoControls } from '@/components/ui';
+import { ChannelMappingPanel, ConfigPanel, ErrorBoundary, EventsPanel, ValidationPanel, UndoRedoControls } from '@/components/ui';
 import { SCXMLParser, SCXMLValidator } from '@/lib';
 import { updateConfigFieldExpr } from '@/lib/utils/datamodel-extractor';
 import { hasVisualMetadata } from '@/lib/utils';
@@ -15,7 +15,7 @@ import type { FileInfo, ValidationError } from '@/types/common';
 import type { ActionType } from '@/types/history';
 import { DEFAULT_SCXML_TEMPLATE } from '@/lib/consts/default_scxml_template';
 import { useHostAPIStore } from '@/stores/host-api-store';
-import type { ChannelMapping, ConfigValue, ScxmlEditorAPI } from '@/types/host-api';
+import type { ChannelInfo, ChannelMapping, ConfigValue, EventEntry, ScxmlEditorAPI } from '@/types/host-api';
 import { MoreVertical, Upload as UploadIcon, Download, Database, Eye } from 'lucide-react';
 
 export default function Home() {
@@ -47,6 +47,9 @@ export default function Home() {
   const channelMappingsRef = useRef<ChannelMapping[]>([]);
   const storeChannelMappings = useHostAPIStore(state => state.channelMappings);
   useEffect(() => { channelMappingsRef.current = storeChannelMappings; }, [storeChannelMappings]);
+  const eventsRef = useRef<EventEntry[]>([]);
+  const storeEvents = useHostAPIStore(state => state.events);
+  useEffect(() => { eventsRef.current = storeEvents; }, [storeEvents]);
   useEffect(() => {
     if (requestedValidationTab !== null) {
       setValidationPanelTab(requestedValidationTab);
@@ -61,6 +64,7 @@ export default function Home() {
   const [currentHistoryActionType, setCurrentHistoryActionType] = React.useState<ActionType | undefined>(undefined);
   const [isConfigPanelVisible, setConfigPanelVisible] = React.useState(false);
   const [isChannelMappingPanelVisible, setChannelMappingPanelVisible] = React.useState(false);
+  const [isEventsPanelVisible, setEventsPanelVisible] = React.useState(false);
   const [validationPanelTab, setValidationPanelTab] = React.useState<'validation' | 'host-alerts'>('validation');
   const [isMoreMenuOpen, setIsMoreMenuOpen] = React.useState(false);
   const moreMenuRef = React.useRef<HTMLDivElement>(null);
@@ -312,15 +316,21 @@ export default function Home() {
       getConfigValues: () => configValuesRef.current,
       registerCommand,
       showFeedback,
-      setChannels: (channels: string[]) => useHostAPIStore.getState().setChannels(channels),
+      setChannels: (channels: (string | ChannelInfo)[]) => useHostAPIStore.getState().setChannels(channels),
       toggleConfigPanel: () => setConfigPanelVisible(v => {
-        if (!v) { setValidationPanelVisible(false); setChannelMappingPanelVisible(false); }
+        if (!v) { setValidationPanelVisible(false); setChannelMappingPanelVisible(false); setEventsPanelVisible(false); }
         return !v;
       }),
       getChannelMappings: () => channelMappingsRef.current,
       setChannelMappings: (mappings) => useHostAPIStore.getState().setChannelMappings(mappings),
       toggleChannelMappingPanel: () => setChannelMappingPanelVisible(v => {
-        if (!v) { setValidationPanelVisible(false); setConfigPanelVisible(false); }
+        if (!v) { setValidationPanelVisible(false); setConfigPanelVisible(false); setEventsPanelVisible(false); }
+        return !v;
+      }),
+      setEvents: (events: EventEntry[]) => useHostAPIStore.getState().setEvents(events),
+      getEvents: () => eventsRef.current,
+      toggleEventsPanel: () => setEventsPanelVisible(v => {
+        if (!v) { setValidationPanelVisible(false); setConfigPanelVisible(false); setChannelMappingPanelVisible(false); }
         return !v;
       }),
       setActiveTab: (tab) => useHostAPIStore.getState().setRequestedTab(tab),
@@ -332,7 +342,7 @@ export default function Home() {
       // Upgrade the stub object in place so any host reference already captured
       // (e.g. `var api = iframe.contentWindow.ScxmlEditorAPI` in a load handler)
       // automatically gets the real methods without needing to re-read the property.
-      const queue = stub._q as { ready: (() => void)[]; commands: any[]; feedback: [string, any][]; channels?: string[]; channelMappings?: ChannelMapping[]; hostErrors?: Array<{ message: string; level?: string }>; clearErrors?: boolean };
+      const queue = stub._q as { ready: (() => void)[]; commands: any[]; feedback: [string, any][]; channels?: (string | ChannelInfo)[]; channelMappings?: ChannelMapping[]; events?: EventEntry[]; hostErrors?: Array<{ message: string; level?: string }>; clearErrors?: boolean };
       Object.assign(stub, realApi);
       delete stub._q;
       queue.ready.forEach(cb => onReady(cb));
@@ -340,6 +350,7 @@ export default function Home() {
       queue.feedback.forEach(([m, l]) => showFeedback(m, l));
       if (queue.channels) useHostAPIStore.getState().setChannels(queue.channels);
       if (queue.channelMappings) useHostAPIStore.getState().setChannelMappings(queue.channelMappings);
+      if (queue.events) useHostAPIStore.getState().setEvents(queue.events);
       if (queue.clearErrors) useHostAPIStore.getState().clearHostErrors();
       if (queue.hostErrors?.length) useHostAPIStore.getState().showErrors(queue.hostErrors as Array<{ message: string; level?: 'info' | 'warning' | 'error' }>);
     } else {
@@ -436,6 +447,10 @@ export default function Home() {
         isVisible={isChannelMappingPanelVisible}
         onClose={() => setChannelMappingPanelVisible(false)}
         scxmlContent={content}
+      />
+      <EventsPanel
+        isVisible={isEventsPanelVisible}
+        onClose={() => setEventsPanelVisible(false)}
       />
     </>
   );
