@@ -4,7 +4,7 @@ import React from 'react';
 import { Save, X } from 'lucide-react';
 import { useHostAPIStore } from '@/stores/host-api-store';
 import { extractDatamodelVariables } from '@/lib/utils/datamodel-extractor';
-import { BADGE_COLORS } from '@/lib';
+import { BADGE_COLORS, EVENT_FALLBACK_VALUE } from '@/lib';
 
 interface TransitionEditBarProps {
   edgeId: string;
@@ -250,10 +250,10 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
                   className='text-xs px-1 py-0.5 rounded font-mono text-black'
                   style={{
                     backgroundColor:
-                      BADGE_COLORS[channelTypeMap[suggestion.label] ?? "ch"],
+                      BADGE_COLORS[channelTypeMap[suggestion.label] ?? EVENT_FALLBACK_VALUE],
                   }}
                 >
-                  {channelTypeMap[suggestion.label] ?? "ch"}
+                  {channelTypeMap[suggestion.label] ?? EVENT_FALLBACK_VALUE}
                 </span>
                 <span>{suggestion.label}</span>
               </div>

@@ -4,23 +4,9 @@ import React, { useState } from 'react';
 import { Check, Plus, Trash2, X } from 'lucide-react';
 import { useHostAPIStore } from '@/stores/host-api-store';
 import type { EventEntry } from '@/types/host-api';
+import { SearchableSelect } from './searchable-select';
 
 const UNITS = ['V', 'A', 'l/min', '% rh', 'g/m3', 'Hz', 'rpm', 'Vdc', 'Vac', 'ppm', 'Ohm', 'bar', 'mbar', '°C', 's', 'g/day', 'on/off', 'state'];
-
-function UnitSelect({ value, onChange, className }: { value: string | undefined; onChange: (v: string | undefined) => void; className?: string }) {
-  const isCustom = value !== undefined && value !== '' && !UNITS.includes(value);
-  return (
-    <select
-      value={isCustom ? '__custom__' : (value ?? '')}
-      onChange={e => onChange(e.target.value === '' ? undefined : e.target.value === '__custom__' ? value : e.target.value)}
-      className={className}
-    >
-      <option value=''>?</option>
-      {isCustom && <option value='__custom__'>{value}</option>}
-      {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-    </select>
-  );
-}
 
 interface EventsPanelProps {
   isVisible: boolean;
@@ -134,11 +120,14 @@ export function EventsPanel({ isVisible, onClose }: EventsPanelProps) {
                       placeholder='max'
                       className={`w-12 ${argInputClassExisting}`}
                     />
-                    <UnitSelect
-                      value={event.unit}
-                      onChange={v => update(index, { unit: v })}
-                      className={`w-16 ${argInputClassExisting}`}
-                    />
+                    <div className='w-16'>
+                      <SearchableSelect
+                        value={event.unit ?? ''}
+                        options={UNITS}
+                        onChange={v => update(index, { unit: v || undefined })}
+                        placeholder='?'
+                      />
+                    </div>
                   </div>
                 )}
               </li>
@@ -195,11 +184,14 @@ export function EventsPanel({ isVisible, onClose }: EventsPanelProps) {
                       placeholder='max'
                       className={`w-12 ${argInputClass}`}
                     />
-                    <UnitSelect
-                      value={newUnit || undefined}
-                      onChange={v => setNewUnit(v ?? '')}
-                      className={`w-16 ${argInputClass}`}
-                    />
+                    <div className='w-16'>
+                      <SearchableSelect
+                        value={newUnit}
+                        options={UNITS}
+                        onChange={v => setNewUnit(v)}
+                        placeholder='?'
+                      />
+                    </div>
                   </div>
                 )}
               </li>

@@ -1,6 +1,6 @@
 "use client";
 
-import { BADGE_COLORS } from "@/lib";
+import { BADGE_COLORS, EVENT_FALLBACK_VALUE } from "@/lib";
 import { extractDatamodelVariables } from "@/lib/utils/datamodel-extractor";
 import { useHostAPIStore } from "@/stores/host-api-store";
 import { Save, X } from "lucide-react";
@@ -200,10 +200,10 @@ export const StateActionsEditBar: React.FC<StateActionsEditBarProps> = ({
                   className='text-xs px-1 py-0.5 rounded font-mono text-black'
                   style={{
                     backgroundColor:
-                      BADGE_COLORS[channelTypeMap[suggestion.label] ?? "ch"],
+                      BADGE_COLORS[channelTypeMap[suggestion.label] ?? EVENT_FALLBACK_VALUE],
                   }}
                 >
-                  {channelTypeMap[suggestion.label] ?? "ch"}
+                  {channelTypeMap[suggestion.label] ?? EVENT_FALLBACK_VALUE}
                 </span>
                 <span>{suggestion.label}</span>
               </div>
