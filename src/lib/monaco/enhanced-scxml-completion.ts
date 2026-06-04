@@ -896,13 +896,28 @@ function createAttributeValueSuggestions(
     if (channelAttrs.includes(context.currentAttribute)) {
       const channels = useHostAPIStore.getState().channels;
       for (const ch of channels) {
-        if (typedPrefix && !ch.includes(typedPrefix)) continue;
+        if (typedPrefix && !ch.name.includes(typedPrefix)) continue;
         suggestions.push({
-          label: ch,
+          label: ch.name,
           kind: monaco.languages.CompletionItemKind.Variable,
-          insertText: ch,
+          insertText: ch.name,
           detail: 'Channel',
           documentation: 'System channel',
+          range: replaceRange,
+        });
+      }
+    }
+
+    if (context.currentElement === 'transition' && context.currentAttribute === 'event') {
+      const events = useHostAPIStore.getState().events;
+      for (const ev of events) {
+        if (typedPrefix && !ev.name.includes(typedPrefix)) continue;
+        suggestions.push({
+          label: ev.name,
+          kind: monaco.languages.CompletionItemKind.Event,
+          insertText: ev.name,
+          detail: 'Event',
+          documentation: 'WebUI event',
           range: replaceRange,
         });
       }

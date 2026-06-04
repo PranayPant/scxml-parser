@@ -5,6 +5,7 @@ import { Check, Plus, Trash2, X } from 'lucide-react';
 import { useHostAPIStore } from '@/stores/host-api-store';
 import type { EventEntry } from '@/types/host-api';
 import { SearchableSelect } from './searchable-select';
+import { EVENT_FALLBACK_VALUE } from '@/lib/utils/common-utils';
 
 const UNITS = ['V', 'A', 'l/min', '% rh', 'g/m3', 'Hz', 'rpm', 'Vdc', 'Vac', 'ppm', 'Ohm', 'bar', 'mbar', '°C', 's', 'g/day', 'on/off', 'state'];
 
@@ -35,6 +36,7 @@ export function EventsPanel({ isVisible, onClose }: EventsPanelProps) {
     const hasArgument = isAdding === 'arg';
     setEvents([...events, {
       name: trimmed,
+      type: EVENT_FALLBACK_VALUE,
       hasArgument,
       defaultValue: hasArgument ? newDefaultValue : undefined,
       min: hasArgument && newMin.trim() ? newMin.trim() : undefined,

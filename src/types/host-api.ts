@@ -45,6 +45,7 @@ export interface ChannelInfo {
 
 export interface EventEntry {
   name: string;
+  type: string;
   hasArgument: boolean;
   defaultValue?: string;
   min?: string;
@@ -59,7 +60,7 @@ export interface ScxmlEditorAPI {
   getConfigValues: () => ConfigValue[];
   registerCommand: (options: CommandOptions) => void;
   showFeedback: (message: string, level?: FeedbackItem['level']) => void;
-  setChannels: (channels: (string | ChannelInfo)[]) => void;
+  setChannels: (channels: ChannelInfo[]) => void;
   toggleConfigPanel: () => void;
   getChannelMappings: () => ChannelMapping[];
   setChannelMappings: (mappings: ChannelMapping[]) => void;

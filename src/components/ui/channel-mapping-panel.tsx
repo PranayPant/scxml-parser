@@ -17,12 +17,14 @@ export function ChannelMappingPanel({ isVisible, onClose, scxmlContent }: Channe
   const channelMappings = useHostAPIStore(state => state.channelMappings);
   const updateChannelMapping = useHostAPIStore(state => state.updateChannelMapping);
 
-  const unresolvedRefs = useMemo(() => extractUnresolvedChannelRefs(scxmlContent, channels), [scxmlContent, channels]);
+  const channelNames = useMemo(() => channels.map(c => c.name), [channels]);
+
+  const unresolvedRefs = useMemo(() => extractUnresolvedChannelRefs(scxmlContent, channelNames), [scxmlContent, channelNames]);
 
   const availableOptions = useMemo(() => {
     const datamodelVars = extractDatamodelVariables(scxmlContent).filter(v => !v.startsWith('this_'));
-    return Array.from(new Set([...channels, ...datamodelVars])).sort();
-  }, [scxmlContent, channels]);
+    return Array.from(new Set([...channelNames, ...datamodelVars])).sort();
+  }, [scxmlContent, channelNames]);
 
   const getMapped = (scxmlRef: string) =>
     channelMappings.find(m => m.scxmlRef === scxmlRef)?.mappedChannel ?? '';

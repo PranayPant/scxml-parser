@@ -7,9 +7,7 @@ interface HostAPIState {
   isReady: boolean;
   readyCallbacks: (() => void)[];
   feedbackQueue: FeedbackItem[];
-  channels: string[];
-  hostChannels: string[];
-  channelTypeMap: Record<string, ChannelInfo['type']>;
+  channels: ChannelInfo[];
   channelMappings: ChannelMapping[];
   events: EventEntry[];
   requestedTab: 'code' | 'visual' | null;
@@ -24,7 +22,7 @@ interface HostAPIActions {
   executeCommand: (id: string) => Promise<void>;
   showFeedback: (message: string, level?: FeedbackItem['level']) => void;
   dismissFeedback: (id: string) => void;
-  setChannels: (channels: (string | ChannelInfo)[]) => void;
+  setChannels: (channels: ChannelInfo[]) => void;
   setChannelMappings: (mappings: ChannelMapping[]) => void;
   updateChannelMapping: (scxmlRef: string, mappedChannel: string) => void;
   setEvents: (events: EventEntry[]) => void;
@@ -41,8 +39,6 @@ export const useHostAPIStore = create<HostAPIState & HostAPIActions>((set, get) 
   readyCallbacks: [],
   feedbackQueue: [],
   channels: [],
-  hostChannels: [],
-  channelTypeMap: {},
   channelMappings: [],
   events: [],
   requestedTab: null,
@@ -113,24 +109,11 @@ export const useHostAPIStore = create<HostAPIState & HostAPIActions>((set, get) 
     }));
   },
 
-  setChannels: (channels: (string | ChannelInfo)[]) => {
-    const infos: ChannelInfo[] = channels.map(c =>
-      typeof c === 'string' ? { name: c, type: 'ch' as const } : c
-    );
-    const { events } = get();
-    const names = infos.map(i => i.name);
-    const typeMap = Object.fromEntries(infos.map(i => [i.name, i.type]));
-    const eventNames = events.map(e => e.name);
-    set({ hostChannels: names, channelTypeMap: typeMap, channels: [...names, ...eventNames.filter(n => !names.includes(n))] });
-  },
+  setChannels: (channels: ChannelInfo[]) => set({ channels }),
 
   setChannelMappings: (mappings: ChannelMapping[]) => set({ channelMappings: mappings }),
 
-  setEvents: (events: EventEntry[]) => {
-    const { hostChannels } = get();
-    const eventNames = events.map(e => e.name);
-    set({ events, channels: [...hostChannels, ...eventNames.filter(n => !hostChannels.includes(n))] });
-  },
+  setEvents: (events: EventEntry[]) => set({ events }),
 
   setRequestedTab: (tab) => set({ requestedTab: tab }),
 

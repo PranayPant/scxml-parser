@@ -16,6 +16,7 @@ import type { ActionType } from '@/types/history';
 import { DEFAULT_SCXML_TEMPLATE } from '@/lib/consts/default_scxml_template';
 import { useHostAPIStore } from '@/stores/host-api-store';
 import type { ChannelInfo, ChannelMapping, ConfigValue, EventEntry, ScxmlEditorAPI } from '@/types/host-api';
+import { EVENT_FALLBACK_VALUE } from '@/lib/utils/common-utils';
 import { MoreVertical, Upload as UploadIcon, Download, Database, Eye } from 'lucide-react';
 
 export default function Home() {
@@ -316,7 +317,7 @@ export default function Home() {
       getConfigValues: () => configValuesRef.current,
       registerCommand,
       showFeedback,
-      setChannels: (channels: (string | ChannelInfo)[]) => useHostAPIStore.getState().setChannels(channels),
+      setChannels: (channels: ChannelInfo[]) => useHostAPIStore.getState().setChannels(channels),
       toggleConfigPanel: () => setConfigPanelVisible(v => {
         if (!v) { setValidationPanelVisible(false); setChannelMappingPanelVisible(false); setEventsPanelVisible(false); }
         return !v;
@@ -327,7 +328,7 @@ export default function Home() {
         if (!v) { setValidationPanelVisible(false); setConfigPanelVisible(false); setEventsPanelVisible(false); }
         return !v;
       }),
-      setEvents: (events: EventEntry[]) => useHostAPIStore.getState().setEvents(events),
+      setEvents: (events: EventEntry[]) => useHostAPIStore.getState().setEvents(events.map(e => ({ ...e, type: e.type ?? EVENT_FALLBACK_VALUE }))),
       getEvents: () => eventsRef.current,
       toggleEventsPanel: () => setEventsPanelVisible(v => {
         if (!v) { setValidationPanelVisible(false); setConfigPanelVisible(false); setChannelMappingPanelVisible(false); }
@@ -342,7 +343,7 @@ export default function Home() {
       // Upgrade the stub object in place so any host reference already captured
       // (e.g. `var api = iframe.contentWindow.ScxmlEditorAPI` in a load handler)
       // automatically gets the real methods without needing to re-read the property.
-      const queue = stub._q as { ready: (() => void)[]; commands: any[]; feedback: [string, any][]; channels?: (string | ChannelInfo)[]; channelMappings?: ChannelMapping[]; events?: EventEntry[]; hostErrors?: Array<{ message: string; level?: string }>; clearErrors?: boolean };
+      const queue = stub._q as { ready: (() => void)[]; commands: any[]; feedback: [string, any][]; channels?: ChannelInfo[]; channelMappings?: ChannelMapping[]; events?: EventEntry[]; hostErrors?: Array<{ message: string; level?: string }>; clearErrors?: boolean };
       Object.assign(stub, realApi);
       delete stub._q;
       queue.ready.forEach(cb => onReady(cb));
@@ -350,7 +351,7 @@ export default function Home() {
       queue.feedback.forEach(([m, l]) => showFeedback(m, l));
       if (queue.channels) useHostAPIStore.getState().setChannels(queue.channels);
       if (queue.channelMappings) useHostAPIStore.getState().setChannelMappings(queue.channelMappings);
-      if (queue.events) useHostAPIStore.getState().setEvents(queue.events);
+      if (queue.events) useHostAPIStore.getState().setEvents(queue.events.map(e => ({ ...e, type: e.type ?? EVENT_FALLBACK_VALUE })));
       if (queue.clearErrors) useHostAPIStore.getState().clearHostErrors();
       if (queue.hostErrors?.length) useHostAPIStore.getState().showErrors(queue.hostErrors as Array<{ message: string; level?: 'info' | 'warning' | 'error' }>);
     } else {
