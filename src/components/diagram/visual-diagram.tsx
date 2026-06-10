@@ -47,7 +47,7 @@ import 'reactflow/dist/style.css';
 import { SCXMLTransitionEdge } from './edges/scxml-transition-edge';
 import { HistoryWrapperNode } from './nodes/history-wrapper-node';
 import { SCXMLStateNode } from './nodes/scxml-state-node';
-import { StateActionsEditBar } from './state-actions-edit-bar';
+import { StateActionsPanel } from '@/components/ui/state-actions-panel';
 import { TransitionEditBar } from './transition-edit-bar';
 
 // ==================== TYPES & INTERFACES ====================
@@ -2106,220 +2106,223 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
   }, []);
   // ==================== RENDER ====================
   return (
-    <div className='h-full w-full bg-gray-50 flex flex-col relative'>
-      {/* Edge hover tooltip */}
-      {hoveredEdge && (
-        <div
-          className='fixed z-[10000] pointer-events-none'
-          style={{
-            left: hoveredEdge.x + 10,
-            top: hoveredEdge.y + 10,
-          }}
-        >
-          <div className='bg-gray-900 text-white text-xs px-3 py-2 rounded-md shadow-lg max-w-xs break-words'>
-            {hoveredEdge.fullLabel}
-          </div>
-        </div>
-      )}
-
-      {/* Hierarchy Navigation Controls — hidden; breadcrumb shown in main toolbar */}
-      <div className='hidden'>
-        <div className='flex items-center gap-1 flex-1'>
-          {breadcrumbPath.map((path, index) => (
-            <React.Fragment key={index}>
-              <button
-                onClick={() => navigateToBreadcrumb(index)}
-                className={`px-2 py-1 text-sm hover:bg-gray-100 rounded transition-colors ${
-                  index === breadcrumbPath.length - 1
-                    ? 'font-semibold text-gray-900'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                {path}
-              </button>
-              {index < breadcrumbPath.length - 1 && (
-                <ChevronRight className='h-3 w-3 text-gray-400' />
-              )}
-            </React.Fragment>
-          ))}
-        </div>
-
-        {currentParentNode && (
-          <div className='text-sm text-gray-600 ml-auto'>
-            Level: {breadcrumbPath.length - 1}
+    <div className='h-full w-full flex'>
+      {/* Diagram area */}
+      <div className='flex-1 bg-gray-50 flex flex-col relative overflow-hidden'>
+        {/* Edge hover tooltip */}
+        {hoveredEdge && (
+          <div
+            className='fixed z-[10000] pointer-events-none'
+            style={{
+              left: hoveredEdge.x + 10,
+              top: hoveredEdge.y + 10,
+            }}
+          >
+            <div className='bg-gray-900 text-white text-xs px-3 py-2 rounded-md shadow-lg max-w-xs break-words'>
+              {hoveredEdge.fullLabel}
+            </div>
           </div>
         )}
-      </div>
 
-      {/* Transition Label Editor - Overlays the diagram */}
-      {selectedEdgeForEdit && (
-        <TransitionEditBar
-          key={selectedEdgeForEdit.id}
-          edgeId={selectedEdgeForEdit.id}
-          source={selectedEdgeForEdit.source}
-          target={selectedEdgeForEdit.target}
-          event={selectedEdgeForEdit.event}
-          cond={selectedEdgeForEdit.cond}
-          scxmlContent={scxmlContent}
-          onCommit={handleTransitionLabelChange}
-          onNewChannel={handleNewChannel}
-          onCancel={() => {
-            setSelectedEdgeForEdit(null);
-            setSelectedTransitions(new Set());
-          }}
-        />
-      )}
+        {/* Hierarchy Navigation Controls — hidden; breadcrumb shown in main toolbar */}
+        <div className='hidden'>
+          <div className='flex items-center gap-1 flex-1'>
+            {breadcrumbPath.map((path, index) => (
+              <React.Fragment key={index}>
+                <button
+                  onClick={() => navigateToBreadcrumb(index)}
+                  className={`px-2 py-1 text-sm hover:bg-gray-100 rounded transition-colors ${
+                    index === breadcrumbPath.length - 1
+                      ? 'font-semibold text-gray-900'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  {path}
+                </button>
+                {index < breadcrumbPath.length - 1 && (
+                  <ChevronRight className='h-3 w-3 text-gray-400' />
+                )}
+              </React.Fragment>
+            ))}
+          </div>
 
-      {/* State Actions Editor (onentry/onexit with assign) - Overlays the diagram */}
-      {selectedStateForActions && (
-        <StateActionsEditBar
-          key={selectedStateForActions.id}
-          stateId={selectedStateForActions.id}
-          entryActions={selectedStateForActions.entryActions}
-          exitActions={selectedStateForActions.exitActions}
-          scxmlContent={scxmlContent}
-          onSave={(entryActions, exitActions) => {
-            handleNodeActionsChange(selectedStateForActions.id, entryActions, exitActions);
-            setSelectedStateForActions(null);
-            setActiveStates(new Set());
-          }}
-          onCancel={() => {
-            setSelectedStateForActions(null);
-            setActiveStates(new Set());
-          }}
-        />
-      )}
+          {currentParentNode && (
+            <div className='text-sm text-gray-600 ml-auto'>
+              Level: {breadcrumbPath.length - 1}
+            </div>
+          )}
+        </div>
 
-      <div className='flex-1'>
-        <ReactFlow
-          nodes={nodes}
-          edges={displayFilteredEdges}
-          onNodesChange={handleNodesChange}
-          onEdgesChange={handleEdgesChange}
-          onConnect={onConnect}
-          onReconnect={onReconnect}
-          onNodeClick={(event, node) => handleStateClick(node.id, event)}
-          onNodeDoubleClick={(event, node) => {
-            // Double-click on node should trigger label editing
-            event.stopPropagation();
-            const nodeElement = nodes.find((n) => n.id === node.id);
-            if (nodeElement?.data?.onLabelChange) {
-              // Trigger label editing by updating node data
-              setNodes((nds) =>
-                nds.map((n) => {
-                  if (n.id === node.id) {
-                    return {
-                      ...n,
-                      data: {
-                        ...n.data,
-                        isEditing: true,
-                      },
-                    };
-                  }
-                  return n;
-                })
-              );
-            }
-          }}
-          onEdgeClick={handleEdgeClick}
-          onEdgeMouseEnter={handleEdgeMouseEnter}
-          onEdgeMouseLeave={handleEdgeMouseLeave}
-          onPaneClick={() => {
-            setSelectedEdgeForEdit(null);
-            setSelectedTransitions(new Set());
-            setSelectedStateForActions(null);
-            setActiveStates(new Set());
-          }}
-          nodeTypes={nodeTypes}
-          edgeTypes={edgeTypes}
-          fitView={true}
-          fitViewOptions={{
-            padding: 0.3,
-            includeHiddenNodes: false,
-            minZoom: 0.5,
-            maxZoom: 2,
-          }}
-          attributionPosition='bottom-left'
-          className='bg-gradient-to-br from-slate-50 to-slate-100'
-          minZoom={0.2}
-          maxZoom={4}
-          defaultViewport={{ x: 0, y: 0, zoom: 0.8 }}
-          nodesDraggable={true}
-          nodesConnectable={true}
-          elementsSelectable={true}
-          deleteKeyCode={['Delete']}
-          connectionLineType={ConnectionLineType.SmoothStep}
-          connectionMode={ConnectionMode.Loose}
-          connectionRadius={2}
-          reconnectRadius={20}
-          edgesUpdatable={true}
-          edgesFocusable={true}
-          elevateEdgesOnSelect={true}
-          elevateNodesOnSelect={false}
-          zoomOnScroll={true}
-          zoomOnPinch={true}
-          panOnScroll={false}
-          panOnDrag={true}
-          zoomOnDoubleClick={false}
-        >
-          {/* Global SVG definitions for arrows */}
-          <svg style={{ position: 'absolute', width: 0, height: 0 }}>
-            <defs>
-              <marker
-                id='arrow-marker'
-                viewBox='0 0 20 20'
-                refX='20'
-                refY='10'
-                markerWidth='10'
-                markerHeight='10'
-                orient='auto'
-              >
-                <path d='M 2 2 L 18 10 L 2 18 L 7 10 Z' fill='currentColor' />
-              </marker>
-              <marker
-                id='arrow-marker-selected'
-                viewBox='0 0 20 20'
-                refX='20'
-                refY='10'
-                markerWidth='12'
-                markerHeight='12'
-                orient='auto'
-              >
-                <path d='M 2 2 L 18 10 L 2 18 L 7 10 Z' fill='#3b82f6' />
-              </marker>
-            </defs>
-          </svg>
-          <Background
-            color='#cbd5e1'
-            gap={20}
-            size={1}
-            variant={BackgroundVariant.Dots}
+        {/* Transition Label Editor - Overlays the diagram */}
+        {selectedEdgeForEdit && (
+          <TransitionEditBar
+            key={selectedEdgeForEdit.id}
+            edgeId={selectedEdgeForEdit.id}
+            source={selectedEdgeForEdit.source}
+            target={selectedEdgeForEdit.target}
+            event={selectedEdgeForEdit.event}
+            cond={selectedEdgeForEdit.cond}
+            scxmlContent={scxmlContent}
+            onCommit={handleTransitionLabelChange}
+            onNewChannel={handleNewChannel}
+            onCancel={() => {
+              setSelectedEdgeForEdit(null);
+              setSelectedTransitions(new Set());
+            }}
           />
-          <Controls
-            position='bottom-left'
-            showZoom={true}
-            showFitView={true}
-            showInteractive={true}
+        )}
+
+        <div className='flex-1'>
+          <ReactFlow
+            nodes={nodes}
+            edges={displayFilteredEdges}
+            onNodesChange={handleNodesChange}
+            onEdgesChange={handleEdgesChange}
+            onConnect={onConnect}
+            onReconnect={onReconnect}
+            onNodeClick={(event, node) => handleStateClick(node.id, event)}
+            onNodeDoubleClick={(event, node) => {
+              event.stopPropagation();
+              const nodeElement = nodes.find((n) => n.id === node.id);
+              if (nodeElement?.data?.onLabelChange) {
+                setNodes((nds) =>
+                  nds.map((n) => {
+                    if (n.id === node.id) {
+                      return {
+                        ...n,
+                        data: {
+                          ...n.data,
+                          isEditing: true,
+                        },
+                      };
+                    }
+                    return n;
+                  })
+                );
+              }
+            }}
+            onEdgeClick={handleEdgeClick}
+            onEdgeMouseEnter={handleEdgeMouseEnter}
+            onEdgeMouseLeave={handleEdgeMouseLeave}
+            onPaneClick={() => {
+              setSelectedEdgeForEdit(null);
+              setSelectedTransitions(new Set());
+              setSelectedStateForActions(null);
+              setActiveStates(new Set());
+            }}
+            nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
+            fitView={true}
+            fitViewOptions={{
+              padding: 0.3,
+              includeHiddenNodes: false,
+              minZoom: 0.5,
+              maxZoom: 2,
+            }}
+            attributionPosition='bottom-left'
+            className='bg-gradient-to-br from-slate-50 to-slate-100'
+            minZoom={0.2}
+            maxZoom={4}
+            defaultViewport={{ x: 0, y: 0, zoom: 0.8 }}
+            nodesDraggable={true}
+            nodesConnectable={true}
+            elementsSelectable={true}
+            deleteKeyCode={['Delete']}
+            connectionLineType={ConnectionLineType.SmoothStep}
+            connectionMode={ConnectionMode.Loose}
+            connectionRadius={2}
+            reconnectRadius={20}
+            edgesUpdatable={true}
+            edgesFocusable={true}
+            elevateEdgesOnSelect={true}
+            elevateNodesOnSelect={false}
+            zoomOnScroll={true}
+            zoomOnPinch={true}
+            panOnScroll={false}
+            panOnDrag={true}
+            zoomOnDoubleClick={false}
           >
-            <ControlButton
-              onClick={handleAddRootState}
-              title='Add State'
-              aria-label='Add State'
-              className='text-gray-600 hover:text-gray-900'
+            {/* Global SVG definitions for arrows */}
+            <svg style={{ position: 'absolute', width: 0, height: 0 }}>
+              <defs>
+                <marker
+                  id='arrow-marker'
+                  viewBox='0 0 20 20'
+                  refX='20'
+                  refY='10'
+                  markerWidth='10'
+                  markerHeight='10'
+                  orient='auto'
+                >
+                  <path d='M 2 2 L 18 10 L 2 18 L 7 10 Z' fill='currentColor' />
+                </marker>
+                <marker
+                  id='arrow-marker-selected'
+                  viewBox='0 0 20 20'
+                  refX='20'
+                  refY='10'
+                  markerWidth='12'
+                  markerHeight='12'
+                  orient='auto'
+                >
+                  <path d='M 2 2 L 18 10 L 2 18 L 7 10 Z' fill='#3b82f6' />
+                </marker>
+              </defs>
+            </svg>
+            <Background
+              color='#cbd5e1'
+              gap={20}
+              size={1}
+              variant={BackgroundVariant.Dots}
+            />
+            <Controls
+              position='bottom-left'
+              showZoom={true}
+              showFitView={true}
+              showInteractive={true}
             >
-              S
-            </ControlButton>
-          </Controls>
-          <MiniMap
-            position='bottom-right'
-            nodeStrokeColor='#64748b'
-            nodeColor='#f8fafc'
-            nodeBorderRadius={12}
-            maskColor='rgba(0, 0, 0, 0.05)'
-            className='bg-white/90 border border-slate-200 rounded-lg shadow-sm'
-          />
-        </ReactFlow>
+              <ControlButton
+                onClick={handleAddRootState}
+                title='Add State'
+                aria-label='Add State'
+                className='text-gray-600 hover:text-gray-900'
+              >
+                S
+              </ControlButton>
+            </Controls>
+            <MiniMap
+              position='bottom-right'
+              nodeStrokeColor='#64748b'
+              nodeColor='#f8fafc'
+              nodeBorderRadius={12}
+              maskColor='rgba(0, 0, 0, 0.05)'
+              className='bg-white/90 border border-slate-200 rounded-lg shadow-sm'
+            />
+          </ReactFlow>
+        </div>
       </div>
+
+      {/* State Actions side panel */}
+      <StateActionsPanel
+        isVisible={selectedStateForActions !== null}
+        onClose={() => {
+          setSelectedStateForActions(null);
+          setActiveStates(new Set());
+        }}
+        stateId={selectedStateForActions?.id ?? ''}
+        entryActions={selectedStateForActions?.entryActions ?? []}
+        exitActions={selectedStateForActions?.exitActions ?? []}
+        scxmlContent={scxmlContent}
+        onApply={(entryActions, exitActions) => {
+          if (selectedStateForActions) {
+            handleNodeActionsChange(
+              selectedStateForActions.id,
+              entryActions,
+              exitActions,
+            );
+          }
+        }}
+      />
     </div>
   );
 };

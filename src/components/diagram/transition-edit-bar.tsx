@@ -4,7 +4,7 @@ import React from 'react';
 import { Save, X } from 'lucide-react';
 import { useHostAPIStore } from '@/stores/host-api-store';
 import { extractDatamodelVariables } from '@/lib/utils/datamodel-extractor';
-import { BADGE_COLORS, EVENT_FALLBACK_VALUE } from '@/lib';
+import { BADGE_COLORS } from '@/lib';
 
 interface TransitionEditBarProps {
   edgeId: string;
@@ -34,7 +34,7 @@ interface TransitionEditBarProps {
   onCancel: () => void;
 }
 
-type Suggestion = { label: string; kind: 'regular' | 'new-channel' };
+type Suggestion = { label: string; kind: 'channel' | 'event' | 'variable' | 'new-channel' };
 
 const OPERATORS = ['==', '!=', '>=', '<=', '>', '<', '&&', '||'];
 const OPERATOR_SET = new Set([...OPERATORS, '!']);
@@ -50,9 +50,8 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
   onNewChannel,
   onCancel,
 }) => {
-  const [editingField, setEditingField] = React.useState<'event' | 'cond'>(
-    event ? 'event' : 'cond'
-  );
+  const [selectionMode, setSelectionMode] = React.useState<'undecided' | 'event' | 'cond'>('undecided');
+  const editingField = selectionMode === 'event' ? 'event' : 'cond';
   const [rawValue, setRawValue] = React.useState(event ?? cond ?? '');
   const [activeIndex, setActiveIndex] = React.useState(-1);
   const [isOpen, setIsOpen] = React.useState(false);
@@ -65,43 +64,58 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
   }, []);
 
   const channels = useHostAPIStore((state) => state.channels);
-  const channelTypeMap = useHostAPIStore((state) => state.channelTypeMap);
+  const events = useHostAPIStore((state) => state.events);
 
   const suggestions: Suggestion[] = React.useMemo(() => {
     const vars = extractDatamodelVariables(scxmlContent);
-    const combined = Array.from(new Set([...vars, ...channels]));
+    const channelSet = new Set(channels.map(c => c.name));
+    const eventNames = events.map(e => e.name);
+    const eventSet = new Set(eventNames);
 
-    if (editingField !== 'cond') {
+    const kindOf = (item: string): Suggestion['kind'] =>
+      channelSet.has(item) ? 'channel' : eventSet.has(item) ? 'event' : 'variable';
+
+    if (selectionMode === 'event') {
       const prefix = rawValue.toLowerCase();
-      const filtered = combined.filter((item) => item.toLowerCase().includes(prefix));
-      if (filtered.length === 0 && rawValue.startsWith('this_')) {
-        return [{ label: rawValue, kind: 'new-channel' as const }];
-      }
-      return filtered.map((item) => ({ label: item, kind: 'regular' as const }));
+      return eventNames
+        .filter(name => name.toLowerCase().includes(prefix))
+        .map(name => ({ label: name, kind: 'event' as const }));
     }
 
-    // Cond field: token-aware suggestions
+    if (selectionMode === 'undecided') {
+      const allNames = Array.from(new Set([...Array.from(vars), ...channels.map(c => c.name), ...eventNames]));
+      const prefix = rawValue.toLowerCase();
+      const filtered = allNames.filter(item => item.toLowerCase().includes(prefix));
+      if (filtered.length === 0 && rawValue.startsWith('this_')) {
+        return [{ label: rawValue, kind: 'new-channel' }];
+      }
+      return filtered.map(item => ({ label: item, kind: kindOf(item) }));
+    }
+
+    // Cond mode: channels + vars only, token-aware (no events)
+    const allNames = Array.from(new Set([...Array.from(vars), ...channels.map(c => c.name)]));
+    const condKindOf = (item: string): Suggestion['kind'] =>
+      channelSet.has(item) ? 'channel' : 'variable';
+
     const endsWithSpace = rawValue.endsWith(' ');
     const tokens = rawValue.trimEnd().split(/\s+/);
     const lastToken = endsWithSpace ? '' : (tokens[tokens.length - 1] ?? '');
     const prevToken = endsWithSpace ? (tokens[tokens.length - 1] ?? '') : (tokens[tokens.length - 2] ?? '');
 
     if (endsWithSpace) {
-      // After a space: suggest operators or variables depending on context
       if (OPERATOR_SET.has(prevToken)) {
-        return combined.map((item) => ({ label: item, kind: 'regular' as const }));
+        return allNames.map(item => ({ label: item, kind: condKindOf(item) }));
       }
-      return OPERATORS.map((op) => ({ label: op, kind: 'regular' as const }));
+      return OPERATORS.map(op => ({ label: op, kind: 'variable' as const }));
     }
 
-    // Mid-token: filter variables/channels by the current token
     const prefix = lastToken.toLowerCase();
-    const filtered = combined.filter((item) => item.toLowerCase().includes(prefix));
+    const filtered = allNames.filter(item => item.toLowerCase().includes(prefix));
     if (filtered.length === 0 && lastToken.startsWith('this_')) {
-      return [{ label: lastToken, kind: 'new-channel' as const }];
+      return [{ label: lastToken, kind: 'new-channel' }];
     }
-    return filtered.map((item) => ({ label: item, kind: 'regular' as const }));
-  }, [rawValue, channels, scxmlContent, editingField]);
+    return filtered.map(item => ({ label: item, kind: condKindOf(item) }));
+  }, [rawValue, channels, events, scxmlContent, selectionMode]);
 
   const showSuggestions = isOpen && suggestions.length > 0;
 
@@ -113,18 +127,28 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
     return tokens.join(' ');
   };
 
-  const acceptSuggestion = (label: string) => {
-    setRawValue(editingField === 'cond' ? buildCondValue(label) : label);
+  const acceptSuggestion = (suggestion: Suggestion) => {
+    if (selectionMode === 'undecided') {
+      setSelectionMode(suggestion.kind === 'event' ? 'event' : 'cond');
+      setRawValue(suggestion.label);
+    } else if (selectionMode === 'cond') {
+      setRawValue(buildCondValue(suggestion.label));
+    } else {
+      setRawValue(suggestion.label);
+    }
     setIsOpen(false);
     setActiveIndex(-1);
   };
 
-  const commit = (value: string, kind: Suggestion['kind'] = 'regular') => {
+  const commit = (value: string, kind: Suggestion['kind'] = 'variable') => {
     const trimmed = value.trim();
+    const resolvedField: 'event' | 'cond' =
+      selectionMode !== 'undecided' ? editingField :
+      events.some(e => e.name === trimmed) ? 'event' : 'cond';
     if (kind === 'new-channel' && onNewChannel) {
-      onNewChannel(trimmed, source, target, event, cond, editingField, edgeId);
+      onNewChannel(trimmed, source, target, event, cond, resolvedField, edgeId);
     } else if (trimmed) {
-      onCommit(source, target, event, cond, trimmed, editingField, edgeId);
+      onCommit(source, target, event, cond, trimmed, resolvedField, edgeId);
     }
     onCancel();
   };
@@ -143,7 +167,7 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
       }
       if (e.key === 'Tab' && activeIndex >= 0) {
         e.preventDefault();
-        acceptSuggestion(suggestions[activeIndex].label);
+        acceptSuggestion(suggestions[activeIndex]);
         return;
       }
       if (e.key === 'Enter') {
@@ -155,7 +179,7 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
           enterIndex = activeIndex
         }
         if (enterIndex >= 0 && suggestions[enterIndex]) {
-          acceptSuggestion(suggestions[enterIndex].label);
+          acceptSuggestion(suggestions[enterIndex]);
         } else {
           commit(rawValue);
         }
@@ -178,31 +202,8 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
     }
   };
 
-  const switchField = (field: 'event' | 'cond') => {
-    setEditingField(field);
-    setRawValue(field === 'cond' ? cond ?? '' : event ?? '');
-    setIsOpen(false);
-    setActiveIndex(-1);
-  };
-
   return (
     <div className='absolute top-[0px] left-0 right-0 z-10 flex items-center gap-2 px-4 py-2 bg-white border-b shadow-sm'>
-      <div className='flex rounded-md border border-gray-200 overflow-hidden text-sm'>
-        {(["event", "cond"] as const).map((field) => (
-          <button
-            key={field}
-            type='button'
-            onClick={() => switchField(field)}
-            className={`px-3 py-1.5 font-mono transition-colors ${
-              editingField === field
-                ? "bg-blue-500 text-white"
-                : "bg-white text-gray-500 hover:bg-gray-50"
-            }`}
-          >
-            {field === "cond" ? "condition" : field}
-          </button>
-        ))}
-      </div>
       <div className='relative flex-1'>
         <input
           type='text'
@@ -214,7 +215,9 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
               : rawValue
           }
           onChange={(e) => {
-            setRawValue(e.target.value);
+            const newValue = e.target.value;
+            setRawValue(newValue);
+            if (newValue === '') setSelectionMode('undecided');
             setIsOpen(true);
             setActiveIndex(-1);
           }}
@@ -225,7 +228,9 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
           }}
           className='w-full px-3 py-1.5 text-sm text-gray-800 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
           placeholder={
-            editingField === "cond" ? "Enter condition" : "Enter event"
+            selectionMode === 'event' ? 'Enter event' :
+            selectionMode === 'cond' ? 'Enter condition' :
+            'Search events and channels...'
           }
         />
         {showSuggestions && (
@@ -233,7 +238,7 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
             {suggestions.map((suggestion, index) => (
               <div
                 key={suggestion.label}
-                onMouseDown={() => acceptSuggestion(suggestion.label)}
+                onMouseDown={() => acceptSuggestion(suggestion)}
                 className={`px-3 py-1.5 text-sm cursor-pointer flex items-center gap-2 ${
                   suggestion.kind === "new-channel"
                     ? "bg-amber-50 text-amber-800 border-l-2 border-amber-400"
@@ -246,15 +251,17 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
                   <span className='text-xs text-amber-600'>(new channel)</span>
                 )}
 
-                <span
-                  className='text-xs px-1 py-0.5 rounded font-mono text-black'
-                  style={{
-                    backgroundColor:
-                      BADGE_COLORS[channelTypeMap[suggestion.label] ?? EVENT_FALLBACK_VALUE],
-                  }}
-                >
-                  {channelTypeMap[suggestion.label] ?? EVENT_FALLBACK_VALUE}
-                </span>
+                {(suggestion.kind === 'channel' || suggestion.kind === 'event') && (() => {
+                  const type = channels.find(c => c.name === suggestion.label)?.type ?? events.find(e => e.name === suggestion.label)?.type;
+                  return type ? (
+                    <span
+                      className='text-xs px-1 py-0.5 rounded font-mono text-black'
+                      style={{ backgroundColor: BADGE_COLORS[type] }}
+                    >
+                      {type}
+                    </span>
+                  ) : null;
+                })()}
                 <span>{suggestion.label}</span>
               </div>
             ))}

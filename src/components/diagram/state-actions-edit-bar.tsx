@@ -54,7 +54,6 @@ export const StateActionsEditBar: React.FC<StateActionsEditBarProps> = ({
     editingField === "onentry" ? setEntryActions : setExitActions;
 
   const channels = useHostAPIStore((state) => state.channels);
-  const channelTypeMap = useHostAPIStore((state) => state.channelTypeMap);
 
   const dataVars = React.useMemo(
     () => extractDatamodelVariables(scxmlContent),
@@ -69,8 +68,8 @@ export const StateActionsEditBar: React.FC<StateActionsEditBarProps> = ({
       .filter((v) => v.toLowerCase().includes(prefix))
       .map((v) => ({ label: v, kind: "variable" }));
     const channelSuggestions: Suggestion[] = channels
-      .filter((c) => c.toLowerCase().includes(prefix))
-      .map((c) => ({ label: c, kind: "channel" }));
+      .filter((c) => c.name.toLowerCase().includes(prefix))
+      .map((c) => ({ label: c.name, kind: "channel" }));
     return [...varSuggestions, ...channelSuggestions];
   }, [locationValue, dataVars, channels]);
 
@@ -200,10 +199,10 @@ export const StateActionsEditBar: React.FC<StateActionsEditBarProps> = ({
                   className='text-xs px-1 py-0.5 rounded font-mono text-black'
                   style={{
                     backgroundColor:
-                      BADGE_COLORS[channelTypeMap[suggestion.label] ?? EVENT_FALLBACK_VALUE],
+                      BADGE_COLORS[channels.find(c => c.name === suggestion.label)?.type ?? EVENT_FALLBACK_VALUE],
                   }}
                 >
-                  {channelTypeMap[suggestion.label] ?? EVENT_FALLBACK_VALUE}
+                  {channels.find(c => c.name === suggestion.label)?.type ?? EVENT_FALLBACK_VALUE}
                 </span>
                 <span>{suggestion.label}</span>
               </div>
