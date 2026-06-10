@@ -51,6 +51,7 @@ export interface EventEntry {
   min?: string;
   max?: string;
   unit?: string;
+  hidden?: boolean;
 }
 
 export interface ScxmlEditorAPI {
