@@ -117,7 +117,13 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
     return filtered.map(item => ({ label: item, kind: condKindOf(item) }));
   }, [rawValue, channels, events, scxmlContent, selectionMode]);
 
+  const hintMessage = React.useMemo(() => {
+    if (!isOpen || rawValue.length === 0 || selectionMode === 'event' || suggestions.length > 0) return null;
+    return 'No match — type "this_" prefix to create a new channel';
+  }, [isOpen, rawValue, selectionMode, suggestions]);
+
   const showSuggestions = isOpen && suggestions.length > 0;
+  const showDropdown = showSuggestions || hintMessage !== null;
 
   const buildCondValue = (label: string): string => {
     const endsWithSpace = rawValue.endsWith(' ');
@@ -233,8 +239,13 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
             'Search events and channels...'
           }
         />
-        {showSuggestions && (
+        {showDropdown && (
           <div className='absolute top-full left-0 right-0 mt-1 z-50 bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto'>
+            {hintMessage && (
+              <div className='px-3 py-2 text-xs text-gray-400 italic select-none'>
+                {hintMessage}
+              </div>
+            )}
             {suggestions.map((suggestion, index) => (
               <div
                 key={suggestion.label}
