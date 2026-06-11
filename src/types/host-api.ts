@@ -48,8 +48,8 @@ export interface EventEntry {
   type: string;
   hasArgument: boolean;
   defaultValue?: string;
-  min?: string;
-  max?: string;
+  min?: number;
+  max?: number;
   unit?: string;
   hidden?: boolean;
 }
