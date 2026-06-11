@@ -923,30 +923,45 @@ function createAttributeValueSuggestions(
       }
     }
 
-    // New channel hint — shown only when nothing matched and prefix looks like a channel name
-    if (suggestions.length === 0 && typedPrefix.startsWith('this_') && context.currentAttribute === 'cond') {
-      suggestions.push({
-        label: 'Not declared in datamodel',
-        kind: monaco.languages.CompletionItemKind.Text,
-        insertText: typedPrefix,
-        filterText: typedPrefix,
-        detail: 'Info',
-        sortText: '\x00',
-        range: replaceRange,
-      });
-      suggestions.push({
-        label: {
-          label: typedPrefix,
-          detail: ' (Creates a new channel)',
-        },
-        kind: monaco.languages.CompletionItemKind.Event,
-        insertText: typedPrefix,
-        filterText: typedPrefix,
-        detail: 'New channel',
-        documentation: `'${typedPrefix}' is not declared in the datamodel. It will be treated as a new channel.`,
-        range: replaceRange,
-        preselect: true,
-      });
+    // New channel hint — shown when nothing matched in a channel-relevant attribute
+    const isChannelCreationContext =
+      context.currentAttribute === 'cond' ||
+      (context.currentAttribute === 'location' && context.currentElement === 'assign');
+    if (suggestions.length === 0 && typedPrefix.length > 0 && isChannelCreationContext) {
+      if (typedPrefix.startsWith('this_')) {
+        suggestions.push({
+          label: 'Not declared in datamodel',
+          kind: monaco.languages.CompletionItemKind.Text,
+          insertText: typedPrefix,
+          filterText: typedPrefix,
+          detail: 'Info',
+          sortText: '\x00',
+          range: replaceRange,
+        });
+        suggestions.push({
+          label: {
+            label: typedPrefix,
+            detail: ' (Creates a new channel)',
+          },
+          kind: monaco.languages.CompletionItemKind.Event,
+          insertText: typedPrefix,
+          filterText: typedPrefix,
+          detail: 'New channel',
+          documentation: `'${typedPrefix}' is not declared in the datamodel. It will be treated as a new channel.`,
+          range: replaceRange,
+          preselect: true,
+        });
+      } else {
+        suggestions.push({
+          label: 'No match — type "this_" prefix to create a new channel',
+          kind: monaco.languages.CompletionItemKind.Text,
+          insertText: typedPrefix,
+          filterText: typedPrefix,
+          detail: 'Hint',
+          sortText: '\x00',
+          range: replaceRange,
+        });
+      }
     }
   } else {
     // Static values for non-expression attributes
