@@ -103,7 +103,7 @@ export function EventsPanel({ isVisible, onClose }: EventsPanelProps) {
                         ? 'text-blue-500 bg-blue-50 hover:bg-blue-100'
                         : 'text-gray-200 group-hover:text-gray-400 hover:!text-gray-600 hover:bg-gray-100'
                     }`}
-                    title={event.hidden ? 'Hidden from operators — click to show all' : 'Visible to all — click to hide from operators'}
+                    title={event.hidden ? 'Hidden from operators — click to make visible to operators' : 'Visible to operators — click to hide from operators'}
                   >
                     {event.hidden ? <EyeOff className='h-3.5 w-3.5' /> : <Eye className='h-3.5 w-3.5' />}
                   </button>
@@ -171,7 +171,7 @@ export function EventsPanel({ isVisible, onClose }: EventsPanelProps) {
                         ? 'text-blue-500 bg-blue-50 hover:bg-blue-100'
                         : 'text-gray-300 hover:text-gray-500 hover:bg-gray-100'
                     }`}
-                    title={newHidden ? 'Hidden from operators — click to show all' : 'Visible to all — click to hide from operators'}
+                    title={newHidden ? 'Hidden from operators — click to make visible to operators' : 'Visible to operators — click to hide from operators'}
                   >
                     {newHidden ? <EyeOff className='h-3.5 w-3.5' /> : <Eye className='h-3.5 w-3.5' />}
                   </button>
