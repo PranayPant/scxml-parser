@@ -178,14 +178,10 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
       }
       if (e.key === 'Enter') {
         e.preventDefault();
-        let enterIndex = -1;
-        if(rawValue.startsWith('this_')){
-          enterIndex = 0;
-        }else{
-          enterIndex = activeIndex
-        }
-        if (enterIndex >= 0 && suggestions[enterIndex]) {
-          acceptSuggestion(suggestions[enterIndex]);
+        if (activeIndex >= 0 && suggestions[activeIndex]) {
+          acceptSuggestion(suggestions[activeIndex]);
+        } else if (suggestions[0]?.kind === 'new-channel') {
+          acceptSuggestion(suggestions[0]);
         } else {
           commit(rawValue);
         }
