@@ -41,13 +41,15 @@ export function EventsPanel({ isVisible, onClose }: EventsPanelProps) {
       type: EVENT_FALLBACK_VALUE,
       hasArgument,
       defaultValue: hasArgument ? newDefaultValue : undefined,
-      min: hasArgument && newMin.trim() ? newMin.trim() : undefined,
-      max: hasArgument && newMax.trim() ? newMax.trim() : undefined,
+      min: hasArgument ? parseLimit(newMin) : undefined,
+      max: hasArgument ? parseLimit(newMax) : undefined,
       unit: hasArgument && newUnit.trim() ? newUnit.trim() : undefined,
       hidden: newHidden || undefined,
     }]);
     resetForm();
   };
+
+  const parseLimit = (s: string) => { const n = parseFloat(s.trim()); return isNaN(n) ? undefined : n; };
 
   const resetForm = () => {
     setNewName('');
@@ -116,7 +118,7 @@ export function EventsPanel({ isVisible, onClose }: EventsPanelProps) {
                       ? 'text-primary bg-primary-muted hover:bg-primary-muted'
                       : 'text-dimmed group-hover:text-muted hover:!text-default hover:bg-muted'
                   }`}
-                  title={event.hidden ? 'Hidden from operators — click to show all' : 'Visible to all — click to hide from operators'}
+                  title={event.hidden ? 'Hidden from operators — click to make visible to operators' : 'Visible to operators — click to hide from operators'}
                 >
                   {event.hidden ? <EyeOff className='h-3.5 w-3.5' /> : <Eye className='h-3.5 w-3.5' />}
                 </button>
@@ -138,16 +140,16 @@ export function EventsPanel({ isVisible, onClose }: EventsPanelProps) {
                     className={`flex-1 ${argInputClassExisting}`}
                   />
                   <input
-                    type='text'
+                    type='number'
                     value={event.min ?? ''}
-                    onChange={e => update(index, { min: e.target.value || undefined })}
+                    onChange={e => update(index, { min: isNaN(e.target.valueAsNumber) ? undefined : e.target.valueAsNumber })}
                     placeholder='min'
                     className={`flex-1 ${argInputClassExisting}`}
                   />
                   <input
-                    type='text'
+                    type='number'
                     value={event.max ?? ''}
-                    onChange={e => update(index, { max: e.target.value || undefined })}
+                    onChange={e => update(index, { max: isNaN(e.target.valueAsNumber) ? undefined : e.target.valueAsNumber })}
                     placeholder='max'
                     className={`flex-1 ${argInputClassExisting}`}
                   />
@@ -184,7 +186,7 @@ export function EventsPanel({ isVisible, onClose }: EventsPanelProps) {
                       ? 'text-primary bg-primary-muted hover:bg-primary-muted'
                       : 'text-dimmed hover:text-muted hover:bg-muted'
                   }`}
-                  title={newHidden ? 'Hidden from operators — click to show all' : 'Visible to all — click to hide from operators'}
+                  title={newHidden ? 'Hidden from operators — click to make visible to operators' : 'Visible to operators — click to hide from operators'}
                 >
                   {newHidden ? <EyeOff className='h-3.5 w-3.5' /> : <Eye className='h-3.5 w-3.5' />}
                 </button>
