@@ -88,13 +88,13 @@ export function SearchableSelect({ value, options, onChange, placeholder = '—'
       <button
         ref={buttonRef}
         onClick={() => (isOpen ? (setIsOpen(false), setSearch('')) : handleOpen())}
-        className='w-full border border-gray-200 rounded-md px-2.5 py-1.5 text-xs bg-white flex items-center justify-between gap-2 focus:outline-none focus:ring-2 focus:ring-blue-400/40 focus:border-blue-400 hover:border-gray-300 transition-colors'
+        className='w-full border border-default rounded-md px-2.5 py-1.5 text-xs bg-elevated flex items-center justify-between gap-2 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-primary transition-colors'
       >
-        <span className={`truncate ${value ? 'text-gray-800' : 'text-gray-400'}`}>
+        <span className={`truncate ${value ? 'text-default' : 'text-dimmed'}`}>
           {value || placeholder}
         </span>
         <ChevronDown
-          className={`h-3.5 w-3.5 text-gray-400 flex-shrink-0 transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`}
+          className={`h-3.5 w-3.5 text-dimmed flex-shrink-0 transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`}
         />
       </button>
 
@@ -103,23 +103,23 @@ export function SearchableSelect({ value, options, onChange, placeholder = '—'
           <div
             ref={dropdownRef}
             style={dropdownStyle}
-            className='bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden'
+            className='bg-elevated border border-default rounded-lg shadow-xl overflow-hidden'
           >
-            <div className='flex items-center gap-2 px-2.5 py-2 border-b border-gray-100 bg-gray-50/80'>
-              <Search className='h-3.5 w-3.5 text-gray-400 flex-shrink-0' />
+            <div className='flex items-center gap-2 px-2.5 py-2 border-b border-default bg-muted/80'>
+              <Search className='h-3.5 w-3.5 text-dimmed flex-shrink-0' />
               <input
                 ref={inputRef}
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder='Search...'
-                className='flex-1 text-xs text-gray-700 focus:outline-none bg-transparent placeholder-gray-400'
+                className='flex-1 text-xs text-default focus:outline-none bg-transparent placeholder:text-dimmed'
               />
             </div>
             <div className='max-h-52 overflow-y-auto'>
               <button
                 onClick={() => handleSelect('')}
                 className={`w-full text-left px-3 py-2 text-xs transition-colors ${
-                  !value ? 'bg-blue-50 text-blue-600' : 'text-gray-400 hover:bg-gray-50'
+                  !value ? 'bg-primary-muted text-primary' : 'text-dimmed hover:bg-muted'
                 }`}
               >
                 —
@@ -130,15 +130,15 @@ export function SearchableSelect({ value, options, onChange, placeholder = '—'
                   onClick={() => handleSelect(option)}
                   className={`w-full text-left px-3 py-2 text-xs transition-colors ${
                     value === option
-                      ? 'bg-blue-50 text-blue-700 font-medium'
-                      : 'text-gray-700 hover:bg-gray-50'
+                      ? 'bg-primary-muted text-primary font-medium'
+                      : 'text-default hover:bg-muted'
                   }`}
                 >
                   {option}
                 </button>
               ))}
               {filtered.length === 0 && (
-                <div className='px-3 py-3 text-xs text-gray-400 text-center'>No matches</div>
+                <div className='px-3 py-3 text-xs text-dimmed text-center'>No matches</div>
               )}
             </div>
           </div>,

@@ -59,12 +59,12 @@ export const InlineTipsCarousel: React.FC<InlineTipsCarouselProps> = ({
   const currentTip = filteredTips[currentIndex];
 
   return (
-    <div className='flex items-center space-x-2 text-xs text-gray-500'>
+    <div className='flex items-center space-x-2 text-xs text-muted'>
       {/* Previous Button */}
       {filteredTips.length > 1 && (
         <button
           onClick={goToPrevious}
-          className='p-0.5 hover:bg-gray-200 rounded transition-colors'
+          className='p-0.5 hover:bg-muted rounded transition-colors'
           aria-label='Previous tip'
         >
           <ChevronLeft className='h-3 w-3' />
@@ -80,7 +80,7 @@ export const InlineTipsCarousel: React.FC<InlineTipsCarouselProps> = ({
       {/* Indicators (dots) */}
       {filteredTips.length > 1 && (
         <div className='flex gap-1'>
-          <div className='text-blue-500'>
+          <div className='text-primary'>
             {currentIndex + 1} of {filteredTips.length}{' '}
           </div>
         </div>
@@ -90,7 +90,7 @@ export const InlineTipsCarousel: React.FC<InlineTipsCarouselProps> = ({
       {filteredTips.length > 1 && (
         <button
           onClick={goToNext}
-          className='p-0.5 hover:bg-gray-200 rounded transition-colors'
+          className='p-0.5 hover:bg-muted rounded transition-colors'
           aria-label='Next tip'
         >
           <ChevronRight className='h-3 w-3' />

@@ -17,7 +17,9 @@ import { DEFAULT_SCXML_TEMPLATE } from '@/lib/consts/default_scxml_template';
 import { useHostAPIStore } from '@/stores/host-api-store';
 import type { ChannelInfo, ChannelMapping, ConfigValue, EventEntry, ScxmlEditorAPI } from '@/types/host-api';
 import { EVENT_FALLBACK_VALUE } from '@/lib/utils/common-utils';
+import { useIsDark } from '@/lib/theme/use-is-dark';
 import { MoreVertical, Upload as UploadIcon, Download, Database, Eye } from 'lucide-react';
+import { StatusDot } from '@/components/ui/primitives';
 
 export default function Home() {
   const {
@@ -69,6 +71,8 @@ export default function Home() {
   const [validationPanelTab, setValidationPanelTab] = React.useState<'validation' | 'host-alerts'>('validation');
   const [isMoreMenuOpen, setIsMoreMenuOpen] = React.useState(false);
   const moreMenuRef = React.useRef<HTMLDivElement>(null);
+
+  const isDark = useIsDark();
 
 
   const validateContent = useCallback(
@@ -465,6 +469,7 @@ export default function Home() {
           onChange={handleContentChange}
           errors={errors}
           height='80vh'
+          theme={isDark ? 'dark' : 'light'}
         />
       </div>
 
@@ -542,49 +547,45 @@ export default function Home() {
             ? 'No issues'
             : `${totalErrors} error${totalErrors !== 1 ? 's' : ''}, ${totalWarnings} warning${totalWarnings !== 1 ? 's' : ''}`
         }
-        className='p-2 rounded-md hover:bg-gray-100 transition-colors'
+        className='p-2 rounded-md hover:bg-muted transition-colors'
       >
-        <span
-          className={`block w-2.5 h-2.5 rounded-full ${
-            hasErrors ? 'bg-red-500' : hasWarnings ? 'bg-yellow-400' : 'bg-green-500'
-          }`}
-        />
+        <StatusDot status={hasErrors ? 'error' : hasWarnings ? 'warning' : 'success'} />
       </button>
 
-      <div className='h-6 w-px bg-gray-200' />
+      <div className='h-6 w-px bg-[var(--ui-border)]' />
 
       {/* ⋮ More menu */}
       <div className='relative' ref={moreMenuRef}>
         <button
           onClick={() => setIsMoreMenuOpen((v) => !v)}
-          className='p-2 rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors'
+          className='p-2 rounded-md text-muted hover:bg-muted hover:text-default transition-colors'
           title='More options'
         >
           <MoreVertical className='h-4 w-4' />
         </button>
 
         {isMoreMenuOpen && (
-          <div className='absolute right-0 top-full mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1'>
+          <div className='absolute right-0 top-full mt-1 w-48 bg-elevated border border-default rounded-lg shadow-lg z-50 py-1'>
             <button
               onClick={() => { handleNewFileUpload(); setIsMoreMenuOpen(false); }}
-              className='w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors'
+              className='w-full flex items-center gap-3 px-4 py-2 text-sm text-default hover:bg-muted transition-colors'
             >
-              <UploadIcon className='h-4 w-4 text-gray-500' />
+              <UploadIcon className='h-4 w-4 text-muted' />
               Upload
             </button>
             <button
               onClick={handleMenuDownloadClean}
-              className='w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors'
+              className='w-full flex items-center gap-3 px-4 py-2 text-sm text-default hover:bg-muted transition-colors'
             >
-              <Download className='h-4 w-4 text-gray-500' />
+              <Download className='h-4 w-4 text-muted' />
               Clean SCXML
             </button>
             {hasVisualMetadata(content) && (
               <button
                 onClick={handleMenuDownloadWithVisualData}
-                className='w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors'
+                className='w-full flex items-center gap-3 px-4 py-2 text-sm text-default hover:bg-muted transition-colors'
               >
-                <Eye className='h-4 w-4 text-gray-500' />
+                <Eye className='h-4 w-4 text-muted' />
                 With Visual Data
               </button>
             )}
@@ -596,25 +597,25 @@ export default function Home() {
 
   return (
     <ErrorBoundary>
-      <div className='min-h-screen bg-gray-50 overflow-hidden'>
+      <div className='min-h-screen bg-base overflow-hidden'>
         {isInitialLoading ? (
-          <div className='flex items-center justify-center h-screen bg-gray-50'>
-            <div className='h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin' />
+          <div className='flex items-center justify-center h-screen bg-base'>
+            <div className='h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin' />
           </div>
         ) : !content ? (
           <div className='container mx-auto px-4 py-8'>
             <div className='mb-8'>
-              <h1 className='text-3xl font-bold text-gray-900 mb-2'>
+              <h1 className='text-3xl font-bold text-default mb-2'>
                 Visual SCXML Editor
               </h1>
-              <p className='text-gray-600'>
+              <p className='text-muted'>
                 Edit SCXML files with syntax highlighting, validation, and
                 interactive visual diagrams
               </p>
             </div>
 
             <div className='grid grid-cols-1 lg:grid-cols-2 gap-8'>
-              <div className='bg-white rounded-lg shadow-sm p-6'>
+              <div className='bg-elevated border border-default rounded-lg shadow-sm p-6'>
                 <FileUpload
                   onFileLoad={handleFileLoad}
                   onError={handleFileError}
@@ -622,13 +623,13 @@ export default function Home() {
               </div>
 
               <div className='space-y-6'>
-                <div className='bg-white rounded-lg shadow-sm p-6'>
-                  <h3 className='text-lg font-semibold text-gray-900 mb-4'>
+                <div className='bg-elevated border border-default rounded-lg shadow-sm p-6'>
+                  <h3 className='text-lg font-semibold text-default mb-4'>
                     Getting Started
                   </h3>
-                  <div className='space-y-4 text-sm text-gray-600'>
+                  <div className='space-y-4 text-sm text-muted'>
                     <div className='flex items-start space-x-3'>
-                      <div className='flex-shrink-0 w-6 h-6 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-xs font-medium'>
+                      <div className='flex-shrink-0 w-6 h-6 bg-primary-muted text-primary rounded-full flex items-center justify-center text-xs font-medium'>
                         1
                       </div>
                       <p>
@@ -636,7 +637,7 @@ export default function Home() {
                         <button
                           type='button'
                           onClick={handleCreateNewDocument}
-                          className='inline text-blue-600 cursor-pointer hover:text-blue-800 underline transition-colors focus:outline-none'
+                          className='inline text-primary cursor-pointer hover:text-primary-hover underline transition-colors focus:outline-none'
                           aria-label='Create new SCXML document'
                         >
                           create a new one
@@ -644,7 +645,7 @@ export default function Home() {
                       </p>
                     </div>
                     <div className='flex items-start space-x-3'>
-                      <div className='flex-shrink-0 w-6 h-6 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-xs font-medium'>
+                      <div className='flex-shrink-0 w-6 h-6 bg-primary-muted text-primary rounded-full flex items-center justify-center text-xs font-medium'>
                         2
                       </div>
                       <p>
@@ -652,13 +653,13 @@ export default function Home() {
                       </p>
                     </div>
                     <div className='flex items-start space-x-3'>
-                      <div className='flex-shrink-0 w-6 h-6 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-xs font-medium'>
+                      <div className='flex-shrink-0 w-6 h-6 bg-primary-muted text-primary rounded-full flex items-center justify-center text-xs font-medium'>
                         3
                       </div>
                       <p>Switch to visual diagram for interactive editing</p>
                     </div>
                     <div className='flex items-start space-x-3'>
-                      <div className='flex-shrink-0 w-6 h-6 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-xs font-medium'>
+                      <div className='flex-shrink-0 w-6 h-6 bg-primary-muted text-primary rounded-full flex items-center justify-center text-xs font-medium'>
                         4
                       </div>
                       <p>Download your validated SCXML file</p>
@@ -666,29 +667,29 @@ export default function Home() {
                   </div>
                 </div>
 
-                <div className='bg-white rounded-lg shadow-sm p-6'>
-                  <h3 className='text-lg font-semibold text-gray-900 mb-4'>
+                <div className='bg-elevated border border-default rounded-lg shadow-sm p-6'>
+                  <h3 className='text-lg font-semibold text-default mb-4'>
                     Features
                   </h3>
-                  <ul className='space-y-2 text-sm text-gray-600'>
+                  <ul className='space-y-2 text-sm text-muted'>
                     <li className='flex items-center space-x-2'>
-                      <div className='w-1.5 h-1.5 bg-green-500 rounded-full'></div>
+                      <div className='w-1.5 h-1.5 bg-success rounded-full'></div>
                       <span>Two-way synchronization (Code ↔ Visual)</span>
                     </li>
                     <li className='flex items-center space-x-2'>
-                      <div className='w-1.5 h-1.5 bg-green-500 rounded-full'></div>
+                      <div className='w-1.5 h-1.5 bg-success rounded-full'></div>
                       <span>Interactive state diagram editing</span>
                     </li>
                     <li className='flex items-center space-x-2'>
-                      <div className='w-1.5 h-1.5 bg-green-500 rounded-full'></div>
+                      <div className='w-1.5 h-1.5 bg-success rounded-full'></div>
                       <span>SCXML-specific autocomplete</span>
                     </li>
                     <li className='flex items-center space-x-2'>
-                      <div className='w-1.5 h-1.5 bg-green-500 rounded-full'></div>
+                      <div className='w-1.5 h-1.5 bg-success rounded-full'></div>
                       <span>Real-time validation</span>
                     </li>
                     <li className='flex items-center space-x-2'>
-                      <div className='w-1.5 h-1.5 bg-green-500 rounded-full'></div>
+                      <div className='w-1.5 h-1.5 bg-success rounded-full'></div>
                       <span>Visual metadata preservation</span>
                     </li>
                   </ul>

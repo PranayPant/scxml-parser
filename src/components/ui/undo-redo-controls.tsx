@@ -75,8 +75,8 @@ export const UndoRedoControls: React.FC<UndoRedoControlsProps> = ({
           p-2 rounded-md transition-all duration-200
           ${
             canUndo()
-              ? 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
-              : 'text-gray-400 cursor-not-allowed'
+              ? 'text-muted hover:bg-muted hover:text-default'
+              : 'text-dimmed cursor-not-allowed'
           }
         `}
         title={showTooltips ? undoDescription || 'Undo (Ctrl+Z)' : undefined}
@@ -92,8 +92,8 @@ export const UndoRedoControls: React.FC<UndoRedoControlsProps> = ({
           p-2 rounded-md transition-all duration-200
           ${
             canRedo()
-              ? 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
-              : 'text-gray-400 cursor-not-allowed'
+              ? 'text-muted hover:bg-muted hover:text-default'
+              : 'text-dimmed cursor-not-allowed'
           }
         `}
         title={showTooltips ? redoDescription || 'Redo (Ctrl+Y)' : undefined}

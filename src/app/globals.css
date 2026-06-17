@@ -1,28 +1,98 @@
 @import 'tailwindcss';
 
+/* Dark mode driven by a `.dark` class on <html> (toggle persisted in localStorage). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ------------------------------------------------------------------ */
+/* Raw semantic tokens — edit --ui-primary* to swap the accent color.  */
+/* ------------------------------------------------------------------ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Primary (Nuxt green) */
+  --ui-primary: #00dc82;
+  --ui-primary-hover: #00c074;
+  --ui-primary-muted: #d8fbe8;
+  --ui-primary-fg: #043927;
+
+  /* Surfaces */
+  --ui-bg: #f9fafb;          /* app background */
+  --ui-bg-elevated: #ffffff; /* panels, cards, menus */
+  --ui-bg-muted: #f3f4f6;    /* subtle headers/footers/hover */
+
+  /* Borders */
+  --ui-border: #e5e7eb;
+  --ui-border-muted: #f3f4f6;
+
+  /* Text */
+  --ui-text: #111827;
+  --ui-text-muted: #6b7280;
+  --ui-text-dimmed: #9ca3af;
+
+  /* Status */
+  --ui-success: #16a34a;
+  --ui-warning: #ca8a04;
+  --ui-error: #dc2626;
+  --ui-info: #2563eb;
 }
 
+.dark {
+  --ui-primary: #00dc82;
+  --ui-primary-hover: #2be89a;
+  --ui-primary-muted: #0b3b2a;
+  --ui-primary-fg: #052e16;
+
+  --ui-bg: #09090b;
+  --ui-bg-elevated: #18181b;
+  --ui-bg-muted: #27272a;
+
+  --ui-border: #3f3f46;
+  --ui-border-muted: #27272a;
+
+  --ui-text: #f4f4f5;
+  --ui-text-muted: #a1a1aa;
+  --ui-text-dimmed: #71717a;
+
+  --ui-success: #4ade80;
+  --ui-warning: #facc15;
+  --ui-error: #f87171;
+  --ui-info: #60a5fa;
+}
+
+/* ------------------------------------------------------------------ */
+/* Expose primary + status as Tailwind colors (generates bg-/text-/   */
+/* ring-/border- utilities). `inline` => utilities reference the vars  */
+/* at runtime, so `.dark` overrides take effect.                       */
+/* ------------------------------------------------------------------ */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-primary: var(--ui-primary);
+  --color-primary-hover: var(--ui-primary-hover);
+  --color-primary-muted: var(--ui-primary-muted);
+  --color-primary-fg: var(--ui-primary-fg);
+  --color-success: var(--ui-success);
+  --color-warning: var(--ui-warning);
+  --color-error: var(--ui-error);
+  --color-info: var(--ui-info);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/* ------------------------------------------------------------------ */
+/* Surface/text/border utilities. Defined as custom utilities (not    */
+/* theme colors) to avoid the bg-/text- name collision on "muted".    */
+/* @utility entries support variants (hover:, dark:, focus:).         */
+/* ------------------------------------------------------------------ */
+@utility bg-base { background-color: var(--ui-bg); }
+@utility bg-elevated { background-color: var(--ui-bg-elevated); }
+@utility bg-muted { background-color: var(--ui-bg-muted); }
+@utility text-default { color: var(--ui-text); }
+@utility text-muted { color: var(--ui-text-muted); }
+@utility text-dimmed { color: var(--ui-text-dimmed); }
+@utility border-default { border-color: var(--ui-border); }
+@utility border-muted { border-color: var(--ui-border-muted); }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--ui-bg);
+  color: var(--ui-text);
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
 /* Override ReactFlow's default group node styles */
@@ -40,4 +110,18 @@ body {
 
 button:hover {
   cursor: pointer;
+}
+
+.dark .react-flow__controls {
+  background: var(--ui-bg-elevated);
+  border: 1px solid var(--ui-border);
+}
+.dark .react-flow__controls-button {
+  background: var(--ui-bg-elevated);
+  border-bottom: 1px solid var(--ui-border);
+  color: var(--ui-text-muted);
+  fill: var(--ui-text-muted);
+}
+.dark .react-flow__controls-button:hover {
+  background: var(--ui-bg-muted);
 }

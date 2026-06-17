@@ -49,6 +49,7 @@ import { HistoryWrapperNode } from './nodes/history-wrapper-node';
 import { SCXMLStateNode } from './nodes/scxml-state-node';
 import { StateActionsPanel } from '@/components/ui/state-actions-panel';
 import { TransitionEditBar } from './transition-edit-bar';
+import { useIsDark } from '@/lib/theme/use-is-dark';
 
 // ==================== TYPES & INTERFACES ====================
 interface VisualDiagramProps {
@@ -201,6 +202,10 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
     entryActions: Array<{ location: string; expr: string }>;
     exitActions: Array<{ location: string; expr: string }>;
   } | null>(null);
+
+  // Dark mode tracking for canvas theming
+  const canvasDark = useIsDark();
+
   // ==================== REFS ====================
   // Position update management
   const isUpdatingPositionRef = React.useRef(false);
@@ -2220,7 +2225,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
               maxZoom: 2,
             }}
             attributionPosition='bottom-left'
-            className='bg-gradient-to-br from-slate-50 to-slate-100'
+            className='bg-gradient-to-br from-slate-50 to-slate-100 dark:from-zinc-900 dark:to-zinc-950'
             minZoom={0.2}
             maxZoom={4}
             defaultViewport={{ x: 0, y: 0, zoom: 0.8 }}
@@ -2270,7 +2275,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
               </defs>
             </svg>
             <Background
-              color='#cbd5e1'
+              color={canvasDark ? '#3f3f46' : '#cbd5e1'}
               gap={20}
               size={1}
               variant={BackgroundVariant.Dots}
@@ -2285,7 +2290,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
                 onClick={handleAddRootState}
                 title='Add State'
                 aria-label='Add State'
-                className='text-gray-600 hover:text-gray-900'
+                className='text-muted hover:text-default'
               >
                 S
               </ControlButton>

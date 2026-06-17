@@ -5,6 +5,7 @@ import { extractDatamodelVariables } from '@/lib/utils/datamodel-extractor';
 import { useHostAPIStore } from '@/stores/host-api-store';
 import { Plus, X } from 'lucide-react';
 import React from 'react';
+import { Panel, inputClass } from '@/components/ui/primitives';
 
 interface ActionRow {
   location: string;
@@ -191,10 +192,10 @@ export function StateActionsPanel({
 
   // Inline form shared between expanded rows and the new-action form
   const inlineForm = (
-    <div className='bg-blue-50 ring-1 ring-blue-400 rounded p-2 space-y-1.5'>
+    <div className='bg-primary-muted ring-1 ring-primary rounded p-2 space-y-1.5'>
       {/* Location field */}
       <div className='relative'>
-        <label className='text-[10px] text-gray-500 block mb-0.5'>Location</label>
+        <label className='text-[10px] text-muted block mb-0.5'>Location</label>
         <input
           autoFocus
           type='text'
@@ -210,18 +211,18 @@ export function StateActionsPanel({
           }}
           onKeyDown={handleLocationKeyDown}
           placeholder='variable or channel'
-          className='w-full text-xs text-gray-900 border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white'
+          className={inputClass}
         />
         {showSuggestions && (
-          <div className='absolute top-full left-0 right-0 mt-1 z-50 bg-white border rounded shadow-lg max-h-36 overflow-y-auto'>
+          <div className='absolute top-full left-0 right-0 mt-1 z-50 bg-elevated border border-default rounded shadow-lg max-h-36 overflow-y-auto'>
             {suggestions.map((s, i) => (
               <div
                 key={s.label}
                 onMouseDown={() => selectSuggestion(s)}
                 className={`px-2 py-1 text-xs cursor-pointer flex items-center gap-2 ${
                   i === activeIndex
-                    ? 'bg-blue-500 text-white'
-                    : 'hover:bg-blue-50 text-gray-700'
+                    ? 'bg-primary text-primary-fg'
+                    : 'hover:bg-primary-muted text-default'
                 }`}
               >
                 <span
@@ -246,7 +247,7 @@ export function StateActionsPanel({
 
       {/* Expression field */}
       <div>
-        <label className='text-[10px] text-gray-500 block mb-0.5'>Expression</label>
+        <label className='text-[10px] text-muted block mb-0.5'>Expression</label>
         <input
           type='text'
           value={formExpr}
@@ -256,7 +257,7 @@ export function StateActionsPanel({
             if (e.key === 'Escape') resetForm();
           }}
           placeholder='expression'
-          className='w-full text-xs text-gray-900 border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white'
+          className={inputClass}
         />
       </div>
 
@@ -264,14 +265,14 @@ export function StateActionsPanel({
       <div className='flex justify-end gap-1.5'>
         <button
           onClick={resetForm}
-          className='text-xs px-2.5 py-1 rounded border border-gray-200 text-gray-500 hover:bg-gray-100'
+          className='text-xs px-2.5 py-1 rounded border border-default text-muted hover:bg-muted'
         >
           Discard
         </button>
         <button
           onClick={handleApply}
           disabled={!formLocation || !formExpr}
-          className='text-xs px-2.5 py-1 rounded bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed'
+          className='text-xs px-2.5 py-1 rounded bg-primary text-primary-fg hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed'
         >
           Apply
         </button>
@@ -282,83 +283,83 @@ export function StateActionsPanel({
   if (!isVisible) return null;
 
   return (
-    <div className='w-80 flex flex-col border-l bg-white shadow-sm h-full overflow-hidden flex-shrink-0'>
-      {/* Header */}
-      <div className='flex items-center justify-between px-3 py-2 border-b bg-gray-50'>
-        <div>
-          <span className='text-sm font-semibold text-gray-700'>State Actions</span>
-          <p className='text-xs text-blue-500 mt-0.5'>{stateId}</p>
-        </div>
-        <div className='flex items-center gap-1'>
+    <Panel title='State Actions' onClose={onClose}>
+      {/*
+        Panel's body is already flex-1 overflow-y-auto, but we need the
+        sub-header and tabs to be sticky while only the action list scrolls.
+        Wrap everything in a flex-col h-full so the inner list gets its own
+        overflow-y-auto region.
+      */}
+      <div className='flex flex-col h-full'>
+        {/* Sub-header: stateId + add button */}
+        <div className='flex items-center justify-between px-3 py-1.5 border-b border-default bg-muted flex-shrink-0'>
+          <p className='text-xs text-primary'>{stateId}</p>
           <button
             onClick={handleAddClick}
             title='Add action'
-            className='text-gray-400 hover:text-blue-500 p-0.5 rounded hover:bg-blue-50 transition-colors'
+            className='text-dimmed hover:text-primary p-0.5 rounded hover:bg-primary-muted transition-colors'
           >
             <Plus className='h-4 w-4' />
           </button>
-          <button onClick={onClose} className='text-gray-400 hover:text-gray-600 p-0.5 rounded hover:bg-gray-100 transition-colors'>
-            <X className='h-4 w-4' />
-          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className='flex border-b border-default flex-shrink-0'>
+          {(['onentry', 'onexit'] as Tab[]).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => {
+                setActiveTab(tab);
+                resetForm();
+              }}
+              className={`flex-1 py-2 text-xs font-medium transition-colors ${
+                activeTab === tab
+                  ? 'border-b-2 border-primary text-primary bg-primary-muted'
+                  : 'text-muted hover:text-default'
+              }`}
+            >
+              {tab} ({(tab === 'onentry' ? localEntry : localExit).length})
+            </button>
+          ))}
+        </div>
+
+        {/* Action list — scrolls independently */}
+        <div className='flex-1 overflow-y-auto p-2 space-y-1'>
+          {currentList.length === 0 && formMode !== 'adding' && (
+            <p className='text-xs text-dimmed italic px-1 py-2'>No actions yet</p>
+          )}
+
+          {currentList.map((row, index) =>
+            formMode === 'editing' && editingRowIndex === index ? (
+              <div key={index}>{inlineForm}</div>
+            ) : (
+              <div
+                key={index}
+                onClick={() => handleRowClick(row, index)}
+                className='flex items-center justify-between px-2 py-1.5 rounded text-xs cursor-pointer group bg-muted hover:bg-elevated'
+              >
+                <span className='font-mono truncate text-default'>
+                  <span className='text-primary'>{row.location || '…'}</span>
+                  <span className='text-dimmed'> = </span>
+                  <span className='text-default'>{row.expr || '…'}</span>
+                </span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDelete(index);
+                  }}
+                  className='ml-2 flex-shrink-0 text-dimmed hover:text-error opacity-0 group-hover:opacity-100 transition-opacity'
+                >
+                  <X className='h-3 w-3' />
+                </button>
+              </div>
+            ),
+          )}
+
+          {/* New action form appended at bottom when adding */}
+          {formMode === 'adding' && <div>{inlineForm}</div>}
         </div>
       </div>
-
-      {/* Tabs */}
-      <div className='flex border-b'>
-        {(['onentry', 'onexit'] as Tab[]).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => {
-              setActiveTab(tab);
-              resetForm();
-            }}
-            className={`flex-1 py-2 text-xs font-medium transition-colors ${
-              activeTab === tab
-                ? 'border-b-2 border-blue-500 text-blue-600 bg-blue-50'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            {tab} ({(tab === 'onentry' ? localEntry : localExit).length})
-          </button>
-        ))}
-      </div>
-
-      {/* Action list */}
-      <div className='flex-1 overflow-y-auto p-2 space-y-1'>
-        {currentList.length === 0 && formMode !== 'adding' && (
-          <p className='text-xs text-gray-400 italic px-1 py-2'>No actions yet</p>
-        )}
-
-        {currentList.map((row, index) =>
-          formMode === 'editing' && editingRowIndex === index ? (
-            <div key={index}>{inlineForm}</div>
-          ) : (
-            <div
-              key={index}
-              onClick={() => handleRowClick(row, index)}
-              className='flex items-center justify-between px-2 py-1.5 rounded text-xs cursor-pointer group bg-gray-50 hover:bg-gray-100'
-            >
-              <span className='font-mono truncate text-gray-700'>
-                <span className='text-blue-600'>{row.location || '…'}</span>
-                <span className='text-gray-400'> = </span>
-                <span className='text-gray-700'>{row.expr || '…'}</span>
-              </span>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDelete(index);
-                }}
-                className='ml-2 flex-shrink-0 text-gray-300 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity'
-              >
-                <X className='h-3 w-3' />
-              </button>
-            </div>
-          ),
-        )}
-
-        {/* New action form appended at bottom when adding */}
-        {formMode === 'adding' && <div>{inlineForm}</div>}
-      </div>
-    </div>
+    </Panel>
   );
 }

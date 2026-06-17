@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { Button } from '@/components/ui/primitives';
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -60,39 +61,36 @@ interface ErrorFallbackProps {
 
 function DefaultErrorFallback({ error, resetError }: ErrorFallbackProps) {
   return (
-    <div className="min-h-[400px] flex items-center justify-center bg-red-50 rounded-lg border border-red-200">
+    <div className="min-h-[400px] flex items-center justify-center bg-red-50 dark:bg-red-950/40 rounded-lg border border-red-200 dark:border-red-900">
       <div className="text-center p-8 max-w-md">
         <div className="flex justify-center mb-4">
-          <AlertTriangle className="h-12 w-12 text-red-500" />
+          <AlertTriangle className="h-12 w-12 text-red-500 dark:text-red-400" />
         </div>
-        
-        <h2 className="text-xl font-semibold text-red-800 mb-2">
+
+        <h2 className="text-xl font-semibold text-red-800 dark:text-red-300 mb-2">
           Something went wrong
         </h2>
-        
-        <p className="text-red-600 mb-4">
+
+        <p className="text-red-600 dark:text-red-400 mb-4">
           An unexpected error occurred while processing your request.
         </p>
-        
+
         {error && (
-          <details className="text-left mb-4 p-3 bg-white rounded border">
-            <summary className="cursor-pointer text-sm font-medium text-gray-700">
+          <details className="text-left mb-4 p-3 bg-elevated rounded border border-default">
+            <summary className="cursor-pointer text-sm font-medium text-default">
               Error details
             </summary>
-            <pre className="mt-2 text-xs text-gray-600 whitespace-pre-wrap overflow-auto">
+            <pre className="mt-2 text-xs text-muted whitespace-pre-wrap overflow-auto">
               {error.message}
               {error.stack && `\n\n${error.stack}`}
             </pre>
           </details>
         )}
-        
-        <button
-          onClick={resetError}
-          className="inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
-        >
-          <RefreshCw className="h-4 w-4 mr-2" />
+
+        <Button variant='solid' onClick={resetError}>
+          <RefreshCw className="h-4 w-4" />
           Try again
-        </button>
+        </Button>
       </div>
     </div>
   );

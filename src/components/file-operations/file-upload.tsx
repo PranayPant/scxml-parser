@@ -87,32 +87,32 @@ export function FileUpload({
         className={`
           relative border-2 border-dashed rounded-lg p-8 text-center cursor-pointer
           transition-colors duration-200
-          ${disabled 
-            ? 'border-gray-300 bg-gray-50 cursor-not-allowed' 
-            : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'
+          ${disabled
+            ? 'border-default bg-muted cursor-not-allowed'
+            : 'border-default hover:border-primary hover:bg-primary-muted'
           }
         `}
       >
         <div className="flex flex-col items-center space-y-4">
-          <div className={`p-3 rounded-full ${disabled ? 'bg-gray-200' : 'bg-blue-100'}`}>
+          <div className={`p-3 rounded-full ${disabled ? 'bg-muted' : 'bg-primary-muted'}`}>
             {disabled ? (
-              <FileText className="h-8 w-8 text-gray-400" />
+              <FileText className="h-8 w-8 text-dimmed" />
             ) : (
-              <Upload className="h-8 w-8 text-blue-500" />
+              <Upload className="h-8 w-8 text-primary" />
             )}
           </div>
-          
+
           <div className="space-y-2">
-            <h3 className={`text-lg font-medium ${disabled ? 'text-gray-400' : 'text-gray-700'}`}>
+            <h3 className={`text-lg font-medium ${disabled ? 'text-dimmed' : 'text-default'}`}>
               {disabled ? 'Upload disabled' : 'Upload SCXML file'}
             </h3>
-            
+
             {!disabled && (
               <>
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-muted">
                   Click to browse or drag and drop your SCXML file here
                 </p>
-                <p className="text-xs text-gray-400">
+                <p className="text-xs text-dimmed">
                   Supports .scxml and .xml files up to 10MB
                 </p>
               </>
