@@ -20,3 +20,4 @@ export { ChangeStateTypeCommand } from './change-state-type-command';
 export { DeleteNodeCommand } from './delete-node-command';
 export { ReconnectTransitionCommand } from './reconnect-transition-command';
 export { AddDataCommand } from './add-data-command';
+export { UpdateInternalEventsCommand, type InternalEventAction } from './update-internal-events-command';

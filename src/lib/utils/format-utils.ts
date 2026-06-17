@@ -1,7 +1,11 @@
 export function formatXML(xml: string): string {
   const PADDING = '  ';
+  // Strip whitespace between tags (DOMParser preserves whitespace text nodes from
+  // original formatting; XMLSerializer outputs them literally, so tags end up
+  // separated by spaces/newlines instead of being directly adjacent ><).
+  const normalized = xml.replace(/>\s+</g, '><');
   const reg = /(>)(<)(\/*)/g;
-  const formatted = xml.replace(reg, '$1\r\n$2$3');
+  const formatted = normalized.replace(reg, '$1\r\n$2$3');
   
   let pad = 0;
   return formatted.split('\r\n').map((node) => {

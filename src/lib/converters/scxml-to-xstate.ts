@@ -331,6 +331,31 @@ export class SCXMLToXStateConverter {
       ? extractActionsText(onexit, getAttribute, getElements)
       : [];
 
+    // Extract internal event actions (targetless transitions with type="internal")
+    const rawTransitions = this.getElements(state, 'transition');
+    const internalEventActions: { event: string; location: string; expr: string }[] = [];
+    if (rawTransitions) {
+      const transArray = Array.isArray(rawTransitions) ? rawTransitions : [rawTransitions];
+      for (const tr of transArray) {
+        const trEvent = getAttribute(tr, 'event');
+        const trType = getAttribute(tr, 'type');
+        const trTarget = getAttribute(tr, 'target');
+        if (trEvent && trType === 'internal' && !trTarget) {
+          const assigns = getElements(tr, 'assign');
+          if (assigns) {
+            const assignsArray = Array.isArray(assigns) ? assigns : [assigns];
+            for (const assign of assignsArray) {
+              internalEventActions.push({
+                event: trEvent,
+                location: getAttribute(assign, 'location') || '',
+                expr: getAttribute(assign, 'expr') || '',
+              });
+            }
+          }
+        }
+      }
+    }
+
     // Determine node type
     // Most states use 'scxmlState' type, history states use 'scxmlHistory'
     // State classification is handled via data.stateType
@@ -369,6 +394,7 @@ export class SCXMLToXStateConverter {
       isInitial,
       entryActions,
       exitActions,
+      internalEventActions,
     };
 
     // Create hierarchical node

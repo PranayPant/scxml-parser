@@ -201,6 +201,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
     id: string;
     entryActions: Array<{ location: string; expr: string }>;
     exitActions: Array<{ location: string; expr: string }>;
+    internalEventActions: Array<{ event: string; location: string; expr: string }>;
   } | null>(null);
 
   // Dark mode tracking for canvas theming
@@ -291,6 +292,25 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
         }
       } catch (error) {
         console.error('Failed to sync actions change:', error);
+      }
+    },
+    [scxmlContent, onSCXMLChange]
+  );
+
+  const handleNodeInternalEventsChange = React.useCallback(
+    (nodeId: string, actions: Array<{ event: string; location: string; expr: string }>) => {
+      if (!onSCXMLChange || !scxmlContent) return;
+      try {
+        const { UpdateInternalEventsCommand } = require('@/lib/commands');
+        const command = new UpdateInternalEventsCommand(nodeId, actions);
+        const result = command.execute(scxmlContent);
+        if (result.success) {
+          onSCXMLChange(result.newContent, 'property');
+        } else {
+          console.error('Failed to update internal event reactions:', result.error);
+        }
+      } catch (error) {
+        console.error('Failed to update internal event reactions:', error);
       }
     },
     [scxmlContent, onSCXMLChange]
@@ -806,6 +826,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
                     id: stateId,
                     entryActions: parseActions(node.data.entryActions || []),
                     exitActions: parseActions(node.data.exitActions || []),
+                    internalEventActions: node.data.internalEventActions || [],
                   });
                 }
               }
@@ -2317,6 +2338,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
         stateId={selectedStateForActions?.id ?? ''}
         entryActions={selectedStateForActions?.entryActions ?? []}
         exitActions={selectedStateForActions?.exitActions ?? []}
+        internalEventActions={selectedStateForActions?.internalEventActions ?? []}
         scxmlContent={scxmlContent}
         onApply={(entryActions, exitActions) => {
           if (selectedStateForActions) {
@@ -2325,6 +2347,11 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
               entryActions,
               exitActions,
             );
+          }
+        }}
+        onApplyReactions={(actions) => {
+          if (selectedStateForActions) {
+            handleNodeInternalEventsChange(selectedStateForActions.id, actions);
           }
         }}
       />

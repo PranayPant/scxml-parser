@@ -9,6 +9,7 @@
  */
 
 import { VISUAL_METADATA_CONSTANTS } from '@/types/visual-metadata';
+import { formatXML } from '@/lib/utils/format-utils';
 
 export interface CommandResult {
   /**
@@ -93,7 +94,7 @@ export abstract class BaseCommand implements Command {
    */
   protected serializeXML(doc: Document): string {
     const serializer = new XMLSerializer();
-    return serializer.serializeToString(doc);
+    return formatXML(serializer.serializeToString(doc));
   }
 
   /**

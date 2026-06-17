@@ -12,7 +12,13 @@ interface ActionRow {
   expr: string;
 }
 
-type Tab = 'onentry' | 'onexit';
+interface InternalEventActionRow {
+  event: string;
+  location: string;
+  expr: string;
+}
+
+type Tab = 'onentry' | 'onexit' | 'reactions';
 type FormMode = 'idle' | 'editing' | 'adding';
 type Suggestion = { label: string; kind: 'channel' | 'variable' };
 
@@ -22,8 +28,10 @@ interface StateActionsPanelProps {
   stateId: string;
   entryActions: ActionRow[];
   exitActions: ActionRow[];
+  internalEventActions: InternalEventActionRow[];
   scxmlContent: string;
   onApply: (entryActions: string[], exitActions: string[]) => void;
+  onApplyReactions: (actions: InternalEventActionRow[]) => void;
 }
 
 function toStrings(rows: ActionRow[]): string[] {
@@ -38,16 +46,20 @@ export function StateActionsPanel({
   stateId,
   entryActions: initialEntry,
   exitActions: initialExit,
+  internalEventActions: initialReactions,
   scxmlContent,
   onApply,
+  onApplyReactions,
 }: StateActionsPanelProps) {
   const [activeTab, setActiveTab] = React.useState<Tab>('onentry');
   const [localEntry, setLocalEntry] = React.useState<ActionRow[]>(initialEntry);
   const [localExit, setLocalExit] = React.useState<ActionRow[]>(initialExit);
+  const [localReactions, setLocalReactions] = React.useState<InternalEventActionRow[]>(initialReactions);
 
   // Form state
   const [formMode, setFormMode] = React.useState<FormMode>('idle');
   const [editingRowIndex, setEditingRowIndex] = React.useState<number | null>(null);
+  const [formEvent, setFormEvent] = React.useState('');
   const [formLocation, setFormLocation] = React.useState('');
   const [formExpr, setFormExpr] = React.useState('');
 
@@ -67,6 +79,7 @@ export function StateActionsPanel({
   const resetForm = React.useCallback(() => {
     setFormMode('idle');
     setEditingRowIndex(null);
+    setFormEvent('');
     setFormLocation('');
     setFormExpr('');
     setIsOpen(false);
@@ -77,6 +90,7 @@ export function StateActionsPanel({
   React.useEffect(() => {
     setLocalEntry(initialEntry);
     setLocalExit(initialExit);
+    setLocalReactions(initialReactions);
     resetForm();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stateId]);
@@ -110,8 +124,21 @@ export function StateActionsPanel({
 
   const handleApply = () => {
     if (formMode === 'idle') return;
-    const newRow: ActionRow = { location: formLocation, expr: formExpr };
 
+    if (activeTab === 'reactions') {
+      const newRow: InternalEventActionRow = { event: formEvent, location: formLocation, expr: formExpr };
+      const updatedList: InternalEventActionRow[] =
+        formMode === 'adding'
+          ? [...localReactions, newRow]
+          : localReactions.map((r, i) => (i === editingRowIndex ? newRow : r));
+      setLocalReactions(updatedList);
+      onApplyReactions(updatedList);
+      resetForm();
+      return;
+    }
+
+    const newRow: ActionRow = { location: formLocation, expr: formExpr };
+    
     let updatedList: ActionRow[];
     if (formMode === 'adding') {
       updatedList = [...currentList, newRow];
@@ -133,9 +160,16 @@ export function StateActionsPanel({
   };
 
   const handleDelete = (index: number) => {
-    const updated = currentList.filter((_, i) => i !== index);
     if (formMode === 'editing' && editingRowIndex === index) resetForm();
 
+    if (activeTab === 'reactions') {
+      const updated = localReactions.filter((_, i) => i !== index);
+      setLocalReactions(updated);
+      onApplyReactions(updated);
+      return;
+    }
+
+    const updated = currentList.filter((_, i) => i !== index);
     if (activeTab === 'onentry') {
       setLocalEntry(updated);
       onApply(toStrings(updated), toStrings(localExit));
@@ -154,9 +188,20 @@ export function StateActionsPanel({
     setActiveIndex(-1);
   };
 
+  const handleReactionsRowClick = (row: InternalEventActionRow, index: number) => {
+    setFormMode('editing');
+    setEditingRowIndex(index);
+    setFormEvent(row.event);
+    setFormLocation(row.location);
+    setFormExpr(row.expr);
+    setIsOpen(false);
+    setActiveIndex(-1);
+  };
+
   const handleAddClick = () => {
     setFormMode('adding');
     setEditingRowIndex(null);
+    setFormEvent(activeTab === 'reactions' ? 'vector' : '');
     setFormLocation('');
     setFormExpr('');
     setIsOpen(false);
@@ -193,6 +238,23 @@ export function StateActionsPanel({
   // Inline form shared between expanded rows and the new-action form
   const inlineForm = (
     <div className='bg-primary-muted ring-1 ring-primary rounded p-2 space-y-1.5'>
+      {/* Event field — reactions tab only */}
+      {activeTab === 'reactions' && (
+        <div>
+          <label className='text-[10px] text-muted block mb-0.5'>Event</label>
+          <input
+            type='text'
+            value={formEvent}
+            onChange={(e) => setFormEvent(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleApply();
+              if (e.key === 'Escape') resetForm();
+            }}
+            placeholder='vector'
+            className={inputClass}
+          />
+        </div>
+      )}
       {/* Location field */}
       <div className='relative'>
         <label className='text-[10px] text-muted block mb-0.5'>Location</label>
@@ -271,7 +333,7 @@ export function StateActionsPanel({
         </button>
         <button
           onClick={handleApply}
-          disabled={!formLocation || !formExpr}
+          disabled={!formLocation || !formExpr || (activeTab === 'reactions' && !formEvent)}
           className='text-xs px-2.5 py-1 rounded bg-primary text-primary-fg hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed'
         >
           Apply
@@ -305,7 +367,7 @@ export function StateActionsPanel({
 
         {/* Tabs */}
         <div className='flex border-b border-default flex-shrink-0'>
-          {(['onentry', 'onexit'] as Tab[]).map((tab) => (
+          {(['onentry', 'onexit', 'reactions'] as Tab[]).map((tab) => (
             <button
               key={tab}
               onClick={() => {
@@ -318,48 +380,90 @@ export function StateActionsPanel({
                   : 'text-muted hover:text-default'
               }`}
             >
-              {tab} ({(tab === 'onentry' ? localEntry : localExit).length})
+              {tab === 'reactions'
+              ? `event reactions (${localReactions.length})`
+              : `${tab} (${(tab === 'onentry' ? localEntry : localExit).length})`}
             </button>
           ))}
         </div>
 
-        {/* Action list — scrolls independently */}
-        <div className='flex-1 overflow-y-auto p-2 space-y-1'>
-          {currentList.length === 0 && formMode !== 'adding' && (
-            <p className='text-xs text-dimmed italic px-1 py-2'>No actions yet</p>
-          )}
-
-          {currentList.map((row, index) =>
-            formMode === 'editing' && editingRowIndex === index ? (
-              <div key={index}>{inlineForm}</div>
-            ) : (
-              <div
-                key={index}
-                onClick={() => handleRowClick(row, index)}
-                className='flex items-center justify-between px-2 py-1.5 rounded text-xs cursor-pointer group bg-muted hover:bg-elevated'
-              >
-                <span className='font-mono truncate text-default'>
-                  <span className='text-primary'>{row.location || '…'}</span>
-                  <span className='text-dimmed'> = </span>
-                  <span className='text-default'>{row.expr || '…'}</span>
-                </span>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDelete(index);
-                  }}
-                  className='ml-2 flex-shrink-0 text-dimmed hover:text-error opacity-0 group-hover:opacity-100 transition-opacity'
+      {/* Action list — scrolls independently */}
+      <div className='flex-1 overflow-y-auto p-2 space-y-1'>
+        {activeTab === 'reactions' ? (
+          <>
+            {localReactions.length === 0 && formMode !== 'adding' && (
+              <p className='text-xs text-dimmed italic px-1 py-2'>No reactions yet</p>
+            )}
+            {localReactions.map((row, index) =>
+              formMode === 'editing' && editingRowIndex === index ? (
+                <div key={index}>{inlineForm}</div>
+              ) : (
+                <div
+                  key={index}
+                  onClick={() => handleReactionsRowClick(row, index)}
+                  className='flex items-start justify-between px-2 py-1.5 rounded text-xs cursor-pointer group bg-muted hover:bg-elevated'
                 >
-                  <X className='h-3 w-3' />
-                </button>
-              </div>
-            ),
-          )}
+                  <div className='flex flex-col min-w-0'>
+                    <span className='text-primary text-[10px] font-medium'>{row.event}</span>
+                    <span className='font-mono text-xs text-default pl-2 break-all'>
+                      <span className='text-primary'>{row.location || '…'}</span>
+                      <span className='text-dimmed'> = </span>
+                      <span>{row.expr || '…'}</span>
+                    </span>
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDelete(index);
+                    }}
+                    className='ml-2 mt-0.5 flex-shrink-0 text-dimmed hover:text-error opacity-0 group-hover:opacity-100 transition-opacity'
+                  >
+                    <X className='h-3 w-3' />
+                  </button>
+                </div>
+              )
+            )}
+            {formMode === 'adding' && <div>{inlineForm}</div>}
+          </>
+        ) : (
+          <>
+            {currentList.length === 0 && formMode !== 'adding' && (
+              <p className='text-xs text-dimmed italic px-1 py-2'>No actions yet</p>
+            )}
 
-          {/* New action form appended at bottom when adding */}
-          {formMode === 'adding' && <div>{inlineForm}</div>}
-        </div>
+            {currentList.map((row, index) =>
+              formMode === 'editing' && editingRowIndex === index ? (
+                <div key={index}>{inlineForm}</div>
+              ) : (
+                <div
+                  key={index}
+                  onClick={() => handleRowClick(row, index)}
+                  className='flex items-center justify-between px-2 py-1.5 rounded text-xs cursor-pointer group bg-muted hover:bg-elevated'
+                >
+                  <span className='font-mono truncate text-default'>
+                    <span className='text-primary'>{row.location || '…'}</span>
+                    <span className='text-dimmed'> = </span>
+                    <span className='text-default'>{row.expr || '…'}</span>
+                  </span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDelete(index);
+                    }}
+                    className='ml-2 flex-shrink-0 text-dimmed hover:text-error opacity-0 group-hover:opacity-100 transition-opacity'
+                  >
+                    <X className='h-3 w-3' />
+                  </button>
+                </div>
+              ),
+            )}
+            
+            {/* New action form appended at bottom when adding */}
+            {formMode === 'adding' && <div>{inlineForm}</div>}
+          </>
+        )}
       </div>
-    </Panel>
+    </div>
+  </Panel>
   );
 }

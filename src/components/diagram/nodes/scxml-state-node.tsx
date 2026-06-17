@@ -39,6 +39,7 @@ export interface SCXMLStateNodeData {
   isActive?: boolean;
   entryActions?: string[];
   exitActions?: string[];
+  internalEventActions?: { event: string; location: string; expr: string }[];
   onEntryActions?: string[];
   onExitActions?: string[];
   visualStyles?: VisualStyles;
@@ -79,6 +80,7 @@ export const SCXMLStateNode = memo<NodeProps<SCXMLStateNodeData>>(
       isActive = false,
       entryActions = [],
       exitActions = [],
+      internalEventActions = [],
       visualStyles,
       onLabelChange,
       onStateTypeChange,
@@ -335,6 +337,50 @@ export const SCXMLStateNode = memo<NodeProps<SCXMLStateNodeData>>(
       }
     };
 
+    const actionCountIndicator = (() => {
+      const entryCount = entryActions.length;
+      const exitCount = exitActions.length;
+      const reactionCount = internalEventActions.length;
+      const parts: React.ReactNode[] = [];
+
+      if (entryCount > 0) {
+        parts.push(
+          <span key='entry' className='text-blue-500 font-semibold text-[8px]'>
+            entry:{entryCount}
+          </span>
+        );
+      }
+      if (exitCount > 0) {
+        parts.push(
+          <span key='exit' className='text-amber-500 font-semibold text-[8px]'>
+            exit:{exitCount}
+          </span>
+        );
+      }
+      if (reactionCount > 0) {
+        parts.push(
+          <span key='reaction' className='text-violet-600 font-semibold text-[8px]'>
+            reaction:{reactionCount}
+          </span>
+        );
+      }
+
+      if (parts.length === 0) return null;
+
+      return (
+        <div className='flex items-center gap-[3px] pl-[22px] mb-1'>
+          {parts.map((part, i) => (
+            <React.Fragment key={i}>
+              {i > 0 && (
+                <span className='text-slate-300 text-[8px]'>·</span>
+              )}
+              {part}
+            </React.Fragment>
+          ))}
+        </div>
+      );
+    })();
+
     return (
       <>
         {/* Node Resizer - only shows when node is selected */}
@@ -537,7 +583,7 @@ export const SCXMLStateNode = memo<NodeProps<SCXMLStateNodeData>>(
 
           <div className={`p-4 ${data.height ? 'h-full overflow-hidden' : ''}`}>
             {/* State header with icon and name */}
-            <div className='flex items-center justify-between mb-3'>
+            <div className='flex items-center justify-between mb-2'>
               <div className='flex items-center space-x-2 flex-1'>
                 {getStateIcon()}
                 {editingLabel ? (
@@ -567,6 +613,9 @@ export const SCXMLStateNode = memo<NodeProps<SCXMLStateNodeData>>(
                 </div>
               )}
             </div>
+
+            {/* Action count indicators */}
+            {actionCountIndicator}
 
             {/* Actions indicator */}
             {(hasActions || editingActions) && (

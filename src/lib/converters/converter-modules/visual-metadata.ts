@@ -7,6 +7,7 @@
 
 import type { HierarchicalNode } from '@/types/hierarchical-node';
 import { VISUAL_METADATA_CONSTANTS } from '@/types/visual-metadata';
+import { formatXML } from '@/lib/utils/format-utils';
 
 export interface VisualMetadata {
   x?: number;
@@ -133,7 +134,7 @@ export function writeLayoutToSCXML(
 
     // Serialize back to string
     const serializer = new XMLSerializer();
-    const newContent = serializer.serializeToString(doc);
+    const newContent = formatXML(serializer.serializeToString(doc));
 
     return newContent;
   } catch (error) {
