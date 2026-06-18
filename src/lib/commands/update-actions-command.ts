@@ -36,30 +36,19 @@ export class UpdateActionsCommand extends BaseCommand {
       );
     }
 
-    // Store old actions for undo
-    // Use direct child selector to avoid finding nested onentry elements
-    const existingOnentry = Array.from(stateElement.children).find(
+    // Store old actions for undo (collect from ALL onentry/onexit elements)
+    const allOnentry = Array.from(stateElement.children).filter(
       child => child.tagName.toLowerCase() === 'onentry'
-    ) as Element | undefined;
-    if (existingOnentry) {
-      this.oldEntryActions = this.extractActionsFromElement(existingOnentry);
-    } else {
-      this.oldEntryActions = [];
-    }
+    );
+    this.oldEntryActions = allOnentry.flatMap(el => this.extractActionsFromElement(el));
 
-    const existingOnexit = Array.from(stateElement.children).find(
+    const allOnexit = Array.from(stateElement.children).filter(
       child => child.tagName.toLowerCase() === 'onexit'
-    ) as Element | undefined;
-    if (existingOnexit) {
-      this.oldExitActions = this.extractActionsFromElement(existingOnexit);
-    } else {
-      this.oldExitActions = [];
-    }
+    );
+    this.oldExitActions = allOnexit.flatMap(el => this.extractActionsFromElement(el));
 
-    // Update onentry actions
-    if (existingOnentry) {
-      stateElement.removeChild(existingOnentry);
-    }
+    // Update onentry actions — remove ALL existing onentry elements
+    allOnentry.forEach(el => stateElement.removeChild(el));
 
     if (this.entryActions.length > 0) {
       // Get the namespace from the root element
@@ -67,7 +56,6 @@ export class UpdateActionsCommand extends BaseCommand {
       const onentry = doc.createElementNS(scxmlNamespace, 'onentry');
 
       this.entryActions.forEach((action) => {
-        // Parse action format: "assign|location|expr" or simple string
         if (action.startsWith('assign|')) {
           const parts = action.split('|');
           const location = parts[1] || '';
@@ -76,14 +64,21 @@ export class UpdateActionsCommand extends BaseCommand {
           if (location) assignElement.setAttribute('location', location);
           if (expr) assignElement.setAttribute('expr', expr);
           onentry.appendChild(assignElement);
+        } else if (action.startsWith('send|')) {
+          const parts = action.split('|');
+          const event = parts[1] || '';
+          const delayType = parts[2] || 'delay';
+          const delayValue = parts.slice(3).join('|');
+          const sendElement = doc.createElementNS(scxmlNamespace, 'send');
+          if (event) sendElement.setAttribute('event', event);
+          if (delayValue) sendElement.setAttribute(delayType, delayValue);
+          onentry.appendChild(sendElement);
         } else if (action.startsWith('log')) {
-          // Handle log actions
           const logElement = doc.createElementNS(scxmlNamespace, 'log');
           logElement.setAttribute('label', 'Action');
           logElement.setAttribute('expr', action);
           onentry.appendChild(logElement);
         } else {
-          // Fallback for legacy format
           const executable = doc.createElementNS(scxmlNamespace, 'executable');
           executable.setAttribute('label', 'Action');
           executable.setAttribute('expr', action);
@@ -93,18 +88,14 @@ export class UpdateActionsCommand extends BaseCommand {
       stateElement.appendChild(onentry);
     }
 
-    // Update onexit actions
-    if (existingOnexit) {
-      stateElement.removeChild(existingOnexit);
-    }
+    // Update onexit actions — remove ALL existing onexit elements
+    allOnexit.forEach(el => stateElement.removeChild(el));
 
     if (this.exitActions.length > 0) {
-      // Get the namespace from the root element
       const scxmlNamespace = doc.documentElement.namespaceURI || 'http://www.w3.org/2005/07/scxml';
       const onexit = doc.createElementNS(scxmlNamespace, 'onexit');
 
       this.exitActions.forEach((action) => {
-        // Parse action format: "assign|location|expr" or simple string
         if (action.startsWith('assign|')) {
           const parts = action.split('|');
           const location = parts[1] || '';
@@ -113,14 +104,18 @@ export class UpdateActionsCommand extends BaseCommand {
           if (location) assignElement.setAttribute('location', location);
           if (expr) assignElement.setAttribute('expr', expr);
           onexit.appendChild(assignElement);
+        } else if (action.startsWith('cancel|')) {
+          const parts = action.split('|');
+          const sendid = parts[1] || '';
+          const cancelElement = doc.createElementNS(scxmlNamespace, 'cancel');
+          if (sendid) cancelElement.setAttribute('sendid', sendid);
+          onexit.appendChild(cancelElement);
         } else if (action.startsWith('log')) {
-          // Handle log actions
           const logElement = doc.createElementNS(scxmlNamespace, 'log');
           logElement.setAttribute('label', 'Action');
           logElement.setAttribute('expr', action);
           onexit.appendChild(logElement);
         } else {
-          // Fallback for legacy format
           const executable = doc.createElementNS(scxmlNamespace, 'executable');
           executable.setAttribute('label', 'Action');
           executable.setAttribute('expr', action);
@@ -176,12 +171,21 @@ export class UpdateActionsCommand extends BaseCommand {
         const location = child.getAttribute('location') || '';
         const expr = child.getAttribute('expr') || '';
         actions.push(`assign|${location}|${expr}`);
+      } else if (tagName === 'send') {
+        const event = child.getAttribute('event') || '';
+        const delayexpr = child.getAttribute('delayexpr');
+        const delay = child.getAttribute('delay');
+        const delayType = delayexpr !== null ? 'delayexpr' : 'delay';
+        const delayValue = delayexpr ?? delay ?? '';
+        actions.push(`send|${event}|${delayType}|${delayValue}`);
+      } else if (tagName === 'cancel') {
+        const sendid = child.getAttribute('sendid') || '';
+        actions.push(`cancel|${sendid}`);
       } else if (tagName === 'log') {
         const label = child.getAttribute('label') || '';
         const expr = child.getAttribute('expr') || '';
         actions.push(`log|${label}|${expr}`);
       } else if (tagName === 'executable') {
-        // Legacy format
         const expr = child.getAttribute('expr') || '';
         actions.push(expr);
       }

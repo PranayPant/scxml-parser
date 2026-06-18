@@ -197,10 +197,15 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
   } | null>(null);
 
   // State for editing onentry/onexit actions
+  type ParsedAssignRow = { type: 'assign'; location: string; expr: string };
+  type ParsedSendRow   = { type: 'send'; event: string; delayType: 'delay' | 'delayexpr'; delayValue: string };
+  type ParsedCancelRow = { type: 'cancel'; sendid: string };
+  type ParsedActionRow = ParsedAssignRow | ParsedSendRow | ParsedCancelRow;
+
   const [selectedStateForActions, setSelectedStateForActions] = React.useState<{
     id: string;
-    entryActions: Array<{ location: string; expr: string }>;
-    exitActions: Array<{ location: string; expr: string }>;
+    entryActions: ParsedActionRow[];
+    exitActions: ParsedActionRow[];
     internalEventActions: Array<{ event: string; location: string; expr: string }>;
   } | null>(null);
 
@@ -808,16 +813,25 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
                 // Show actions editor for single selected state
                 const node = nodes.find((n) => n.id === stateId);
                 if (node && node.data) {
-                  const parseActions = (actions: string[]) => {
-                    return actions
-                      .filter((a) => a.startsWith('assign|'))
-                      .map((a) => {
+                  const parseActions = (actions: string[]): ParsedActionRow[] => {
+                    return actions.flatMap((a): ParsedActionRow[] => {
+                      if (a.startsWith('assign|')) {
                         const parts = a.split('|');
-                        return {
-                          location: parts[1] || '',
-                          expr: parts[2] || '',
-                        };
-                      });
+                        return [{ type: 'assign', location: parts[1] || '', expr: parts[2] || '' }];
+                      }
+                      if (a.startsWith('send|')) {
+                        const parts = a.split('|');
+                        const event = parts[1] || '';
+                        const delayType = (parts[2] === 'delayexpr' ? 'delayexpr' : 'delay') as 'delay' | 'delayexpr';
+                        const delayValue = parts.slice(3).join('|');
+                        return [{ type: 'send', event, delayType, delayValue }];
+                      }
+                      if (a.startsWith('cancel|')) {
+                        const parts = a.split('|');
+                        return [{ type: 'cancel', sendid: parts[1] || '' }];
+                      }
+                      return [];
+                    });
                   };
 
                   setSelectedEdgeForEdit(null);

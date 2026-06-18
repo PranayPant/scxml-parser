@@ -287,16 +287,25 @@ export function convertActions(
     }
   }
 
-  // Handle send elements (for now, we'll ignore delays and just note them)
   const sends = getElements(actionsElement, 'send');
   if (sends) {
     const sendsArray = Array.isArray(sends) ? sends : [sends];
     for (const send of sendsArray) {
       const event = getAttribute(send, 'event') || '';
-      const delay = getAttribute(send, 'delay') || '';
-      // For now, we'll just add a simple send action
-      // In a full implementation, this would handle delays properly
-      actions.push('send');
+      const delayexpr = getAttribute(send, 'delayexpr');
+      const delay = getAttribute(send, 'delay');
+      const delayType = delayexpr !== undefined ? 'delayexpr' : 'delay';
+      const delayValue = delayexpr ?? delay ?? '';
+      actions.push(`send|${event}|${delayType}|${delayValue}`);
+    }
+  }
+
+  const cancels = getElements(actionsElement, 'cancel');
+  if (cancels) {
+    const cancelsArray = Array.isArray(cancels) ? cancels : [cancels];
+    for (const cancel of cancelsArray) {
+      const sendid = getAttribute(cancel, 'sendid') || '';
+      actions.push(`cancel|${sendid}`);
     }
   }
 
