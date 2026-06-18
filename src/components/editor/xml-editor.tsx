@@ -237,7 +237,7 @@ export const XMLEditor = forwardRef<XMLEditorRef, XMLEditorProps>(
         <Editor
           height={height}
           language='xml'
-          theme={theme === 'dark' ? 'vs-dark' : 'vs'}
+          theme={theme === 'dark' ? 'vs-dark' : 'vs-dark'}
           value={value}
           onChange={handleEditorChange}
           beforeMount={handleBeforeMount}

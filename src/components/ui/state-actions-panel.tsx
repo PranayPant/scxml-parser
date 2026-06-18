@@ -406,9 +406,9 @@ export function StateActionsPanel({
                   <div className='flex flex-col min-w-0'>
                     <span className='text-primary text-[10px] font-medium'>{row.event}</span>
                     <span className='font-mono text-xs text-default pl-2 break-all'>
-                      <span className='text-primary'>{row.location || '…'}</span>
-                      <span className='text-dimmed'> = </span>
-                      <span>{row.expr || '…'}</span>
+                      <span className='text-default'>{row.location || '…'}</span>
+                      <span className='text-default'> = </span>
+                      <span className='text-muted'>{row.expr || '…'}</span>
                     </span>
                   </div>
                   <button

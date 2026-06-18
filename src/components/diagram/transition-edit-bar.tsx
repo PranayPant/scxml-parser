@@ -205,7 +205,7 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
   };
 
   return (
-    <div className='absolute top-[0px] left-0 right-0 z-10 flex items-center gap-2 px-4 py-2 bg-white border-b shadow-sm'>
+    <div className='absolute top-[0px] left-0 right-0 z-10 flex items-center gap-2 px-4 py-2 bg-elevated border-b border-default shadow-sm'>
       <div className='relative flex-1'>
         <input
           type='text'
@@ -228,7 +228,7 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
           onBlur={() => {
             blurTimerRef.current = setTimeout(() => setIsOpen(false), 100);
           }}
-          className='w-full px-3 py-1.5 text-sm text-gray-800 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+          className='w-full px-3 py-1.5 text-sm text-default bg-elevated border border-default rounded-md placeholder:text-dimmed focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent'
           placeholder={
             selectionMode === 'event' ? 'Enter event' :
             selectionMode === 'cond' ? 'Enter condition' :
@@ -236,9 +236,9 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
           }
         />
         {showDropdown && (
-          <div className='absolute top-full left-0 right-0 mt-1 z-50 bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto'>
+          <div className='absolute top-full left-0 right-0 mt-1 z-50 bg-elevated border border-default rounded-md shadow-lg max-h-48 overflow-y-auto'>
             {hintMessage && (
-              <div className='px-3 py-2 text-xs text-gray-400 italic select-none'>
+              <div className='px-3 py-2 text-xs text-dimmed italic select-none'>
                 {hintMessage}
               </div>
             )}
@@ -250,8 +250,8 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
                   suggestion.kind === "new-channel"
                     ? "bg-amber-50 text-amber-800 border-l-2 border-amber-400"
                     : index === activeIndex
-                      ? "bg-blue-500 text-white"
-                      : "hover:bg-blue-100 text-gray-800"
+                      ? "bg-primary text-primary-fg"
+                      : "hover:bg-primary-muted text-default"
                 }`}
               >
                 {suggestion.kind === "new-channel" && (
@@ -278,14 +278,14 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
       <button
         onClick={() => commit(rawValue)}
         title='Save'
-        className='p-1.5 rounded-md text-gray-500 hover:bg-gray-100 hover:text-blue-600 transition-colors'
+        className='p-1.5 rounded-md text-dimmed hover:bg-muted hover:text-primary transition-colors'
       >
         <Save className='h-4 w-4' />
       </button>
       <button
         onClick={onCancel}
         title='Cancel'
-        className='p-1.5 rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors'
+        className='p-1.5 rounded-md text-dimmed hover:bg-muted hover:text-default transition-colors'
       >
         <X className='h-4 w-4' />
       </button>
