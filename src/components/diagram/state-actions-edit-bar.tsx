@@ -137,9 +137,9 @@ export const StateActionsEditBar: React.FC<StateActionsEditBarProps> = ({
   };
 
   return (
-    <div className='absolute top-[0px] left-0 right-0 z-10 flex items-center gap-2 px-4 py-2 bg-white border-b shadow-sm'>
+    <div className='absolute top-[0px] left-0 right-0 z-10 flex items-center gap-2 px-4 py-2 bg-elevated border-b border-default shadow-sm'>
       {/* onentry / onexit switch */}
-      <div className='flex rounded-md border border-green-300 overflow-hidden text-sm'>
+      <div className='flex rounded-md border border-default overflow-hidden text-sm'>
         {(["onentry", "onexit"] as const).map((field) => (
           <button
             key={field}
@@ -151,8 +151,8 @@ export const StateActionsEditBar: React.FC<StateActionsEditBarProps> = ({
             }}
             className={`px-3 py-1.5 font-mono transition-colors ${
               editingField === field
-                ? "bg-green-500 text-white"
-                : "bg-white text-gray-600 hover:bg-green-50"
+                ? "bg-primary text-primary-fg"
+                : "bg-elevated text-muted hover:bg-primary-muted"
             }`}
           >
             {field}
@@ -180,19 +180,19 @@ export const StateActionsEditBar: React.FC<StateActionsEditBarProps> = ({
             blurTimerRef.current = setTimeout(() => setIsOpen(false), 100);
           }}
           onKeyDown={handleLocationKeyDown}
-          className='w-full px-3 py-1.5 text-sm text-gray-800 border border-green-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent'
+          className='w-full px-3 py-1.5 text-sm text-default bg-elevated border border-default rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-transparent'
           placeholder='location'
         />
         {showSuggestions && (
-          <div className='absolute top-full left-0 right-0 mt-1 z-50 bg-white border border-green-200 rounded-md shadow-lg max-h-48 overflow-y-auto'>
+          <div className='absolute top-full left-0 right-0 mt-1 z-50 bg-elevated border border-default rounded-md shadow-lg max-h-48 overflow-y-auto'>
             {suggestions.map((suggestion, index) => (
               <div
                 key={suggestion.label}
                 onMouseDown={() => selectSuggestion(suggestion)}
                 className={`px-3 py-1.5 text-sm cursor-pointer flex items-center gap-2 ${
                   index === activeIndex
-                    ? "bg-green-500 text-white"
-                    : "hover:bg-green-100 text-gray-800"
+                    ? "bg-primary text-primary-fg"
+                    : "hover:bg-primary-muted text-default"
                 }`}
               >
                 <span
@@ -225,21 +225,21 @@ export const StateActionsEditBar: React.FC<StateActionsEditBarProps> = ({
           if (e.key === "Enter") saveAll();
           else if (e.key === "Escape") onCancel();
         }}
-        className='flex-1 px-3 py-1.5 text-sm text-gray-800 border border-green-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent'
+        className='flex-1 px-3 py-1.5 text-sm text-default bg-elevated border border-default rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-transparent'
         placeholder='expr'
       />
 
       <button
         onClick={saveAll}
         title='Save'
-        className='p-1.5 rounded-md text-green-500 hover:bg-gray-100 hover:text-green-600 transition-colors'
+        className='p-1.5 rounded-md text-primary hover:bg-muted transition-colors'
       >
         <Save className='h-4 w-4' />
       </button>
       <button
         onClick={onCancel}
         title='Cancel'
-        className='p-1.5 rounded-md text-gray-400 hover:bg-gray-100 hover:text-red-700 transition-colors'
+        className='p-1.5 rounded-md text-muted hover:bg-muted hover:text-error transition-colors'
       >
         <X className='h-4 w-4' />
       </button>

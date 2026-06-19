@@ -651,7 +651,7 @@ export function StateActionsPanel({
                 setActiveTab(tab);
                 resetForm();
               }}
-              className={`flex-1 py-2 text-xs font-medium transition-colors ${
+              className={`flex-1 py-1.5 text-[10px] font-medium transition-colors whitespace-nowrap ${
                 activeTab === tab
                   ? 'border-b-2 border-primary text-primary bg-primary-muted'
                   : 'text-muted hover:text-default'
