@@ -4,52 +4,75 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* ------------------------------------------------------------------ */
+/* Client's custom green palette (overrides Tailwind default green).   */
+/* ------------------------------------------------------------------ */
+@theme {
+  --color-green-50: #effdf5;
+  --color-green-100: #d9fbe8;
+  --color-green-200: #b3f5d1;
+  --color-green-300: #75edae;
+  --color-green-400: #00dc82;
+  --color-green-500: #00c16a;
+  --color-green-600: #00a155;
+  --color-green-700: #007f45;
+  --color-green-800: #016538;
+  --color-green-900: #0a5331;
+  --color-green-950: #052e16;
+}
+
+/* ------------------------------------------------------------------ */
 /* Raw semantic tokens — edit --ui-primary* to swap the accent color.  */
 /* ------------------------------------------------------------------ */
 :root {
-  /* Primary (Nuxt green) */
+  /* Primary (Nuxt green = green-400) */
   --ui-primary: #00dc82;
-  --ui-primary-hover: #00c074;
-  --ui-primary-muted: #d8fbe8;
-  --ui-primary-fg: #043927;
+  --ui-primary-hover: #00c16a;
+  --ui-primary-muted: #d9fbe8;
+  --ui-primary-fg: #016538;
 
-  /* Surfaces */
-  --ui-bg: #f9fafb;          /* app background */
-  --ui-bg-elevated: #ffffff; /* panels, cards, menus */
-  --ui-bg-muted: #f3f4f6;    /* subtle headers/footers/hover */
+  /* Surfaces — slate scale (neutral: 'slate') */
+  --ui-bg: #f8fafc;          /* slate-50 */
+  --ui-bg-elevated: #ffffff;
+  --ui-bg-muted: #f1f5f9;    /* slate-100 */
 
-  /* Borders */
-  --ui-border: #e5e7eb;
-  --ui-border-muted: #f3f4f6;
+  /* Borders — slate */
+  --ui-border: #e2e8f0;      /* slate-200 */
+  --ui-border-muted: #f1f5f9; /* slate-100 */
 
-  /* Text */
-  --ui-text: #111827;
-  --ui-text-muted: #6b7280;
-  --ui-text-dimmed: #9ca3af;
+  /* Text — slate */
+  --ui-text: #0f172a;        /* slate-900 */
+  --ui-text-muted: #64748b;  /* slate-500 */
+  --ui-text-dimmed: #94a3b8; /* slate-400 */
 
   /* Status */
   --ui-success: #16a34a;
   --ui-warning: #ca8a04;
   --ui-error: #dc2626;
   --ui-info: #2563eb;
+
+  /* Header height (matches client's --spacing(12) = 48px) */
+  --ui-header-height: 3rem;
 }
 
 .dark {
   --ui-primary: #00dc82;
   --ui-primary-hover: #2be89a;
-  --ui-primary-muted: #0b3b2a;
+  --ui-primary-muted: #0a5331;
   --ui-primary-fg: #052e16;
 
-  --ui-bg: #09090b;
-  --ui-bg-elevated: #18181b;
-  --ui-bg-muted: #27272a;
+  /* Surfaces — slate dark scale */
+  --ui-bg: #020617;          /* slate-950 */
+  --ui-bg-elevated: #0f172a; /* slate-900 */
+  --ui-bg-muted: #1e293b;    /* slate-800 */
 
-  --ui-border: #3f3f46;
-  --ui-border-muted: #27272a;
+  /* Borders — slate dark */
+  --ui-border: #334155;      /* slate-700 */
+  --ui-border-muted: #1e293b; /* slate-800 */
 
-  --ui-text: #f4f4f5;
-  --ui-text-muted: #a1a1aa;
-  --ui-text-dimmed: #71717a;
+  /* Text — slate dark */
+  --ui-text: #f8fafc;        /* slate-50 */
+  --ui-text-muted: #94a3b8;  /* slate-400 */
+  --ui-text-dimmed: #64748b; /* slate-500 */
 
   --ui-success: #4ade80;
   --ui-warning: #facc15;
@@ -71,7 +94,7 @@
   --color-warning: var(--ui-warning);
   --color-error: var(--ui-error);
   --color-info: var(--ui-info);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-dm-sans);
   --font-mono: var(--font-geist-mono);
 }
 
@@ -92,7 +115,7 @@
 body {
   background: var(--ui-bg);
   color: var(--ui-text);
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  font-family: var(--font-dm-sans), Arial, Helvetica, sans-serif;
 }
 
 /* Override ReactFlow's default group node styles */

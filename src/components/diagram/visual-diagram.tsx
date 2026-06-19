@@ -197,10 +197,15 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
   } | null>(null);
 
   // State for editing onentry/onexit actions
+  type ParsedAssignRow = { type: 'assign'; location: string; expr: string };
+  type ParsedSendRow   = { type: 'send'; event: string; delayType: 'delay' | 'delayexpr'; delayValue: string };
+  type ParsedCancelRow = { type: 'cancel'; sendid: string };
+  type ParsedActionRow = ParsedAssignRow | ParsedSendRow | ParsedCancelRow;
+
   const [selectedStateForActions, setSelectedStateForActions] = React.useState<{
     id: string;
-    entryActions: Array<{ location: string; expr: string }>;
-    exitActions: Array<{ location: string; expr: string }>;
+    entryActions: ParsedActionRow[];
+    exitActions: ParsedActionRow[];
     internalEventActions: Array<{ event: string; location: string; expr: string }>;
   } | null>(null);
 
@@ -808,16 +813,25 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
                 // Show actions editor for single selected state
                 const node = nodes.find((n) => n.id === stateId);
                 if (node && node.data) {
-                  const parseActions = (actions: string[]) => {
-                    return actions
-                      .filter((a) => a.startsWith('assign|'))
-                      .map((a) => {
+                  const parseActions = (actions: string[]): ParsedActionRow[] => {
+                    return actions.flatMap((a): ParsedActionRow[] => {
+                      if (a.startsWith('assign|')) {
                         const parts = a.split('|');
-                        return {
-                          location: parts[1] || '',
-                          expr: parts[2] || '',
-                        };
-                      });
+                        return [{ type: 'assign', location: parts[1] || '', expr: parts[2] || '' }];
+                      }
+                      if (a.startsWith('send|')) {
+                        const parts = a.split('|');
+                        const event = parts[1] || '';
+                        const delayType = (parts[2] === 'delayexpr' ? 'delayexpr' : 'delay') as 'delay' | 'delayexpr';
+                        const delayValue = parts.slice(3).join('|');
+                        return [{ type: 'send', event, delayType, delayValue }];
+                      }
+                      if (a.startsWith('cancel|')) {
+                        const parts = a.split('|');
+                        return [{ type: 'cancel', sendid: parts[1] || '' }];
+                      }
+                      return [];
+                    });
                   };
 
                   setSelectedEdgeForEdit(null);
@@ -2134,7 +2148,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
   return (
     <div className='h-full w-full flex'>
       {/* Diagram area */}
-      <div className='flex-1 bg-gray-50 flex flex-col relative overflow-hidden'>
+      <div className='flex-1 bg-base flex flex-col relative overflow-hidden'>
         {/* Edge hover tooltip */}
         {hoveredEdge && (
           <div
@@ -2157,23 +2171,23 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
               <React.Fragment key={index}>
                 <button
                   onClick={() => navigateToBreadcrumb(index)}
-                  className={`px-2 py-1 text-sm hover:bg-gray-100 rounded transition-colors ${
+                  className={`px-2 py-1 text-sm hover:bg-muted rounded transition-colors ${
                     index === breadcrumbPath.length - 1
-                      ? 'font-semibold text-gray-900'
-                      : 'text-gray-600 hover:text-gray-900'
+                      ? 'font-semibold text-default'
+                      : 'text-muted hover:text-default'
                   }`}
                 >
                   {path}
                 </button>
                 {index < breadcrumbPath.length - 1 && (
-                  <ChevronRight className='h-3 w-3 text-gray-400' />
+                  <ChevronRight className='h-3 w-3 text-dimmed' />
                 )}
               </React.Fragment>
             ))}
           </div>
 
           {currentParentNode && (
-            <div className='text-sm text-gray-600 ml-auto'>
+            <div className='text-sm text-muted ml-auto'>
               Level: {breadcrumbPath.length - 1}
             </div>
           )}
@@ -2246,7 +2260,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
               maxZoom: 2,
             }}
             attributionPosition='bottom-left'
-            className='bg-gradient-to-br from-slate-50 to-slate-100 dark:from-zinc-900 dark:to-zinc-950'
+            className='bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-950'
             minZoom={0.2}
             maxZoom={4}
             defaultViewport={{ x: 0, y: 0, zoom: 0.8 }}
