@@ -333,14 +333,14 @@ export class SCXMLToXStateConverter {
 
     // Extract internal event actions (targetless transitions with type="internal")
     const rawTransitions = this.getElements(state, 'transition');
-    const internalEventActions: { event: string; location: string; expr: string }[] = [];
+    const internalEventActions: { event: string; location: string; expr: string; type: 'internal' | 'external' }[] = [];
     if (rawTransitions) {
       const transArray = Array.isArray(rawTransitions) ? rawTransitions : [rawTransitions];
       for (const tr of transArray) {
         const trEvent = getAttribute(tr, 'event');
         const trType = getAttribute(tr, 'type');
         const trTarget = getAttribute(tr, 'target');
-        if (trEvent && trType === 'internal' && !trTarget) {
+        if (trEvent && (trType === 'internal' || trType === 'external') && !trTarget) {
           const assigns = getElements(tr, 'assign');
           if (assigns) {
             const assignsArray = Array.isArray(assigns) ? assigns : [assigns];
@@ -349,6 +349,7 @@ export class SCXMLToXStateConverter {
                 event: trEvent,
                 location: getAttribute(assign, 'location') || '',
                 expr: getAttribute(assign, 'expr') || '',
+                type: (trType as 'internal' | 'external'),
               });
             }
           }

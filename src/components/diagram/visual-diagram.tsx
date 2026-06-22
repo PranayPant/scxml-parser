@@ -206,7 +206,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
     id: string;
     entryActions: ParsedActionRow[];
     exitActions: ParsedActionRow[];
-    internalEventActions: Array<{ event: string; location: string; expr: string }>;
+    internalEventActions: Array<{ event: string; location: string; expr: string; type: 'internal' | 'external' }>;
   } | null>(null);
 
   // Dark mode tracking for canvas theming
@@ -303,7 +303,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
   );
 
   const handleNodeInternalEventsChange = React.useCallback(
-    (nodeId: string, actions: Array<{ event: string; location: string; expr: string }>) => {
+    (nodeId: string, actions: Array<{ event: string; location: string; expr: string; type: 'internal' | 'external' }>) => {
       if (!onSCXMLChange || !scxmlContent) return;
       try {
         const { UpdateInternalEventsCommand } = require('@/lib/commands');

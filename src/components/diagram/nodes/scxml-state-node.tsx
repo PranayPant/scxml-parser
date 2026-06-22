@@ -39,7 +39,7 @@ export interface SCXMLStateNodeData {
   isActive?: boolean;
   entryActions?: string[];
   exitActions?: string[];
-  internalEventActions?: { event: string; location: string; expr: string }[];
+  internalEventActions?: { event: string; location: string; expr: string; type: 'internal' | 'external' }[];
   onEntryActions?: string[];
   onExitActions?: string[];
   visualStyles?: VisualStyles;

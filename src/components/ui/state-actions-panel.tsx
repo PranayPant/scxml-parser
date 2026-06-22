@@ -17,6 +17,7 @@ interface InternalEventActionRow {
   event: string;
   location: string;
   expr: string;
+  type: 'internal' | 'external';
 }
 
 type Tab = 'onentry' | 'onexit' | 'reactions';
@@ -72,6 +73,7 @@ export function StateActionsPanel({
   // for delay type: number + unit stored separately so we can render number input + unit dropdown
   const [formDelayNumber, setFormDelayNumber] = React.useState('');
   const [formDelayUnit, setFormDelayUnit] = React.useState<'s' | 'ms'>('s');
+  const [formReactionType, setFormReactionType] = React.useState<'internal' | 'external'>('internal');
 
   // Autocomplete state — location field
   const [isOpen, setIsOpen] = React.useState(false);
@@ -116,6 +118,7 @@ export function StateActionsPanel({
     setFormDelayValue('');
     setFormDelayNumber('');
     setFormDelayUnit('s');
+    setFormReactionType('internal');
     setIsOpen(false);
     setActiveIndex(-1);
     setIsSendIdOpen(false);
@@ -195,7 +198,7 @@ export function StateActionsPanel({
     if (formMode === 'idle') return;
 
     if (activeTab === 'reactions') {
-      const newRow: InternalEventActionRow = { event: formEvent, location: formLocation, expr: formExpr };
+      const newRow: InternalEventActionRow = { event: formEvent, location: formLocation, expr: formExpr, type: formReactionType };
       const updatedList: InternalEventActionRow[] =
         formMode === 'adding'
           ? [...localReactions, newRow]
@@ -306,6 +309,7 @@ export function StateActionsPanel({
     setFormEvent(row.event);
     setFormLocation(row.location);
     setFormExpr(row.expr);
+    setFormReactionType(row.type);
     setIsOpen(false);
     setActiveIndex(-1);
   };
@@ -313,11 +317,7 @@ export function StateActionsPanel({
   const handleAddClick = () => {
     setFormMode('adding');
     setEditingRowIndex(null);
-    setFormActionType(
-      activeTab === 'onentry' ? 'send'
-      : activeTab === 'onexit' ? 'cancel'
-      : 'assign'
-    );
+    setFormActionType('assign');
     setFormEvent(activeTab === 'reactions' ? 'vector' : '');
     setFormLocation('');
     setFormExpr('');
@@ -388,22 +388,42 @@ export function StateActionsPanel({
         </div>
       )}
 
-      {/* reactions: event field */}
+      {/* reactions: event field + type toggle */}
       {activeTab === 'reactions' && (
-        <div>
-          <label className='text-[10px] text-muted block mb-0.5'>Event</label>
-          <input
-            type='text'
-            value={formEvent}
-            onChange={(e) => setFormEvent(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleApply();
-              if (e.key === 'Escape') resetForm();
-            }}
-            placeholder='vector'
-            className={inputClass}
-          />
-        </div>
+        <>
+          <div>
+            <label className='text-[10px] text-muted block mb-0.5'>Event</label>
+            <input
+              type='text'
+              value={formEvent}
+              onChange={(e) => setFormEvent(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleApply();
+                if (e.key === 'Escape') resetForm();
+              }}
+              placeholder='vector'
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className='text-[10px] text-muted block mb-0.5'>Type</label>
+            <div className='flex gap-1'>
+              {(['internal', 'external'] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setFormReactionType(t)}
+                  className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${
+                    formReactionType === t
+                      ? 'border-primary bg-primary text-primary-fg'
+                      : 'border-default text-muted hover:border-primary'
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
       )}
 
       {/* assign fields (also used by reactions tab for location + expr) */}
@@ -681,7 +701,10 @@ export function StateActionsPanel({
                   className='flex items-start justify-between px-2 py-1.5 rounded text-xs cursor-pointer group bg-muted hover:bg-elevated'
                 >
                   <div className='flex flex-col min-w-0'>
-                    <span className='text-primary text-[10px] font-medium'>{row.event}</span>
+                    <div className='flex items-center gap-1'>
+                      <span className='text-primary text-[10px] font-medium'>{row.event}</span>
+                      <span className='text-[9px] px-1 rounded border border-default text-dimmed'>{row.type}</span>
+                    </div>
                     <span className='font-mono text-xs text-default pl-2 break-all'>
                       <span className='text-default'>{row.location || '…'}</span>
                       <span className='text-default'> = </span>

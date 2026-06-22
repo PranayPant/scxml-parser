@@ -4,6 +4,7 @@ export interface InternalEventAction {
   event: string;
   location: string;
   expr: string;
+  type: 'internal' | 'external';
 }
 
 export class UpdateInternalEventsCommand extends BaseCommand {
@@ -33,12 +34,12 @@ export class UpdateInternalEventsCommand extends BaseCommand {
     // Snapshot existing internal transitions for undo
     this.oldActions = this.extractCurrentActions(stateElement);
 
-    // Remove all existing targetless internal transitions
+    // Remove all existing targetless internal/external transitions (reactions)
     const toRemove = Array.from(stateElement.children).filter(
       (child) =>
         child.tagName.toLowerCase() === 'transition' &&
-        child.getAttribute('type') === 'internal' &&
-        !child.getAttribute('target')
+        !child.getAttribute('target') &&
+        (child.getAttribute('type') === 'internal' || child.getAttribute('type') === 'external')
     );
     toRemove.forEach((el) => stateElement.removeChild(el));
 
@@ -64,7 +65,7 @@ export class UpdateInternalEventsCommand extends BaseCommand {
       for (const [eventName, rows] of grouped) {
         const transEl = doc.createElementNS(scxmlNS, 'transition');
         transEl.setAttribute('event', eventName);
-        transEl.setAttribute('type', 'internal');
+        transEl.setAttribute('type', rows[0].type);
         for (const row of rows) {
           const assignEl = doc.createElementNS(scxmlNS, 'assign');
           assignEl.setAttribute('location', row.location);
@@ -101,16 +102,18 @@ export class UpdateInternalEventsCommand extends BaseCommand {
     for (const child of Array.from(stateElement.children)) {
       if (
         child.tagName.toLowerCase() === 'transition' &&
-        child.getAttribute('type') === 'internal' &&
-        !child.getAttribute('target')
+        !child.getAttribute('target') &&
+        (child.getAttribute('type') === 'internal' || child.getAttribute('type') === 'external')
       ) {
         const eventName = child.getAttribute('event') || '';
+        const transType = (child.getAttribute('type') || 'internal') as 'internal' | 'external';
         for (const assign of Array.from(child.children)) {
           if (assign.tagName.toLowerCase() === 'assign') {
             result.push({
               event: eventName,
               location: assign.getAttribute('location') || '',
               expr: assign.getAttribute('expr') || '',
+              type: transType,
             });
           }
         }
