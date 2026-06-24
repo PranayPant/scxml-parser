@@ -183,7 +183,7 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
 
     const resolvedField: 'event' | 'cond' =
       selectionMode !== 'undecided' ? editingField :
-      events.some((e) => e.name === trimmed) ? 'event' : 'cond';
+      (trimmed.includes('_t_') || events.some((e) => e.name === trimmed)) ? 'event' : 'cond';
 
     const isNewChannel = suggestions.length === 1 && suggestions[0].kind === 'new-channel';
     if (isNewChannel && onNewChannel) {
@@ -191,11 +191,12 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
       return;
     }
 
-    const hasDelay = resolvedField === 'event' && (
+    const isTimeEvent = resolvedField === 'event' && trimmed.includes('_t_');
+    const hasDelay = isTimeEvent && (
       delayType === 'delay' ? delayNumber.trim().length > 0 : delayExpr.trim().length > 0
     );
     const delayValue = delayType === 'delay' ? `${delayNumber}${delayUnit}` : delayExpr;
-    const hasCancelId = resolvedField === 'event' && cancelSendId.trim().length > 0;
+    const hasCancelId = isTimeEvent && cancelSendId.trim().length > 0;
 
     onApply({
       newValue: trimmed,
@@ -228,7 +229,7 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
 
   const hintMessage = React.useMemo(() => {
     if (!isOpen || rawValue.length === 0 || selectionMode === 'event' || suggestions.length > 0) return null;
-    return 'No match — type "this_" prefix to create a new channel';
+    return 'No match — type "this_" to create a new channel, or include "_t_" in the event name to create a time transition';
   }, [isOpen, rawValue, selectionMode, suggestions]);
 
   const showSuggestions = isOpen && suggestions.length > 0;
@@ -266,7 +267,14 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
             value={activeIndex >= 0 && suggestions[activeIndex]
               ? editingField === 'cond' ? buildCondValue(suggestions[activeIndex].label) : suggestions[activeIndex].label
               : rawValue}
-            onChange={(e) => { const v = e.target.value; setRawValue(v); if (v === '') setSelectionMode('undecided'); setIsOpen(true); setActiveIndex(-1); }}
+            onChange={(e) => {
+              const v = e.target.value;
+              setRawValue(v);
+              if (v === '') setSelectionMode('undecided');
+              else if (v.includes('_t_')) setSelectionMode('event');
+              setIsOpen(true);
+              setActiveIndex(-1);
+            }}
             onFocus={() => setIsOpen(true)}
             onBlur={() => { blurTimerRef.current = setTimeout(() => setIsOpen(false), 100); }}
             onKeyDown={handleKeyDown}
@@ -292,8 +300,8 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
           )}
         </div>
 
-        {/* onentry/onexit tabs — only shown when an event is selected */}
-        {selectionMode === 'event' && (
+        {/* onentry/onexit tabs — only shown for time transition events (_t_) */}
+        {selectionMode === 'event' && rawValue.includes('_t_') && (
           <>
             <div className='flex border-b border-default -mx-3 mt-3 mb-3'>
               {(['onentry', 'onexit'] as const).map((tab) => (
