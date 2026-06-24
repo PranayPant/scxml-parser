@@ -255,14 +255,10 @@ export const SCXMLTransitionEdge: React.FC<
     return parts.join(' ');
   };
 
-  // Truncate label to prevent overflow
-  const truncateLabel = (text: string, maxLength: number = 15) => {
-    if (text.length <= maxLength) return text;
-    return text.substring(0, maxLength) + '...';
-  };
+  const lineLength = Math.sqrt((targetX - sourceX) ** 2 + (targetY - sourceY) ** 2);
+  const maxLabelWidth = Math.max(lineLength * 0.7, 60);
 
-  const fullLabelContent = getLabelContent();
-  const labelContent = truncateLabel(fullLabelContent);
+  const labelContent = getLabelContent();
 
   // Update marker color to match edge color
   const updatedMarkerEnd =
@@ -338,38 +334,50 @@ export const SCXMLTransitionEdge: React.FC<
       {labelContent && (
         <g style={{ pointerEvents: 'none', zIndex: 10000 }}>
           <foreignObject
-            width={Math.max(labelContent.length * 8, 60)}
+            width={maxLabelWidth}
             height={26}
-            x={
-              labelX - Math.max(labelContent.length * 8, 60) / 2 + labelOffset.x
-            }
+            x={labelX - maxLabelWidth / 2 + labelOffset.x}
             y={labelY - 13 + labelOffset.y + labelOffsetY}
             style={{
-              overflow: 'visible',
+              overflow: 'hidden',
               zIndex: 10000,
               pointerEvents: 'none',
             }}
           >
             <div
-              className='px-2 py-1 rounded text-xs font-semibold text-center'
               style={{
-                fontSize: '12px',
-                lineHeight: '1.2',
-                whiteSpace: 'nowrap',
-                position: 'relative',
-                zIndex: 10000,
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                pointerEvents: 'none',
+              }}
+            >
+              <div
+                className='px-2 py-1 rounded text-xs font-semibold'
+                style={{
+                  fontSize: '10px',
+                  lineHeight: '1.2',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  width: 'fit-content',
+                  maxWidth: '100%',
+                  zIndex: 10000,
                 backgroundColor: condition ? '#ef4444' : '#3b82f6', // Red for conditional, blue for non-conditional
-                color: '#fff',
-                opacity: 0.95,
-                cursor: 'pointer',
+                  color: '#fff',
+                  opacity: 0.95,
+                  cursor: 'pointer',
                 pointerEvents: 'auto', // Re-enable pointer events only on the label itself
                 userSelect: 'none', // Prevent text selection
                 WebkitUserSelect: 'none', // Safari/Chrome
                 MozUserSelect: 'none', // Firefox
                 msUserSelect: 'none', // IE/Edge
-              }}
-            >
-              {labelContent}
+                }}
+              >
+                {labelContent}
+              </div>
             </div>
           </foreignObject>
         </g>

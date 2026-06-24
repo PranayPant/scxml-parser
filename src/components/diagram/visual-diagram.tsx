@@ -48,7 +48,7 @@ import { SCXMLTransitionEdge } from './edges/scxml-transition-edge';
 import { HistoryWrapperNode } from './nodes/history-wrapper-node';
 import { SCXMLStateNode } from './nodes/scxml-state-node';
 import { StateActionsPanel } from '@/components/ui/state-actions-panel';
-import { TransitionEditBar } from './transition-edit-bar';
+import { TransitionPanel, type TransitionApplyArgs } from './transition-panel';
 import { useIsDark } from '@/lib/theme/use-is-dark';
 
 // ==================== TYPES & INTERFACES ====================
@@ -300,6 +300,76 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
       }
     },
     [scxmlContent, onSCXMLChange]
+  );
+
+  const handleTransitionApply = React.useCallback(
+    ({ newValue, editingField, delay, cancelSendId, originalEventName, originalCancelSendId }: TransitionApplyArgs) => {
+      if (!onSCXMLChange || !scxmlContent || !selectedEdgeForEdit) return;
+      try {
+        let content = scxmlContent;
+
+        // Step 1: apply transition event/cond update
+        const { UpdateTransitionCommand } = require('@/lib/commands');
+        const { parseTransitionIndexFromEdgeId } = require('@/lib/converters/converter-modules');
+        const transitionIndex = parseTransitionIndexFromEdgeId(selectedEdgeForEdit.id);
+        const transResult = new UpdateTransitionCommand(
+          selectedEdgeForEdit.source,
+          selectedEdgeForEdit.target,
+          selectedEdgeForEdit.event,
+          selectedEdgeForEdit.cond,
+          newValue,
+          editingField,
+          transitionIndex
+        ).execute(content);
+        if (transResult.success) content = transResult.newContent;
+        else console.error('Failed to update transition:', transResult.error);
+
+        // Step 2: apply delay/cancel actions on the already-updated content
+        // Runs in event mode (add/remove) and when switching to cond (cleanup old send/cancel)
+        if (editingField === 'event' || (editingField === 'cond' && originalEventName)) {
+          const sourceNodeId = selectedEdgeForEdit.source;
+          const sourceNode = nodes.find((n) => n.id === sourceNodeId);
+          if (sourceNode) {
+            const existingEntry: string[] = sourceNode.data.entryActions ?? [];
+            const existingExit: string[] = sourceNode.data.exitActions ?? [];
+
+            // Remove send for original OR new event name, then add back if delay is set
+            const newEntry = [
+              ...existingEntry.filter((a) => {
+                if (newValue && a.startsWith(`send|${newValue}|`)) return false;
+                if (originalEventName && a.startsWith(`send|${originalEventName}|`)) return false;
+                return true;
+              }),
+              ...(delay ? [`send|${newValue}|${delay.type}|${delay.value}`] : []),
+            ];
+
+            // Remove old cancel by original sendId and by new sendId, then add back if set
+            const newExit = [
+              ...existingExit.filter((a) => {
+                if (originalCancelSendId && a === `cancel|${originalCancelSendId}`) return false;
+                if (cancelSendId && a === `cancel|${cancelSendId}`) return false;
+                return true;
+              }),
+              ...(cancelSendId ? [`cancel|${cancelSendId}`] : []),
+            ];
+
+            const entryChanged = JSON.stringify(newEntry) !== JSON.stringify(existingEntry);
+            const exitChanged = JSON.stringify(newExit) !== JSON.stringify(existingExit);
+            if (entryChanged || exitChanged) {
+              const { UpdateActionsCommand } = require('@/lib/commands');
+              const actResult = new UpdateActionsCommand(sourceNodeId, newEntry, newExit).execute(content);
+              if (actResult.success) content = actResult.newContent;
+              else console.error('Failed to update actions:', actResult.error);
+            }
+          }
+        }
+
+        onSCXMLChange(content, 'property');
+      } catch (error) {
+        console.error('Failed to apply transition:', error);
+      }
+    },
+    [scxmlContent, onSCXMLChange, selectedEdgeForEdit, nodes]
   );
 
   const handleNodeInternalEventsChange = React.useCallback(
@@ -1505,11 +1575,6 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
             edgeGroups.get(key)!.push(edge);
           });
 
-          const haveSameParent = (sourceId: string, targetId: string) => {
-            const sourceNode = nodes.find((n) => n.id === sourceId);
-            const targetNode = nodes.find((n) => n.id === targetId);
-            return sourceNode?.parentId === targetNode?.parentId;
-          };
 
           const edgesWithMarkers = edges.map((edge) => {
             const edgeMetadata = metadataManager.getVisualMetadata(edge.id);
@@ -1517,30 +1582,10 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
             const parallelEdges = edgeGroups.get(edgeKey) || [];
             const edgeIndex = parallelEdges.findIndex((e) => e.id === edge.id);
             const hasParallelEdges = parallelEdges.length > 1;
-            const inSameContainer = haveSameParent(edge.source, edge.target);
             const hasWaypoints =
               edge.data?.waypoints && edge.data.waypoints.length > 0;
 
-            let edgeType = 'smoothstep';
-
-            // Always use custom edge type if waypoints are present
-            if (hasWaypoints) {
-              edgeType = 'scxmlTransition';
-            } else if (inSameContainer) {
-              if (hasParallelEdges) {
-                // Use custom edge type for parallel edges to support offset
-                edgeType = 'scxmlTransition';
-              } else {
-                edgeType = 'smoothstep';
-              }
-            } else {
-              if (hasParallelEdges) {
-                // Use custom edge type for parallel edges to support offset
-                edgeType = 'scxmlTransition';
-              } else {
-                edgeType = 'smart';
-              }
-            }
+            const edgeType = 'scxmlTransition';
 
             let pathOptions: any = {};
             if (hasParallelEdges) {
@@ -1567,61 +1612,37 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
               };
             }
 
-            // Build label content with event and condition
-            const getLabelContent = () => {
-              const parts: string[] = [];
-              if (edge.data?.event) parts.push(`${edge.data.event}`);
-              if (edge.data?.condition) parts.push(`${edge.data.condition}`);
-              if (edge.data?.actions?.length > 0)
-                parts.push(
-                  `/ ${edge.data.actions.length} action${
-                    edge.data.actions.length > 1 ? 's' : ''
-                  }`
-                );
-              return parts.join(' ');
-            };
-
-            const fullLabel = getLabelContent();
-            const truncateLabel = (text: string, maxLength: number = 10) => {
-              if (text.length <= maxLength) return text;
-              return text.substring(0, maxLength) + '...';
-            };
+            const fullLabel = [
+              edge.data?.event,
+              edge.data?.condition,
+              edge.data?.actions?.length > 0
+                ? `/ ${edge.data.actions.length} action${edge.data.actions.length > 1 ? 's' : ''}`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(' ');
 
             const edgeUpdate: any = {
               ...edge,
               type: edgeType,
-              label: truncateLabel(fullLabel),
+              label: undefined,
               data: {
                 ...edge.data,
                 fullLabel,
                 offset: pathOptions.offset,
                 labelOffsetY: pathOptions.labelOffsetY,
-                // Add waypoint handlers for interactive editing
                 onWaypointDrag: handleWaypointDrag,
                 onWaypointDragEnd: handleWaypointDragEnd,
                 onWaypointDelete: handleWaypointDelete,
                 onWaypointAdd: handleWaypointAdd,
               },
               pathOptions,
-
               style: {
                 ...edge.style,
                 strokeWidth: 2,
                 zIndex: 1,
               },
               zIndex: 1,
-              labelStyle: {
-                fill: '#fff',
-                fontWeight: 600,
-                fontSize: 12,
-                cursor: 'pointer',
-              },
-              labelBgStyle: {
-                fill: edge.labelBgStyle?.fill || '#3b82f6',
-                fillOpacity: 0.95,
-              },
-              labelBgPadding: [6, 4] as [number, number],
-              labelBgBorderRadius: 4,
               interactionWidth: 30,
             };
 
@@ -2193,25 +2214,6 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
           )}
         </div>
 
-        {/* Transition Label Editor - Overlays the diagram */}
-        {selectedEdgeForEdit && (
-          <TransitionEditBar
-            key={selectedEdgeForEdit.id}
-            edgeId={selectedEdgeForEdit.id}
-            source={selectedEdgeForEdit.source}
-            target={selectedEdgeForEdit.target}
-            event={selectedEdgeForEdit.event}
-            cond={selectedEdgeForEdit.cond}
-            scxmlContent={scxmlContent}
-            onCommit={handleTransitionLabelChange}
-            onNewChannel={handleNewChannel}
-            onCancel={() => {
-              setSelectedEdgeForEdit(null);
-              setSelectedTransitions(new Set());
-            }}
-          />
-        )}
-
         <div className='flex-1'>
           <ReactFlow
             nodes={nodes}
@@ -2341,6 +2343,27 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
           </ReactFlow>
         </div>
       </div>
+
+      {/* Transition panel */}
+      {selectedEdgeForEdit && (
+        <TransitionPanel
+          key={selectedEdgeForEdit.id}
+          edgeId={selectedEdgeForEdit.id}
+          source={selectedEdgeForEdit.source}
+          target={selectedEdgeForEdit.target}
+          event={selectedEdgeForEdit.event}
+          cond={selectedEdgeForEdit.cond}
+          scxmlContent={scxmlContent}
+          entryActions={nodes.find((n) => n.id === selectedEdgeForEdit.source)?.data.entryActions ?? []}
+          exitActions={nodes.find((n) => n.id === selectedEdgeForEdit.source)?.data.exitActions ?? []}
+          onApply={handleTransitionApply}
+          onNewChannel={handleNewChannel}
+          onClose={() => {
+            setSelectedEdgeForEdit(null);
+            setSelectedTransitions(new Set());
+          }}
+        />
+      )}
 
       {/* State Actions side panel */}
       <StateActionsPanel

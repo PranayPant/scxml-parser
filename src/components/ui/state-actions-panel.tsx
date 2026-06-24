@@ -11,7 +11,6 @@ interface AssignActionRow { type: 'assign'; location: string; expr: string; }
 interface SendActionRow   { type: 'send'; event: string; delayType: 'delay' | 'delayexpr'; delayValue: string; }
 interface CancelActionRow { type: 'cancel'; sendid: string; }
 type ActionRow = AssignActionRow | SendActionRow | CancelActionRow;
-type ActionType = 'assign' | 'send' | 'cancel';
 
 interface InternalEventActionRow {
   event: string;
@@ -63,24 +62,14 @@ export function StateActionsPanel({
   // Form state
   const [formMode, setFormMode] = React.useState<FormMode>('idle');
   const [editingRowIndex, setEditingRowIndex] = React.useState<number | null>(null);
-  const [formActionType, setFormActionType] = React.useState<ActionType>('assign');
   const [formEvent, setFormEvent] = React.useState('');
   const [formLocation, setFormLocation] = React.useState('');
   const [formExpr, setFormExpr] = React.useState('');
-  const [formSendId, setFormSendId] = React.useState('');
-  const [formDelayType, setFormDelayType] = React.useState<'delay' | 'delayexpr'>('delay');
-  const [formDelayValue, setFormDelayValue] = React.useState('');
-  // for delay type: number + unit stored separately so we can render number input + unit dropdown
-  const [formDelayNumber, setFormDelayNumber] = React.useState('');
-  const [formDelayUnit, setFormDelayUnit] = React.useState<'s' | 'ms'>('s');
   const [formReactionType, setFormReactionType] = React.useState<'internal' | 'external'>('internal');
 
   // Autocomplete state — location field
   const [isOpen, setIsOpen] = React.useState(false);
   const [activeIndex, setActiveIndex] = React.useState(-1);
-  // Autocomplete state — sendid field
-  const [isSendIdOpen, setIsSendIdOpen] = React.useState(false);
-  const [activeSendIdIndex, setActiveSendIdIndex] = React.useState(-1);
   const blurTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const channels = useHostAPIStore((s) => s.channels);
@@ -89,40 +78,17 @@ export function StateActionsPanel({
     [scxmlContent],
   );
 
-  // All send event names in the SCXML — source for the cancel sendid autocomplete
-  const sendEventNames = React.useMemo(() => {
-    const matches = [...scxmlContent.matchAll(/<send[^>]+event="([^"]+)"/g)];
-    return [...new Set(matches.map((m) => m[1]))];
-  }, [scxmlContent]);
-
-  // Filtered suggestions for cancel sendid field
-  const sendIdSuggestions = React.useMemo(() => {
-    const prefix = formSendId.toLowerCase();
-    if (!prefix) return sendEventNames;
-    return sendEventNames.filter((n) => n.toLowerCase().includes(prefix));
-  }, [formSendId, sendEventNames]);
-
-  const showSendIdSuggestions = isSendIdOpen && sendIdSuggestions.length > 0;
-
   const currentList = activeTab === 'onentry' ? localEntry : localExit;
 
   const resetForm = React.useCallback(() => {
     setFormMode('idle');
     setEditingRowIndex(null);
-    setFormActionType('assign');
     setFormEvent('');
     setFormLocation('');
     setFormExpr('');
-    setFormSendId('');
-    setFormDelayType('delay');
-    setFormDelayValue('');
-    setFormDelayNumber('');
-    setFormDelayUnit('s');
     setFormReactionType('internal');
     setIsOpen(false);
     setActiveIndex(-1);
-    setIsSendIdOpen(false);
-    setActiveSendIdIndex(-1);
   }, []);
 
   // Reset local lists and form when the selected state changes
@@ -161,39 +127,6 @@ export function StateActionsPanel({
     setActiveIndex(-1);
   };
 
-  const selectSendIdSuggestion = (name: string) => {
-    setFormSendId(name);
-    setIsSendIdOpen(false);
-    setActiveSendIdIndex(-1);
-  };
-
-  const handleSendIdKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (showSendIdSuggestions) {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setActiveSendIdIndex((p) => (p < sendIdSuggestions.length - 1 ? p + 1 : 0));
-        return;
-      }
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setActiveSendIdIndex((p) => (p > 0 ? p - 1 : sendIdSuggestions.length - 1));
-        return;
-      }
-      if ((e.key === 'Tab' || e.key === 'Enter') && activeSendIdIndex >= 0) {
-        e.preventDefault();
-        selectSendIdSuggestion(sendIdSuggestions[activeSendIdIndex]);
-        return;
-      }
-      if (e.key === 'Escape') {
-        setIsSendIdOpen(false);
-        setActiveSendIdIndex(-1);
-        return;
-      }
-    }
-    if (e.key === 'Enter') handleApply();
-    if (e.key === 'Escape') resetForm();
-  };
-
   const handleApply = () => {
     if (formMode === 'idle') return;
 
@@ -209,17 +142,7 @@ export function StateActionsPanel({
       return;
     }
 
-    let newRow: ActionRow;
-    if (formActionType === 'send') {
-      const delayValue = formDelayType === 'delay'
-        ? `${formDelayNumber}${formDelayUnit}`
-        : formDelayValue;
-      newRow = { type: 'send', event: formEvent, delayType: formDelayType, delayValue };
-    } else if (formActionType === 'cancel') {
-      newRow = { type: 'cancel', sendid: formSendId };
-    } else {
-      newRow = { type: 'assign', location: formLocation, expr: formExpr };
-    }
+    const newRow: AssignActionRow = { type: 'assign', location: formLocation, expr: formExpr };
 
     const updatedList: ActionRow[] = formMode === 'adding'
       ? [...currentList, newRow]
@@ -257,48 +180,12 @@ export function StateActionsPanel({
   };
 
   const handleRowClick = (row: ActionRow, index: number) => {
+    if (row.type !== 'assign') return;
     setFormMode('editing');
     setEditingRowIndex(index);
-    setFormActionType(row.type);
-    if (row.type === 'assign') {
-      setFormLocation(row.location);
-      setFormExpr(row.expr);
-      setFormEvent('');
-      setFormSendId('');
-      setFormDelayType('delay');
-      setFormDelayValue('');
-    } else if (row.type === 'send') {
-      setFormEvent(row.event);
-      setFormDelayType(row.delayType);
-      if (row.delayType === 'delay') {
-        // Parse "3s" → num="3", unit="s";  "500ms" → num="500", unit="ms"
-        if (row.delayValue.endsWith('ms')) {
-          setFormDelayNumber(row.delayValue.slice(0, -2));
-          setFormDelayUnit('ms');
-        } else if (row.delayValue.endsWith('s')) {
-          setFormDelayNumber(row.delayValue.slice(0, -1));
-          setFormDelayUnit('s');
-        } else {
-          setFormDelayNumber(row.delayValue);
-          setFormDelayUnit('s');
-        }
-        setFormDelayValue('');
-      } else {
-        setFormDelayValue(row.delayValue);
-        setFormDelayNumber('');
-        setFormDelayUnit('s');
-      }
-      setFormLocation('');
-      setFormExpr('');
-      setFormSendId('');
-    } else if (row.type === 'cancel') {
-      setFormSendId(row.sendid);
-      setFormLocation('');
-      setFormExpr('');
-      setFormEvent('');
-      setFormDelayType('delay');
-      setFormDelayValue('');
-    }
+    setFormLocation(row.location);
+    setFormExpr(row.expr);
+    setFormEvent('');
     setIsOpen(false);
     setActiveIndex(-1);
   };
@@ -317,15 +204,9 @@ export function StateActionsPanel({
   const handleAddClick = () => {
     setFormMode('adding');
     setEditingRowIndex(null);
-    setFormActionType('assign');
     setFormEvent(activeTab === 'reactions' ? 'vector' : '');
     setFormLocation('');
     setFormExpr('');
-    setFormSendId('');
-    setFormDelayType('delay');
-    setFormDelayValue('');
-    setFormDelayNumber('');
-    setFormDelayUnit('s');
     setIsOpen(false);
     setActiveIndex(-1);
   };
@@ -359,35 +240,11 @@ export function StateActionsPanel({
 
   const isApplyDisabled =
     (activeTab === 'reactions' && (!formEvent || !formLocation || !formExpr)) ||
-    (activeTab !== 'reactions' && formActionType === 'assign' && (!formLocation || !formExpr)) ||
-    (activeTab !== 'reactions' && formActionType === 'send' && (
-      !formEvent ||
-      (formDelayType === 'delay' ? !formDelayNumber : !formDelayValue)
-    )) ||
-    (activeTab !== 'reactions' && formActionType === 'cancel' && !formSendId);
+    (activeTab !== 'reactions' && (!formLocation || !formExpr));
 
   // Inline form shared between expanded rows and the new-action form
   const inlineForm = (
     <div className='bg-primary-muted ring-1 ring-primary rounded p-2 space-y-1.5'>
-      {/* Action type selector — onentry/onexit only */}
-      {activeTab !== 'reactions' && (
-        <div className='flex gap-1'>
-          {(activeTab === 'onentry' ? (['assign', 'send'] as ActionType[]) : (['assign', 'cancel'] as ActionType[])).map((t) => (
-            <button
-              key={t}
-              onClick={() => setFormActionType(t)}
-              className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${
-                formActionType === t
-                  ? 'border-primary bg-primary text-primary-fg'
-                  : 'border-default text-muted hover:border-primary'
-              }`}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
-      )}
-
       {/* reactions: event field + type toggle */}
       {activeTab === 'reactions' && (
         <>
@@ -427,198 +284,70 @@ export function StateActionsPanel({
       )}
 
       {/* assign fields (also used by reactions tab for location + expr) */}
-      {(activeTab === 'reactions' || formActionType === 'assign') && (
-        <>
-          <div className='relative'>
-            <label className='text-[10px] text-muted block mb-0.5'>Location</label>
-            <input
-              autoFocus
-              type='text'
-              value={activeIndex >= 0 ? suggestions[activeIndex].label : formLocation}
-              onChange={(e) => {
-                setFormLocation(e.target.value);
-                setIsOpen(true);
-                setActiveIndex(-1);
-              }}
-              onFocus={() => setIsOpen(true)}
-              onBlur={() => {
-                blurTimerRef.current = setTimeout(() => setIsOpen(false), 100);
-              }}
-              onKeyDown={handleLocationKeyDown}
-              placeholder='variable or channel'
-              className={inputClass}
-            />
-            {showSuggestions && (
-              <div className='absolute top-full left-0 right-0 mt-1 z-50 bg-elevated border border-default rounded shadow-lg max-h-36 overflow-y-auto'>
-                {suggestions.map((s, i) => (
-                  <div
-                    key={s.label}
-                    onMouseDown={() => selectSuggestion(s)}
-                    className={`px-2 py-1 text-xs cursor-pointer flex items-center gap-2 ${
-                      i === activeIndex
-                        ? 'bg-primary text-primary-fg'
-                        : 'hover:bg-primary-muted text-default'
-                    }`}
-                  >
-                    <span
-                      className='text-xs px-1 rounded font-mono text-black'
-                      style={{
-                        backgroundColor:
-                          BADGE_COLORS[
-                            channels.find((c) => c.name === s.label)?.type ??
-                              EVENT_FALLBACK_VALUE
-                          ],
-                      }}
-                    >
-                      {channels.find((c) => c.name === s.label)?.type ??
-                        EVENT_FALLBACK_VALUE}
-                    </span>
-                    {s.label}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <div>
-            <label className='text-[10px] text-muted block mb-0.5'>Expression</label>
-            <input
-              type='text'
-              value={formExpr}
-              onChange={(e) => setFormExpr(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleApply();
-                if (e.key === 'Escape') resetForm();
-              }}
-              placeholder='expression'
-              className={inputClass}
-            />
-          </div>
-        </>
-      )}
-
-      {/* send fields */}
-      {formActionType === 'send' && activeTab !== 'reactions' && (
-        <>
-          <div>
-            <label className='text-[10px] text-muted block mb-0.5'>Event</label>
-            <input
-              autoFocus
-              type='text'
-              value={formEvent}
-              onChange={(e) => setFormEvent(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleApply();
-                if (e.key === 'Escape') resetForm();
-              }}
-              placeholder='my_event_name'
-              className={inputClass}
-            />
-          </div>
-          <div>
-            <label className='text-[10px] text-muted block mb-0.5'>Delay type</label>
-            <div className='flex gap-1'>
-              {(['delay', 'delayexpr'] as const).map((dt) => (
-                <button
-                  key={dt}
-                  onClick={() => setFormDelayType(dt)}
-                  className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${
-                    formDelayType === dt
-                      ? 'border-primary bg-primary text-primary-fg'
-                      : 'border-default text-muted hover:border-primary'
-                  }`}
-                >
-                  {dt}
-                </button>
-              ))}
-            </div>
-          </div>
-          {formDelayType === 'delay' ? (
-            <div>
-              <label className='text-[10px] text-muted block mb-0.5'>Delay</label>
-              <div className='flex gap-1'>
-                <input
-                  type='number'
-                  min='0'
-                  step='1'
-                  value={formDelayNumber}
-                  onChange={(e) => setFormDelayNumber(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleApply();
-                    if (e.key === 'Escape') resetForm();
+      <div className='relative'>
+        <label className='text-[10px] text-muted block mb-0.5'>Location</label>
+        <input
+          autoFocus
+          type='text'
+          value={activeIndex >= 0 ? suggestions[activeIndex].label : formLocation}
+          onChange={(e) => {
+            setFormLocation(e.target.value);
+            setIsOpen(true);
+            setActiveIndex(-1);
+          }}
+          onFocus={() => setIsOpen(true)}
+          onBlur={() => {
+            blurTimerRef.current = setTimeout(() => setIsOpen(false), 100);
+          }}
+          onKeyDown={handleLocationKeyDown}
+          placeholder='variable or channel'
+          className={inputClass}
+        />
+        {showSuggestions && (
+          <div className='absolute top-full left-0 right-0 mt-1 z-50 bg-elevated border border-default rounded shadow-lg max-h-36 overflow-y-auto'>
+            {suggestions.map((s, i) => (
+              <div
+                key={s.label}
+                onMouseDown={() => selectSuggestion(s)}
+                className={`px-2 py-1 text-xs cursor-pointer flex items-center gap-2 ${
+                  i === activeIndex
+                    ? 'bg-primary text-primary-fg'
+                    : 'hover:bg-primary-muted text-default'
+                }`}
+              >
+                <span
+                  className='text-xs px-1 rounded font-mono text-black'
+                  style={{
+                    backgroundColor:
+                      BADGE_COLORS[
+                        channels.find((c) => c.name === s.label)?.type ??
+                          EVENT_FALLBACK_VALUE
+                      ],
                   }}
-                  placeholder='e.g. 3'
-                  className='flex-1 border border-default rounded px-2 py-1 text-xs text-default bg-elevated placeholder:text-dimmed focus:outline-none focus:ring-1 focus:ring-primary'
-                />
-                <select
-                  value={formDelayUnit}
-                  onChange={(e) => setFormDelayUnit(e.target.value as 's' | 'ms')}
-                  title='Use ms for fractional seconds (e.g. 3600ms = 3.6s)'
-                  className='border border-default rounded px-2 py-1 text-xs text-default bg-elevated focus:outline-none focus:ring-1 focus:ring-primary'
                 >
-                  <option value='s'>s</option>
-                  <option value='ms'>ms</option>
-                </select>
+                  {channels.find((c) => c.name === s.label)?.type ??
+                    EVENT_FALLBACK_VALUE}
+                </span>
+                {s.label}
               </div>
-            </div>
-          ) : (
-            <div>
-              <label className='text-[10px] text-muted block mb-0.5'>Delay expression</label>
-              <input
-                type='text'
-                value={formDelayValue}
-                onChange={(e) => setFormDelayValue(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleApply();
-                  if (e.key === 'Escape') resetForm();
-                }}
-                placeholder='Math.floor(x * 1000)'
-                className={inputClass}
-              />
-            </div>
-          )}
-        </>
-      )}
-
-      {/* cancel fields */}
-      {formActionType === 'cancel' && activeTab !== 'reactions' && (
-        <div className='relative'>
-          <label className='text-[10px] text-muted block mb-0.5'>Send ID</label>
-          <input
-            autoFocus
-            type='text'
-            value={activeSendIdIndex >= 0 ? sendIdSuggestions[activeSendIdIndex] : formSendId}
-            onChange={(e) => {
-              setFormSendId(e.target.value);
-              setIsSendIdOpen(true);
-              setActiveSendIdIndex(-1);
-            }}
-            onFocus={() => setIsSendIdOpen(true)}
-            onBlur={() => {
-              blurTimerRef.current = setTimeout(() => setIsSendIdOpen(false), 100);
-            }}
-            onKeyDown={handleSendIdKeyDown}
-            placeholder='event name to cancel'
-            className={inputClass}
-          />
-          {showSendIdSuggestions && (
-            <div className='absolute top-full left-0 right-0 mt-1 z-50 bg-elevated border border-default rounded shadow-lg max-h-36 overflow-y-auto'>
-              {sendIdSuggestions.map((name, i) => (
-                <div
-                  key={name}
-                  onMouseDown={() => selectSendIdSuggestion(name)}
-                  className={`px-2 py-1 text-xs cursor-pointer font-mono ${
-                    i === activeSendIdIndex
-                      ? 'bg-primary text-primary-fg'
-                      : 'hover:bg-primary-muted text-default'
-                  }`}
-                >
-                  {name}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </div>
+      <div>
+        <label className='text-[10px] text-muted block mb-0.5'>Expression</label>
+        <input
+          type='text'
+          value={formExpr}
+          onChange={(e) => setFormExpr(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') handleApply();
+            if (e.key === 'Escape') resetForm();
+          }}
+          placeholder='expression'
+          className={inputClass}
+        />
+      </div>
 
       {/* Apply / Discard */}
       <div className='flex justify-end gap-1.5'>
@@ -643,12 +372,6 @@ export function StateActionsPanel({
 
   return (
     <Panel title='State Actions' onClose={onClose}>
-      {/*
-        Panel's body is already flex-1 overflow-y-auto, but we need the
-        sub-header and tabs to be sticky while only the action list scrolls.
-        Wrap everything in a flex-col h-full so the inner list gets its own
-        overflow-y-auto region.
-      */}
       <div className='flex flex-col h-full'>
         {/* Sub-header: stateId + add button */}
         <div className='flex items-center justify-between px-3 py-1.5 border-b border-default bg-muted flex-shrink-0'>
@@ -771,7 +494,7 @@ export function StateActionsPanel({
                 </div>
               ),
             )}
-            
+
             {/* New action form appended at bottom when adding */}
             {formMode === 'adding' && <div>{inlineForm}</div>}
           </>

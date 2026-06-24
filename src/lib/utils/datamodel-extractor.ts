@@ -136,7 +136,9 @@ export function extractUnresolvedChannelRefs(xmlContent: string, channels: strin
       if (SCXML_EXPR_ATTRS.has(key) && typeof val === 'string') {
         // <data> expr initializes variables with literal/computed values, not channel refs
         if (key === '@_expr' && parentKey === 'data') continue;
-        for (const v of ConditionEvaluator.extractVariables(val)) {
+        // Strip _event. prefix so _event.data is treated as the event parameter, not a channel ref
+        const stripped = val.replace(/_event\./g, '');
+        for (const v of ConditionEvaluator.extractVariables(stripped)) {
           refs.add(v);
         }
       } else if (key !== ':@') {
@@ -149,6 +151,6 @@ export function extractUnresolvedChannelRefs(xmlContent: string, channels: strin
   walk(parsed);
 
   return Array.from(refs)
-    .filter(r => !r.startsWith('this_') && !r.startsWith('conf_') && !channelSet.has(r))
+    .filter(r => !r.startsWith('this_') && !r.startsWith('conf_') && r !== 'data' && !channelSet.has(r))
     .sort();
 }
