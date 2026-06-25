@@ -3,7 +3,7 @@
 import React from 'react';
 import { useHostAPIStore } from '@/stores/host-api-store';
 import { extractDatamodelVariables } from '@/lib/utils/datamodel-extractor';
-import { BADGE_COLORS } from '@/lib';
+import { BADGE_COLORS, getVariableType } from '@/lib';
 import { Panel } from '@/components/ui/primitives/panel';
 import {
   parseAfterSyntax,
@@ -251,8 +251,10 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
   const showDropdown = showSuggestions || hintMessage !== null;
 
   const renderBadge = (s: Suggestion) => {
-    if (s.kind !== 'channel' && s.kind !== 'event') return null;
-    const type = channels.find((c) => c.name === s.label)?.type ?? events.find((ev) => ev.name === s.label)?.type;
+    if (s.kind !== 'channel' && s.kind !== 'event' && s.kind !== 'variable') return null;
+    const type = s.kind === 'variable'
+      ? getVariableType(s.label)
+      : channels.find((c) => c.name === s.label)?.type ?? events.find((ev) => ev.name === s.label)?.type;
     return type ? (
       <span className='text-xs px-1 py-0.5 rounded font-mono text-black' style={{ backgroundColor: BADGE_COLORS[type] }}>{type}</span>
     ) : null;

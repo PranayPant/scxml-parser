@@ -4,7 +4,7 @@ import React from 'react';
 import { Save, X } from 'lucide-react';
 import { useHostAPIStore } from '@/stores/host-api-store';
 import { extractDatamodelVariables } from '@/lib/utils/datamodel-extractor';
-import { BADGE_COLORS } from '@/lib';
+import { BADGE_COLORS, getVariableType } from '@/lib';
 
 interface TransitionEditBarProps {
   edgeId: string;
@@ -258,8 +258,10 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
                   <span className='text-xs text-amber-600'>(new channel)</span>
                 )}
 
-                {(suggestion.kind === 'channel' || suggestion.kind === 'event') && (() => {
-                  const type = channels.find(c => c.name === suggestion.label)?.type ?? events.find(e => e.name === suggestion.label)?.type;
+                {(suggestion.kind === 'channel' || suggestion.kind === 'event' || suggestion.kind === 'variable') && (() => {
+                  const type = suggestion.kind === 'variable'
+                    ? getVariableType(suggestion.label)
+                    : channels.find(c => c.name === suggestion.label)?.type ?? events.find(e => e.name === suggestion.label)?.type;
                   return type ? (
                     <span
                       className='text-xs px-1 py-0.5 rounded font-mono text-black'

@@ -1,6 +1,6 @@
 'use client';
 
-import { BADGE_COLORS, EVENT_FALLBACK_VALUE } from '@/lib';
+import { BADGE_COLORS, EVENT_FALLBACK_VALUE, getVariableType } from '@/lib';
 import { extractDatamodelVariables } from '@/lib/utils/datamodel-extractor';
 import { useHostAPIStore } from '@/stores/host-api-store';
 import { Plus, X } from 'lucide-react';
@@ -110,8 +110,9 @@ export function StateActionsPanel({
   const suggestions: Suggestion[] = React.useMemo(() => {
     if (formMode === 'idle') return [];
     const prefix = formLocation.toLowerCase();
+    const channelSet = new Set(channels.map((c) => c.name));
     const vars = dataVars
-      .filter((v) => v.toLowerCase().includes(prefix))
+      .filter((v) => !channelSet.has(v) && v.toLowerCase().includes(prefix))
       .map((v): Suggestion => ({ label: v, kind: 'variable' }));
     const chans = channels
       .filter((c) => c.name.toLowerCase().includes(prefix))
@@ -318,15 +319,16 @@ export function StateActionsPanel({
                 <span
                   className='text-xs px-1 rounded font-mono text-black'
                   style={{
-                    backgroundColor:
-                      BADGE_COLORS[
-                        channels.find((c) => c.name === s.label)?.type ??
-                          EVENT_FALLBACK_VALUE
-                      ],
+                    backgroundColor: BADGE_COLORS[
+                      s.kind === 'variable'
+                        ? getVariableType(s.label)
+                        : channels.find((c) => c.name === s.label)?.type ?? EVENT_FALLBACK_VALUE
+                    ],
                   }}
                 >
-                  {channels.find((c) => c.name === s.label)?.type ??
-                    EVENT_FALLBACK_VALUE}
+                  {s.kind === 'variable'
+                    ? getVariableType(s.label)
+                    : channels.find((c) => c.name === s.label)?.type ?? EVENT_FALLBACK_VALUE}
                 </span>
                 {s.label}
               </div>

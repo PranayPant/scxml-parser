@@ -40,7 +40,7 @@ export interface ChannelMapping {
 
 export interface ChannelInfo {
   name: string;
-  type: 'ch' | 'in' | 'out' | 'st';
+  type: 'ch' | 'in' | 'out' | 'st' | 'cf' | 'th' | 'dm';
 }
 
 export interface EventEntry {

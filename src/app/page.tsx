@@ -7,7 +7,7 @@ import { TwoTabLayout, type TabType } from '@/components/layout';
 import { VisualDiagram } from '@/components/diagram';
 import { ChannelMappingPanel, ConfigPanel, ErrorBoundary, EventsPanel, ValidationPanel, UndoRedoControls } from '@/components/ui';
 import { SCXMLParser, SCXMLValidator } from '@/lib';
-import { updateConfigFieldExpr, deleteConfigField } from '@/lib/utils/datamodel-extractor';
+import { updateConfigFieldExpr, deleteConfigField, extractUnresolvedChannelRefs } from '@/lib/utils/datamodel-extractor';
 import { hasVisualMetadata } from '@/lib/utils';
 import { useEditorStore } from '@/stores/editor-store';
 import { usePanelStore } from '@/stores/panel-store';
@@ -316,7 +316,11 @@ export default function Home() {
       showFeedback,
       setChannels: (channels: ChannelInfo[]) => useHostAPIStore.getState().setChannels(channels),
       toggleConfigPanel: () => togglePanel('config'),
-      getChannelMappings: () => channelMappingsRef.current,
+      getChannelMappings: () => {
+        const channelNames = useHostAPIStore.getState().channels.map(c => c.name);
+        const activeRefs = new Set(extractUnresolvedChannelRefs(contentRef.current, channelNames));
+        return channelMappingsRef.current.filter(m => activeRefs.has(m.scxmlRef));
+      },
       setChannelMappings: (mappings) => useHostAPIStore.getState().setChannelMappings(mappings),
       toggleChannelMappingPanel: () => togglePanel('channelMapping'),
       setEvents: (events: EventEntry[]) => useHostAPIStore.getState().setEvents(events.map(e => ({ ...e, type: e.type ?? EVENT_FALLBACK_VALUE }))),

@@ -1,6 +1,6 @@
 "use client";
 
-import { BADGE_COLORS, EVENT_FALLBACK_VALUE } from "@/lib";
+import { BADGE_COLORS, EVENT_FALLBACK_VALUE, getVariableType } from "@/lib";
 import { extractDatamodelVariables } from "@/lib/utils/datamodel-extractor";
 import { useHostAPIStore } from "@/stores/host-api-store";
 import { Save, X } from "lucide-react";
@@ -64,8 +64,9 @@ export const StateActionsEditBar: React.FC<StateActionsEditBarProps> = ({
 
   const suggestions: Suggestion[] = React.useMemo(() => {
     const prefix = locationValue.toLowerCase();
+    const channelSet = new Set(channels.map((c) => c.name));
     const varSuggestions: Suggestion[] = dataVars
-      .filter((v) => v.toLowerCase().includes(prefix))
+      .filter((v) => !channelSet.has(v) && v.toLowerCase().includes(prefix))
       .map((v) => ({ label: v, kind: "variable" }));
     const channelSuggestions: Suggestion[] = channels
       .filter((c) => c.name.toLowerCase().includes(prefix))
@@ -198,11 +199,16 @@ export const StateActionsEditBar: React.FC<StateActionsEditBarProps> = ({
                 <span
                   className='text-xs px-1 py-0.5 rounded font-mono text-black'
                   style={{
-                    backgroundColor:
-                      BADGE_COLORS[channels.find(c => c.name === suggestion.label)?.type ?? EVENT_FALLBACK_VALUE],
+                    backgroundColor: BADGE_COLORS[
+                      suggestion.kind === 'variable'
+                        ? getVariableType(suggestion.label)
+                        : channels.find(c => c.name === suggestion.label)?.type ?? EVENT_FALLBACK_VALUE
+                    ],
                   }}
                 >
-                  {channels.find(c => c.name === suggestion.label)?.type ?? EVENT_FALLBACK_VALUE}
+                  {suggestion.kind === 'variable'
+                    ? getVariableType(suggestion.label)
+                    : channels.find(c => c.name === suggestion.label)?.type ?? EVENT_FALLBACK_VALUE}
                 </span>
                 <span>{suggestion.label}</span>
               </div>
