@@ -22,6 +22,7 @@ export interface SCXMLTransitionEdgeData {
   offset?: number; // Path offset for parallel edges
   labelOffsetY?: number; // Label Y-axis offset for parallel edges
   fullLabel?: string; // Full label text for tooltip
+  displayEvent?: string; // "after 2s" / "after 714ms" / "after (expr) s" for _t_ time-transition edges
   waypoints?: Waypoint[]; // Waypoint control points for edge routing
 
   // Handlers for waypoint editing
@@ -187,6 +188,7 @@ export const SCXMLTransitionEdge: React.FC<
   const labelOffset = data?.labelOffset || { x: 0, y: 0 };
   const offset = data?.offset || 0;
   const labelOffsetY = data?.labelOffsetY || 0;
+  const displayEvent = data?.displayEvent;
   const waypoints = data?.waypoints || [];
   const onWaypointDrag = data?.onWaypointDrag;
   const onWaypointDragEnd = data?.onWaypointDragEnd;
@@ -245,10 +247,10 @@ export const SCXMLTransitionEdge: React.FC<
   const strokeWidth = selected ? 3 : actions.length > 0 ? 2.5 : 2;
   const edgeColor = getEdgeColor();
 
-  // Create label content
+  // Create label content — use displayEvent (e.g. "after 2s") for _t_ time-transition edges
   const getLabelContent = () => {
     const parts: string[] = [];
-    if (event) parts.push(`${event}`);
+    if (displayEvent ?? event) parts.push(`${displayEvent ?? event}`);
     if (condition) parts.push(`${condition}`);
     if (actions.length > 0)
       parts.push(`/ ${actions.length} action${actions.length > 1 ? 's' : ''}`);

@@ -5,6 +5,12 @@ import { useHostAPIStore } from '@/stores/host-api-store';
 import { extractDatamodelVariables } from '@/lib/utils/datamodel-extractor';
 import { BADGE_COLORS } from '@/lib';
 import { Panel } from '@/components/ui/primitives/panel';
+import {
+  parseAfterSyntax,
+  formatAfterSyntax,
+  isTimeEventName,
+  generateTimeEventName,
+} from '@/lib/utils/time-transition';
 
 type Suggestion = { label: string; kind: 'channel' | 'event' | 'variable' | 'new-channel' };
 
@@ -50,55 +56,53 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
   cond,
   scxmlContent,
   entryActions,
-  exitActions,
   onApply,
   onNewChannel,
   onClose,
 }) => {
-  // ── event/cond search state (ported from TransitionEditBar) ──
-  const [selectionMode, setSelectionMode] = React.useState<'undecided' | 'event' | 'cond'>(
-    event ? 'event' : cond ? 'cond' : 'undecided'
-  );
-  const [rawValue, setRawValue] = React.useState(event ?? cond ?? '');
+  // ── event/cond search state ──
+  // For time events the stored event name (e.g. Idle_t_0_timeEvent_0) is invisible to the user;
+  // we reconstruct the "after X" display string from the source state's send action.
+  const initRawValue = (() => {
+    if (event && isTimeEventName(event)) {
+      const sendStr = (entryActions ?? []).find((a) => a.startsWith(`send|${event}|`));
+      if (sendStr) {
+        const parts = sendStr.split('|');
+        const dt = (parts[2] as 'delay' | 'delayexpr' | undefined) ?? 'delay';
+        const dv = parts.slice(3).join('|');
+        return formatAfterSyntax(dt, dv);
+      }
+    }
+    return event ?? cond ?? '';
+  })();
+
+  const initSelectionMode = (() => {
+    if (event && isTimeEventName(event)) return 'undecided' as const; // shown as "after X"
+    if (event) return 'event' as const;
+    if (cond) return 'cond' as const;
+    return 'undecided' as const;
+  })();
+
+  const [selectionMode, setSelectionMode] = React.useState<'undecided' | 'event' | 'cond'>(initSelectionMode);
+  const [rawValue, setRawValue] = React.useState(initRawValue);
   const [activeIndex, setActiveIndex] = React.useState(-1);
   const [isOpen, setIsOpen] = React.useState(false);
   const blurTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Remembers the auto-generated _t_ event name after the first save so rapid double-clicks
+  // reuse the same name instead of incrementing the index again before the prop updates.
+  const appliedTimeEventRef = React.useRef<string | null>(null);
 
-  // ── tab state ──
-  const [activeTab, setActiveTab] = React.useState<'onentry' | 'onexit'>('onentry');
-
-  // ── parse existing delay/cancel from source state's onentry/onexit ──
-  // format: send|eventName|delayType|delayValue  and  cancel|sendId
-  const initSendStr = event ? (entryActions ?? []).find((a) => a.startsWith(`send|${event}|`)) : undefined;
-  const initSendParts = initSendStr ? initSendStr.split('|') : [];
-  const initDelayType = (initSendParts[2] as 'delay' | 'delayexpr' | undefined) ?? 'delay';
-  const initDelayRaw = initSendParts.slice(3).join('|');
-  const initDelayUnit: 's' | 'ms' = initDelayType === 'delay' && initDelayRaw.endsWith('ms') ? 'ms' : 's';
-  const initDelayNumber = initDelayType === 'delay'
-    ? (initDelayRaw.endsWith('ms') ? initDelayRaw.slice(0, -2) : initDelayRaw.endsWith('s') ? initDelayRaw.slice(0, -1) : initDelayRaw)
-    : '';
-  const initDelayExpr = initDelayType === 'delayexpr' ? initDelayRaw : '';
-  const initCancelStr = (exitActions ?? []).find((a) => a.startsWith('cancel|'));
-  const initCancelId = initCancelStr ? (initCancelStr.split('|')[1] ?? '') : '';
-
-  // ── onentry: delay fields ──
-  const [delayType, setDelayType] = React.useState<'delay' | 'delayexpr'>(initDelayType);
-  const [delayNumber, setDelayNumber] = React.useState(initDelayNumber);
-  const [delayUnit, setDelayUnit] = React.useState<'s' | 'ms'>(initDelayUnit);
-  const [delayExpr, setDelayExpr] = React.useState(initDelayExpr);
-
-  // ── onexit: Send ID ──
-  const [cancelSendId, setCancelSendId] = React.useState(initCancelId);
-  const [sendIdOpen, setSendIdOpen] = React.useState(false);
-  const [activeSendIdIndex, setActiveSendIdIndex] = React.useState(-1);
-  const sendIdBlurRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  // ── originalCancelSendId — only track the cancel that belongs to THIS transition's event.
+  // Searching for any cancel| in exitActions is wrong when a source state has multiple time
+  // transitions: it would grab a sibling's cancel and incorrectly remove it on save.
+  // For the after-X flow the cancel sendid always equals the event name.
+  const initCancelId = event && isTimeEventName(event) ? event : '';
 
   const editingField: 'event' | 'cond' = selectionMode === 'event' ? 'event' : 'cond';
 
   React.useEffect(() => {
     return () => {
       if (blurTimerRef.current !== null) clearTimeout(blurTimerRef.current);
-      if (sendIdBlurRef.current !== null) clearTimeout(sendIdBlurRef.current);
     };
   }, []);
 
@@ -113,6 +117,9 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
     const eventSet = new Set(eventNames);
     const kindOf = (item: string): Suggestion['kind'] =>
       channelSet.has(item) ? 'channel' : eventSet.has(item) ? 'event' : 'variable';
+
+    // Suppress suggestions when user is typing an "after X" time transition
+    if (rawValue.trimStart().startsWith('after')) return [];
 
     if (selectionMode === 'event') {
       const prefix = rawValue.toLowerCase();
@@ -144,18 +151,6 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
     return filtered.map((i) => ({ label: i, kind: condKindOf(i) }));
   }, [rawValue, channels, events, scxmlContent, selectionMode]);
 
-  // ── Send ID suggestions: all event names used in <send> tags in the SCXML ──
-  const sendEventNames = React.useMemo(() => {
-    const matches = [...scxmlContent.matchAll(/<send[^>]+event="([^"]+)"/g)];
-    return [...new Set(matches.map((m) => m[1]))];
-  }, [scxmlContent]);
-
-  const sendIdSuggestions = React.useMemo(() => {
-    const prefix = cancelSendId.toLowerCase();
-    if (!prefix) return sendEventNames;
-    return sendEventNames.filter((n) => n.toLowerCase().includes(prefix));
-  }, [cancelSendId, sendEventNames]);
-
   const buildCondValue = (label: string) => {
     const endsWithSpace = rawValue.endsWith(' ');
     if (endsWithSpace) return rawValue + label;
@@ -181,9 +176,31 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
     const trimmed = rawValue.trim();
     if (!trimmed) return;
 
+    const timeParsed = parseAfterSyntax(trimmed);
+
+    if (timeParsed) {
+      // Preserve existing _t_ event name (prop), or the one we already generated this session,
+      // or generate a fresh one. The ref prevents a rapid double-click from incrementing the
+      // index a second time before the parent re-renders with the updated event prop.
+      const existingName = (event && isTimeEventName(event) ? event : null)
+        ?? appliedTimeEventRef.current;
+      const eventName = existingName ?? generateTimeEventName(source, scxmlContent);
+      appliedTimeEventRef.current = eventName;
+      onApply({
+        newValue: eventName,
+        editingField: 'event',
+        delay: timeParsed,
+        cancelSendId: eventName,
+        originalEventName: event,
+        originalCancelSendId: initCancelId || undefined,
+      });
+      return;
+    }
+
+    // Regular event or condition
     const resolvedField: 'event' | 'cond' =
       selectionMode !== 'undecided' ? editingField :
-      (trimmed.includes('_t_') || events.some((e) => e.name === trimmed)) ? 'event' : 'cond';
+      events.some((e) => e.name === trimmed) ? 'event' : 'cond';
 
     const isNewChannel = suggestions.length === 1 && suggestions[0].kind === 'new-channel';
     if (isNewChannel && onNewChannel) {
@@ -191,18 +208,11 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
       return;
     }
 
-    const isTimeEvent = resolvedField === 'event' && trimmed.includes('_t_');
-    const hasDelay = isTimeEvent && (
-      delayType === 'delay' ? delayNumber.trim().length > 0 : delayExpr.trim().length > 0
-    );
-    const delayValue = delayType === 'delay' ? `${delayNumber}${delayUnit}` : delayExpr;
-    const hasCancelId = isTimeEvent && cancelSendId.trim().length > 0;
-
     onApply({
       newValue: trimmed,
       editingField: resolvedField,
-      delay: hasDelay ? { type: delayType, value: delayValue } : null,
-      cancelSendId: hasCancelId ? cancelSendId.trim() : null,
+      delay: null,
+      cancelSendId: null,
       originalEventName: event,
       originalCancelSendId: initCancelId || undefined,
     });
@@ -228,8 +238,13 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
   };
 
   const hintMessage = React.useMemo(() => {
-    if (!isOpen || rawValue.length === 0 || selectionMode === 'event' || suggestions.length > 0) return null;
-    return 'No match — type "this_" to create a new channel, or include "_t_" in the event name to create a time transition';
+    if (!isOpen || rawValue.length === 0) return null;
+    // Guide user if they've started typing "after" but the format isn't complete yet
+    if (rawValue.trimStart().startsWith('after') && parseAfterSyntax(rawValue.trim()) === null) {
+      return 'Time transition format: after 2s  ·  after 714ms  ·  after (expression) s';
+    }
+    if (selectionMode === 'event' || suggestions.length > 0) return null;
+    return 'No match — type "this_" to create a new channel, or "after Xs" for a time transition';
   }, [isOpen, rawValue, selectionMode, suggestions]);
 
   const showSuggestions = isOpen && suggestions.length > 0;
@@ -245,7 +260,7 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
 
   const footer = (
     <div className='flex gap-2'>
-      <button onClick={handleApply} className='px-3 py-1.5 text-xs font-semibold bg-primary text-primary-fg rounded-md hover:opacity-90 transition-opacity'>Apply</button>
+      <button onClick={handleApply} className='px-3 py-1.5 text-xs font-semibold bg-primary text-primary-fg rounded-md hover:opacity-90 transition-opacity'>Save</button>
       <button onClick={onClose} className='px-3 py-1.5 text-xs border border-default text-muted rounded-md hover:text-default transition-colors'>Cancel</button>
     </div>
   );
@@ -260,7 +275,6 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
       </div>
 
       <div className='px-3 py-2.5'>
-        {/* Search input — always visible, same as original bar */}
         <div className='relative'>
           <input
             type='text'
@@ -271,14 +285,13 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
               const v = e.target.value;
               setRawValue(v);
               if (v === '') setSelectionMode('undecided');
-              else if (v.includes('_t_')) setSelectionMode('event');
               setIsOpen(true);
               setActiveIndex(-1);
             }}
             onFocus={() => setIsOpen(true)}
             onBlur={() => { blurTimerRef.current = setTimeout(() => setIsOpen(false), 100); }}
             onKeyDown={handleKeyDown}
-            placeholder={selectionMode === 'event' ? 'Enter event' : selectionMode === 'cond' ? 'Enter condition' : 'Search events and channels...'}
+            placeholder={selectionMode === 'event' ? 'Enter event' : selectionMode === 'cond' ? 'Enter condition' : 'Search events, channels, or type "after Xs"...'}
             className='w-full px-3 py-1.5 text-sm text-default bg-elevated border border-default rounded-md placeholder:text-dimmed focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent'
           />
           {showDropdown && (
@@ -299,97 +312,6 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
             </div>
           )}
         </div>
-
-        {/* onentry/onexit tabs — only shown for time transition events (_t_) */}
-        {selectionMode === 'event' && rawValue.includes('_t_') && (
-          <>
-            <div className='flex border-b border-default -mx-3 mt-3 mb-3'>
-              {(['onentry', 'onexit'] as const).map((tab) => (
-                <button key={tab} onClick={() => setActiveTab(tab)}
-                  className={`flex-1 py-1.5 text-[10px] font-medium transition-colors ${activeTab === tab ? 'border-b-2 border-primary text-primary' : 'text-muted hover:text-default'}`}>
-                  {tab}
-                </button>
-              ))}
-            </div>
-
-            {activeTab === 'onentry' && (
-              <div className='space-y-2'>
-                <div>
-                  <p className='text-[10px] text-muted mb-1'>Delay type</p>
-                  <div className='flex gap-1'>
-                    {(['delay', 'delayexpr'] as const).map((dt) => (
-                      <button key={dt} onClick={() => setDelayType(dt)}
-                        className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${delayType === dt ? 'border-primary bg-primary text-primary-fg' : 'border-default text-muted hover:border-primary'}`}>
-                        {dt}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                {delayType === 'delay' ? (
-                  <div>
-                    <p className='text-[10px] text-muted mb-1'>Delay</p>
-                    <div className='flex gap-1'>
-                      <input type='number' min='0' step='1' value={delayNumber} onChange={(e) => setDelayNumber(e.target.value)} placeholder='e.g. 3'
-                        className='flex-1 border border-default rounded px-2 py-1 text-xs text-default bg-elevated focus:outline-none focus:ring-1 focus:ring-primary' />
-                      <select value={delayUnit} onChange={(e) => setDelayUnit(e.target.value as 's' | 'ms')} className='border border-default rounded px-2 py-1 text-xs text-default bg-elevated'>
-                        <option value='s'>s</option>
-                        <option value='ms'>ms</option>
-                      </select>
-                    </div>
-                  </div>
-                ) : (
-                  <div>
-                    <p className='text-[10px] text-muted mb-1'>Delay expression</p>
-                    <input type='text' value={delayExpr} onChange={(e) => setDelayExpr(e.target.value)} placeholder='Math.floor(x * 1000)'
-                      className='w-full border border-default rounded px-2 py-1 text-xs text-default bg-elevated focus:outline-none focus:ring-1 focus:ring-primary' />
-                  </div>
-                )}
-                <p className='text-[10px] text-dimmed italic'>leave empty to skip</p>
-              </div>
-            )}
-
-            {activeTab === 'onexit' && (
-              <div className='relative'>
-                <p className='text-[10px] text-muted mb-1'>Send ID</p>
-                <input
-                  type='text'
-                  value={activeSendIdIndex >= 0 ? (sendIdSuggestions[activeSendIdIndex] ?? cancelSendId) : cancelSendId}
-                  onChange={(e) => { setCancelSendId(e.target.value); setSendIdOpen(true); setActiveSendIdIndex(-1); }}
-                  onFocus={() => setSendIdOpen(true)}
-                  onBlur={() => { sendIdBlurRef.current = setTimeout(() => setSendIdOpen(false), 100); }}
-                  onKeyDown={(e) => {
-                    const show = sendIdOpen && sendIdSuggestions.length > 0;
-                    if (show) {
-                      if (e.key === 'ArrowDown') { e.preventDefault(); setActiveSendIdIndex((p) => p < sendIdSuggestions.length - 1 ? p + 1 : 0); return; }
-                      if (e.key === 'ArrowUp') { e.preventDefault(); setActiveSendIdIndex((p) => p > 0 ? p - 1 : sendIdSuggestions.length - 1); return; }
-                      if ((e.key === 'Tab' || e.key === 'Enter') && activeSendIdIndex >= 0) {
-                        e.preventDefault();
-                        setCancelSendId(sendIdSuggestions[activeSendIdIndex] ?? cancelSendId);
-                        setSendIdOpen(false);
-                        setActiveSendIdIndex(-1);
-                        return;
-                      }
-                      if (e.key === 'Escape') { setSendIdOpen(false); setActiveSendIdIndex(-1); return; }
-                    }
-                  }}
-                  placeholder='event name to cancel'
-                  className='w-full border border-default rounded px-2 py-1 text-xs text-default bg-elevated focus:outline-none focus:ring-1 focus:ring-primary'
-                />
-                {sendIdOpen && sendIdSuggestions.length > 0 && (
-                  <div className='absolute top-full left-0 right-0 mt-1 z-50 bg-elevated border border-default rounded-md shadow-lg max-h-36 overflow-y-auto'>
-                    {sendIdSuggestions.map((name, i) => (
-                      <div key={name} onMouseDown={() => { setCancelSendId(name); setSendIdOpen(false); setActiveSendIdIndex(-1); }}
-                        className={`px-2 py-1 text-xs cursor-pointer font-mono ${i === activeSendIdIndex ? 'bg-primary text-primary-fg' : 'hover:bg-primary-muted text-default'}`}>
-                        {name}
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <p className='text-[10px] text-dimmed italic mt-1'>leave empty to skip</p>
-              </div>
-            )}
-          </>
-        )}
       </div>
 
     </Panel>

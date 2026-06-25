@@ -50,6 +50,7 @@ import { SCXMLStateNode } from './nodes/scxml-state-node';
 import { StateActionsPanel } from '@/components/ui/state-actions-panel';
 import { TransitionPanel, type TransitionApplyArgs } from './transition-panel';
 import { useIsDark } from '@/lib/theme/use-is-dark';
+import { isTimeEventName, formatAfterSyntax } from '@/lib/utils/time-transition';
 
 // ==================== TYPES & INTERFACES ====================
 interface VisualDiagramProps {
@@ -681,7 +682,29 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
                 .getVisualMetadataManager()
                 .extractAllVisualMetadata(scxmlDoc);
 
-              const updatedSCXML = parserRef.current.serialize(scxmlDoc, true);
+              let updatedSCXML = parserRef.current.serialize(scxmlDoc, true);
+
+              // Clean up send/cancel actions on the source state for deleted _t_ time-transition edges
+              for (const change of deleteChanges) {
+                const deletedEdge = edges.find((e) => e.id === change.id);
+                if (!deletedEdge?.data?.event || !isTimeEventName(deletedEdge.data.event)) continue;
+
+                const eventName = deletedEdge.data.event as string;
+                const sourceNode = nodes.find((n) => n.id === deletedEdge.source);
+                if (!sourceNode) continue;
+
+                const entryActions: string[] = sourceNode.data.entryActions ?? [];
+                const exitActions: string[] = sourceNode.data.exitActions ?? [];
+                const newEntry = entryActions.filter((a) => !a.startsWith(`send|${eventName}|`));
+                const newExit = exitActions.filter((a) => a !== `cancel|${eventName}`);
+
+                if (newEntry.length !== entryActions.length || newExit.length !== exitActions.length) {
+                  const { UpdateActionsCommand } = require('@/lib/commands');
+                  const result = new UpdateActionsCommand(deletedEdge.source, newEntry, newExit).execute(updatedSCXML);
+                  if (result.success) updatedSCXML = result.newContent;
+                }
+              }
+
               onSCXMLChange(updatedSCXML, 'structure');
               setSelectedTransitions(new Set());
               setSelectedEdgeForEdit(null);
@@ -1612,8 +1635,24 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
               };
             }
 
+            // For time-transition edges, reconstruct the "after X" display string
+            // from the source node's send action so the label shows "after 2s" not the raw event name
+            const edgeEventName = edge.data?.event;
+            const displayEvent = (() => {
+              if (!edgeEventName || !isTimeEventName(edgeEventName)) return undefined;
+              const sourceNode = nodes.find((n) => n.id === edge.source);
+              const sendAction = (sourceNode?.data.entryActions ?? []).find((a: string) =>
+                a.startsWith(`send|${edgeEventName}|`)
+              );
+              if (!sendAction) return undefined;
+              const parts = sendAction.split('|');
+              const dt = (parts[2] as 'delay' | 'delayexpr' | undefined) ?? 'delay';
+              const dv = parts.slice(3).join('|');
+              return formatAfterSyntax(dt, dv);
+            })();
+
             const fullLabel = [
-              edge.data?.event,
+              displayEvent ?? edge.data?.event,
               edge.data?.condition,
               edge.data?.actions?.length > 0
                 ? `/ ${edge.data.actions.length} action${edge.data.actions.length > 1 ? 's' : ''}`
@@ -1629,6 +1668,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
               data: {
                 ...edge.data,
                 fullLabel,
+                displayEvent,
                 offset: pathOptions.offset,
                 labelOffsetY: pathOptions.labelOffsetY,
                 onWaypointDrag: handleWaypointDrag,
