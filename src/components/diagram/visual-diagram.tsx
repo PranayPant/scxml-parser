@@ -50,6 +50,7 @@ import { SCXMLStateNode } from './nodes/scxml-state-node';
 import { StateActionsPanel } from '@/components/ui/state-actions-panel';
 import { TransitionPanel, type TransitionApplyArgs } from './transition-panel';
 import { useIsDark } from '@/lib/theme/use-is-dark';
+import { usePanelStore } from '@/stores/panel-store';
 import { isTimeEventName, formatAfterSyntax } from '@/lib/utils/time-transition';
 
 // ==================== TYPES & INTERFACES ====================
@@ -189,6 +190,8 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
     x: number;
     y: number;
   } | null>(null);
+  const { activePanel, setActivePanel } = usePanelStore();
+
   const [selectedEdgeForEdit, setSelectedEdgeForEdit] = React.useState<{
     id: string;
     source: string;
@@ -929,6 +932,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
 
                   setSelectedEdgeForEdit(null);
                   setSelectedTransitions(new Set());
+                  setActivePanel('stateActions');
                   setSelectedStateForActions({
                     id: stateId,
                     entryActions: parseActions(node.data.entryActions || []),
@@ -1442,6 +1446,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
           newTransitions.add(edge.id);
           setSelectedStateForActions(null);
           setActiveStates(new Set());
+          setActivePanel('transition');
           setSelectedEdgeForEdit({
             id: edge.id,
             source: edge.source,
@@ -2291,6 +2296,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
               setSelectedTransitions(new Set());
               setSelectedStateForActions(null);
               setActiveStates(new Set());
+              setActivePanel(null);
             }}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
@@ -2385,7 +2391,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
       </div>
 
       {/* Transition panel */}
-      {selectedEdgeForEdit && (
+      {selectedEdgeForEdit && activePanel === 'transition' && (
         <TransitionPanel
           key={selectedEdgeForEdit.id}
           edgeId={selectedEdgeForEdit.id}
@@ -2401,16 +2407,18 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
           onClose={() => {
             setSelectedEdgeForEdit(null);
             setSelectedTransitions(new Set());
+            setActivePanel(null);
           }}
         />
       )}
 
       {/* State Actions side panel */}
       <StateActionsPanel
-        isVisible={selectedStateForActions !== null}
+        isVisible={selectedStateForActions !== null && activePanel === 'stateActions'}
         onClose={() => {
           setSelectedStateForActions(null);
           setActiveStates(new Set());
+          setActivePanel(null);
         }}
         stateId={selectedStateForActions?.id ?? ''}
         entryActions={selectedStateForActions?.entryActions ?? []}

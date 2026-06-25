@@ -34,10 +34,19 @@ export function ConfigPanel({ isVisible, onClose, scxmlContent, onAddField, onFi
       const res = await fetch('/scxml-editor/config');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data: { name: string; override: string | null }[] = await res.json();
-      const overrideMap = Object.fromEntries(data.map(d => [d.name, d.override ?? '']));
-      setEntries(fields.map(f => ({ field: f, override: overrideMap[f.name] ?? '' })));
+      const serverOverrideMap = Object.fromEntries(data.map(d => [d.name, d.override ?? '']));
+      setEntries(prev => {
+        const localOverrideMap = Object.fromEntries(prev.map(e => [e.field.name, e.override]));
+        return fields.map(f => ({
+          field: f,
+          override: localOverrideMap[f.name] ?? serverOverrideMap[f.name] ?? '',
+        }));
+      });
     } catch {
-      setEntries(fields.map(f => ({ field: f, override: '' })));
+      setEntries(prev => {
+        const localOverrideMap = Object.fromEntries(prev.map(e => [e.field.name, e.override]));
+        return fields.map(f => ({ field: f, override: localOverrideMap[f.name] ?? '' }));
+      });
     }
   }, []);
 
@@ -212,3 +221,4 @@ export function ConfigPanel({ isVisible, onClose, scxmlContent, onAddField, onFi
     </Panel>
   );
 }
+ 

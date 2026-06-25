@@ -111,6 +111,36 @@ export function updateConfigFieldExpr(xmlContent: string, name: string, newValue
   return updateBuilder.build(doc);
 }
 
+export function deleteConfigField(xmlContent: string, name: string): string {
+  let doc: unknown[];
+  try {
+    doc = updateParser.parse(xmlContent) as unknown[];
+  } catch {
+    return xmlContent;
+  }
+
+  const targetId = `conf_${name}`;
+
+  function walk(nodes: unknown[]): void {
+    for (let i = nodes.length - 1; i >= 0; i--) {
+      const node = nodes[i];
+      if (!node || typeof node !== 'object') continue;
+      const nodeObj = node as Record<string, unknown>;
+      if ('data' in nodeObj) {
+        const attrs = nodeObj[':@'] as Record<string, string> | undefined;
+        if (attrs?.['@_id'] === targetId) nodes.splice(i, 1);
+      } else {
+        for (const [key, val] of Object.entries(nodeObj)) {
+          if (key !== ':@' && Array.isArray(val)) walk(val);
+        }
+      }
+    }
+  }
+
+  walk(doc);
+  return updateBuilder.build(doc);
+}
+
 const SCXML_EXPR_ATTRS = new Set(['@_cond', '@_expr', '@_location', '@_namelist', '@_targetexpr', '@_srcexpr']);
 
 /**

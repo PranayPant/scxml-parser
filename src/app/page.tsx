@@ -7,9 +7,10 @@ import { TwoTabLayout, type TabType } from '@/components/layout';
 import { VisualDiagram } from '@/components/diagram';
 import { ChannelMappingPanel, ConfigPanel, ErrorBoundary, EventsPanel, ValidationPanel, UndoRedoControls } from '@/components/ui';
 import { SCXMLParser, SCXMLValidator } from '@/lib';
-import { updateConfigFieldExpr } from '@/lib/utils/datamodel-extractor';
+import { updateConfigFieldExpr, deleteConfigField } from '@/lib/utils/datamodel-extractor';
 import { hasVisualMetadata } from '@/lib/utils';
 import { useEditorStore } from '@/stores/editor-store';
+import { usePanelStore } from '@/stores/panel-store';
 import { HistoryManager } from '@/lib/history/history-manager';
 import type { FileInfo, ValidationError } from '@/types/common';
 import type { ActionType } from '@/types/history';
@@ -27,11 +28,9 @@ export default function Home() {
     errors,
     fileInfo,
     isDirty,
-    isValidationPanelVisible,
     setContent,
     setErrors,
     setFileInfo,
-    setValidationPanelVisible,
     navigateToRoot,
   } = useEditorStore();
 
@@ -41,6 +40,8 @@ export default function Home() {
   const { markReady, onReady, registerCommand, showFeedback, setRequestedValidationTab, dismissHostError, clearHostErrors } = useHostAPIStore();
   const hostErrors = useHostAPIStore(state => state.hostErrors);
   const requestedValidationTab = useHostAPIStore(state => state.requestedValidationTab);
+
+  const { activePanel, setActivePanel, togglePanel } = usePanelStore();
 
   const editorRef = useRef<XMLEditorRef>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -56,18 +57,14 @@ export default function Home() {
   useEffect(() => {
     if (requestedValidationTab !== null) {
       setValidationPanelTab(requestedValidationTab);
-      setValidationPanelVisible(true);
-      setConfigPanelVisible(false);
+      setActivePanel('validation');
       setRequestedValidationTab(null);
     }
-  }, [requestedValidationTab, setRequestedValidationTab, setValidationPanelVisible]);
+  }, [requestedValidationTab, setRequestedValidationTab, setActivePanel]);
 
   const [isInitialLoading, setIsInitialLoading] = React.useState(true);
   const [isUpdatingFromHistory, setIsUpdatingFromHistory] = React.useState(false);
   const [currentHistoryActionType, setCurrentHistoryActionType] = React.useState<ActionType | undefined>(undefined);
-  const [isConfigPanelVisible, setConfigPanelVisible] = React.useState(false);
-  const [isChannelMappingPanelVisible, setChannelMappingPanelVisible] = React.useState(false);
-  const [isEventsPanelVisible, setEventsPanelVisible] = React.useState(false);
   const [validationPanelTab, setValidationPanelTab] = React.useState<'validation' | 'host-alerts'>('validation');
   const [isMoreMenuOpen, setIsMoreMenuOpen] = React.useState(false);
   const moreMenuRef = React.useRef<HTMLDivElement>(null);
@@ -147,10 +144,9 @@ export default function Home() {
         severity: 'error' as const,
       }));
       setErrors(errors);
-      setValidationPanelVisible(true);
-      setConfigPanelVisible(false);
+      setActivePanel('validation');
     },
-    [setErrors, setValidationPanelVisible]
+    [setErrors, setActivePanel]
   );
 
   const handleContentChange = useCallback(
@@ -248,8 +244,7 @@ export default function Home() {
             },
           ];
           setErrors(errors);
-          setValidationPanelVisible(true);
-          setConfigPanelVisible(false);
+          setActivePanel('validation');
           return;
         }
 
@@ -261,8 +256,7 @@ export default function Home() {
             },
           ];
           setErrors(errors);
-          setValidationPanelVisible(true);
-          setConfigPanelVisible(false);
+          setActivePanel('validation');
           return;
         }
 
@@ -292,8 +286,7 @@ export default function Home() {
             },
           ];
           setErrors(errors);
-          setValidationPanelVisible(true);
-          setConfigPanelVisible(false);
+          setActivePanel('validation');
         };
 
         reader.readAsText(file);
@@ -302,7 +295,7 @@ export default function Home() {
         event.target.value = '';
       }
     },
-    [setContent, setFileInfo, setErrors, setValidationPanelVisible, historyManager]
+    [setContent, setFileInfo, setErrors, setActivePanel, historyManager]
   );
 
   useEffect(() => {
@@ -322,22 +315,13 @@ export default function Home() {
       registerCommand,
       showFeedback,
       setChannels: (channels: ChannelInfo[]) => useHostAPIStore.getState().setChannels(channels),
-      toggleConfigPanel: () => setConfigPanelVisible(v => {
-        if (!v) { setValidationPanelVisible(false); setChannelMappingPanelVisible(false); setEventsPanelVisible(false); }
-        return !v;
-      }),
+      toggleConfigPanel: () => togglePanel('config'),
       getChannelMappings: () => channelMappingsRef.current,
       setChannelMappings: (mappings) => useHostAPIStore.getState().setChannelMappings(mappings),
-      toggleChannelMappingPanel: () => setChannelMappingPanelVisible(v => {
-        if (!v) { setValidationPanelVisible(false); setConfigPanelVisible(false); setEventsPanelVisible(false); }
-        return !v;
-      }),
+      toggleChannelMappingPanel: () => togglePanel('channelMapping'),
       setEvents: (events: EventEntry[]) => useHostAPIStore.getState().setEvents(events.map(e => ({ ...e, type: e.type ?? EVENT_FALLBACK_VALUE }))),
       getEvents: () => eventsRef.current,
-      toggleEventsPanel: () => setEventsPanelVisible(v => {
-        if (!v) { setValidationPanelVisible(false); setConfigPanelVisible(false); setChannelMappingPanelVisible(false); }
-        return !v;
-      }),
+      toggleEventsPanel: () => togglePanel('events'),
       setActiveTab: (tab) => useHostAPIStore.getState().setRequestedTab(tab),
       showErrors: (errors) => useHostAPIStore.getState().showErrors(errors),
       clearErrors: () => useHostAPIStore.getState().clearHostErrors(),
@@ -433,8 +417,8 @@ export default function Home() {
   const renderSidePanels = () => (
     <>
       <ConfigPanel
-        isVisible={isConfigPanelVisible}
-        onClose={() => setConfigPanelVisible(false)}
+        isVisible={activePanel === 'config'}
+        onClose={() => setActivePanel(null)}
         scxmlContent={content}
         onEntriesChange={(values) => { configValuesRef.current = values; }}
         onFieldChange={(name, newValue) => {
@@ -449,13 +433,13 @@ export default function Home() {
         }}
       />
       <ChannelMappingPanel
-        isVisible={isChannelMappingPanelVisible}
-        onClose={() => setChannelMappingPanelVisible(false)}
+        isVisible={activePanel === 'channelMapping'}
+        onClose={() => setActivePanel(null)}
         scxmlContent={content}
       />
       <EventsPanel
-        isVisible={isEventsPanelVisible}
-        onClose={() => setEventsPanelVisible(false)}
+        isVisible={activePanel === 'events'}
+        onClose={() => setActivePanel(null)}
       />
     </>
   );
@@ -477,9 +461,9 @@ export default function Home() {
         <ValidationPanel
           errors={errors}
           hostErrors={hostErrors}
-          isVisible={isValidationPanelVisible}
+          isVisible={activePanel === 'validation'}
           activeTab={validationPanelTab}
-          onClose={() => { setValidationPanelVisible(false); setValidationPanelTab('validation'); }}
+          onClose={() => { setActivePanel(null); setValidationPanelTab('validation'); }}
           onTabChange={setValidationPanelTab}
           onErrorClick={handleErrorClick}
           onDismissHostError={dismissHostError}
@@ -534,13 +518,9 @@ export default function Home() {
       <button
         onClick={() => {
           if (activeTab === 'visual') setActiveTab('code');
-          const opening = !isValidationPanelVisible;
-          setValidationPanelVisible(opening);
-          if (opening) {
-            setConfigPanelVisible(false);
-          } else {
-            setValidationPanelTab('validation');
-          }
+          const opening = activePanel !== 'validation';
+          setActivePanel(opening ? 'validation' : null);
+          if (!opening) setValidationPanelTab('validation');
         }}
         title={
           totalErrors === 0 && totalWarnings === 0

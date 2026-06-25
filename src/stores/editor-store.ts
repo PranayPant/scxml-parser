@@ -11,7 +11,6 @@ export interface HierarchyState {
 
 interface EditorStore extends EditorState {
   fileInfo: FileInfo | null;
-  isValidationPanelVisible: boolean;
 
   // Hierarchy navigation state
   hierarchyState: HierarchyState;
@@ -20,7 +19,6 @@ interface EditorStore extends EditorState {
   setContent: (content: string) => void;
   setErrors: (errors: ValidationError[]) => void;
   setFileInfo: (fileInfo: FileInfo | null) => void;
-  setValidationPanelVisible: (visible: boolean) => void;
   markDirty: () => void;
   markClean: () => void;
   reset: () => void;
@@ -48,7 +46,6 @@ const initialHierarchyState: HierarchyState = {
 export const useEditorStore = create<EditorStore>((set, get) => ({
   ...initialState,
   fileInfo: null,
-  isValidationPanelVisible: false,
   hierarchyState: initialHierarchyState,
 
   setContent: (content: string) => {
@@ -71,10 +68,6 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     });
   },
 
-  setValidationPanelVisible: (visible: boolean) => {
-    set({ isValidationPanelVisible: visible });
-  },
-
   markDirty: () => {
     set({ isDirty: true });
   },
@@ -87,7 +80,6 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     set({
       ...initialState,
       fileInfo: null,
-      isValidationPanelVisible: false,
       hierarchyState: initialHierarchyState
     });
   },
