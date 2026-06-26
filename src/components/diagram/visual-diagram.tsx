@@ -2180,7 +2180,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
   // Handle keyboard events for edge deletion
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Delete' && selectedTransitions.size > 0) {
+      if (event.key === 'Delete' && !activePanel && selectedTransitions.size > 0) {
         event.preventDefault();
         const edgeId = Array.from(selectedTransitions)[0];
         handleEdgesChange([{ id: edgeId, type: 'remove' }]);
