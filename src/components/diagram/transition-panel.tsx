@@ -12,7 +12,7 @@ import {
   generateTimeEventName,
 } from '@/lib/utils/time-transition';
 
-type Suggestion = { label: string; kind: 'channel' | 'event' | 'variable' | 'new-channel' };
+type Suggestion = { label: string; kind: 'channel' | 'event' | 'variable' | 'new-channel' | 'mapped-channel' | 'operator' };
 
 const OPERATORS = ['==', '!=', '>=', '<=', '>', '<', '&&', '||'];
 const OPERATOR_SET = new Set([...OPERATORS, '!']);
@@ -107,16 +107,18 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
   }, []);
 
   const channels = useHostAPIStore((state) => state.channels);
+  const channelMappings = useHostAPIStore((state) => state.channelMappings);
   const events = useHostAPIStore((state) => state.events);
 
   // ── main search suggestions ──
   const suggestions: Suggestion[] = React.useMemo(() => {
     const vars = extractDatamodelVariables(scxmlContent);
     const channelSet = new Set(channels.map((c) => c.name));
+    const scxmlRefSet = new Set(channelMappings.map((m) => m.scxmlRef));
     const eventNames = events.map((e) => e.name);
     const eventSet = new Set(eventNames);
     const kindOf = (item: string): Suggestion['kind'] =>
-      channelSet.has(item) ? 'channel' : eventSet.has(item) ? 'event' : 'variable';
+      channelSet.has(item) ? 'channel' : scxmlRefSet.has(item) ? 'mapped-channel' : eventSet.has(item) ? 'event' : 'variable';
 
     // Suppress suggestions when user is typing an "after X" time transition
     if (rawValue.trimStart().startsWith('after')) return [];
@@ -129,27 +131,27 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
     }
 
     if (selectionMode === 'undecided') {
-      const allNames = Array.from(new Set([...Array.from(vars), ...channels.map((c) => c.name), ...eventNames]));
+      const allNames = Array.from(new Set([...Array.from(vars), ...channels.map((c) => c.name), ...channelMappings.map((m) => m.scxmlRef), ...eventNames]));
       const filtered = allNames.filter((i) => i.toLowerCase().includes(rawValue.toLowerCase()));
       if (filtered.length === 0 && rawValue.startsWith('this_')) return [{ label: rawValue, kind: 'new-channel' }];
       return filtered.map((i) => ({ label: i, kind: kindOf(i) }));
     }
 
     // cond mode
-    const allNames = Array.from(new Set([...Array.from(vars), ...channels.map((c) => c.name)]));
-    const condKindOf = (i: string): Suggestion['kind'] => channelSet.has(i) ? 'channel' : 'variable';
+    const allNames = Array.from(new Set([...Array.from(vars), ...channels.map((c) => c.name), ...channelMappings.map((m) => m.scxmlRef)]));
+    const condKindOf = (i: string): Suggestion['kind'] => channelSet.has(i) ? 'channel' : scxmlRefSet.has(i) ? 'mapped-channel' : 'variable';
     const endsWithSpace = rawValue.endsWith(' ');
     const tokens = rawValue.trimEnd().split(/\s+/);
     const lastToken = endsWithSpace ? '' : (tokens[tokens.length - 1] ?? '');
     const prevToken = endsWithSpace ? (tokens[tokens.length - 1] ?? '') : (tokens[tokens.length - 2] ?? '');
     if (endsWithSpace) {
       if (OPERATOR_SET.has(prevToken)) return allNames.map((i) => ({ label: i, kind: condKindOf(i) }));
-      return OPERATORS.map((op) => ({ label: op, kind: 'variable' as const }));
+      return OPERATORS.map((op) => ({ label: op, kind: 'operator' as const }));
     }
     const filtered = allNames.filter((i) => i.toLowerCase().includes(lastToken.toLowerCase()));
     if (filtered.length === 0 && lastToken.startsWith('this_')) return [{ label: lastToken, kind: 'new-channel' }];
     return filtered.map((i) => ({ label: i, kind: condKindOf(i) }));
-  }, [rawValue, channels, events, scxmlContent, selectionMode]);
+  }, [rawValue, channels, channelMappings, events, scxmlContent, selectionMode]);
 
   const buildCondValue = (label: string) => {
     const endsWithSpace = rawValue.endsWith(' ');
@@ -251,6 +253,13 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
   const showDropdown = showSuggestions || hintMessage !== null;
 
   const renderBadge = (s: Suggestion) => {
+    if (s.kind === 'mapped-channel') {
+      const mappedChannelName = channelMappings.find((m) => m.scxmlRef === s.label)?.mappedChannel;
+      const type = channels.find((c) => c.name === mappedChannelName)?.type;
+      return type ? (
+        <span className='text-xs px-1 py-0.5 rounded font-mono text-black' style={{ backgroundColor: BADGE_COLORS[type] }}>{type}</span>
+      ) : null;
+    }
     if (s.kind !== 'channel' && s.kind !== 'event' && s.kind !== 'variable') return null;
     const type = s.kind === 'variable'
       ? getVariableType(s.label)
@@ -309,6 +318,9 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
                   {s.kind === 'new-channel' && <span className='text-xs text-amber-600'>(new channel)</span>}
                   {renderBadge(s)}
                   <span>{s.label}</span>
+                  {s.kind === 'mapped-channel' && (
+                    <span className='text-xs text-muted ml-1'>→ {channelMappings.find((m) => m.scxmlRef === s.label)?.mappedChannel}</span>
+                  )}
                 </div>
               ))}
             </div>
