@@ -96,46 +96,63 @@ export async function applyDefaultELKLayout(
     }
   });
 
-  // Step 2: Run ELK force-directed layout on ALL nodes
-  // ELK will calculate good positions considering the graph structure
-  const positions = await elkLayoutService.computeLayout(nodes, edges, {
-    algorithm: 'layered', // Force-directed by default for organic layouts
-    direction: 'DOWN',
-    edgeRouting: 'ORTHOGONAL',
-    spacing: {
-      nodeNode: 40, // Reduced: Space between nodes
-      edgeNode: 20, // Reduced: Space between edges and nodes
-      edgeEdge: 10, // Reduced: Space between edges
-    },
-    padding: {
-      top: 20,
-      right: 20,
-      bottom: 20,
-      left: 20,
-    },
-    hierarchical: true, // Respect parent-child relationships
-    aspectRatio: 3, // Prefer wider layouts (16:10 ratio) for more compact vertical spacing
-  });
+  const ELK_OPTIONS = {
+    algorithm: 'layered' as const,
+    direction: 'DOWN' as const,
+    edgeRouting: 'ORTHOGONAL' as const,
+    spacing: { nodeNode: 40, edgeNode: 20, edgeEdge: 10 },
+    padding: { top: 20, right: 20, bottom: 20, left: 20 },
+    // Flat per-level layout — compound nodes are treated as leaves with their
+    // visual size, preventing ELK from expanding them to fit children and
+    // scattering siblings far apart.
+    hierarchical: false,
+    aspectRatio: 3,
+  };
 
-  // Step 3: Apply positions - viz:xywh takes ABSOLUTE priority over ELK
+  // Step 2: Run ELK per hierarchy level so each compound node is sized by its
+  // own visual dimensions, not by the space its children need.
+  //
+  // Collect all distinct parentId values (null = root level).
+  const levels = new Set<string | null>([null]);
+  nodes.forEach((n) => { if (n.parentId) levels.add(n.parentId); });
+
+  const allPositions = new Map<string, { x: number; y: number }>();
+
+  for (const parentId of levels) {
+    const levelNodes = nodes.filter((n) =>
+      parentId === null ? !n.parentId : n.parentId === parentId
+    );
+    if (levelNodes.length === 0) continue;
+
+    const levelNodeIds = new Set(levelNodes.map((n) => n.id));
+    // Only pass edges where both endpoints are visible at this level.
+    const levelEdges = edges.filter(
+      (e) => levelNodeIds.has(e.source) && levelNodeIds.has(e.target)
+    );
+
+    const levelPositions = await elkLayoutService.computeLayout(
+      levelNodes,
+      levelEdges,
+      ELK_OPTIONS
+    );
+
+    levelPositions.forEach((pos, id) => {
+      allPositions.set(id, { x: pos.x, y: pos.y });
+    });
+  }
+
+  // Step 3: Apply positions — viz:xywh takes ABSOLUTE priority over ELK
   nodes.forEach((node) => {
     const vizPosition = nodesWithVizPositions.get(node.id);
 
     if (vizPosition) {
-      // Use viz:xywh position (highest priority)
-      // This preserves user-defined positions from SCXML
       node.position = { x: vizPosition.x, y: vizPosition.y };
     } else {
-      // Use ELK calculated position for nodes without explicit positions
-      const elkPos = positions.get(node.id);
+      const elkPos = allPositions.get(node.id);
       if (elkPos) {
         node.position = { x: elkPos.x, y: elkPos.y };
       }
-      // If no ELK position (shouldn't happen), keep existing position
     }
-
-    // Note: Width/height are now properly handled from viz:xywh
-    // They are applied in createStateNode() and createParallelNode()
   });
 }
 

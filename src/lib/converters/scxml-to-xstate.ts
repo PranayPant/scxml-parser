@@ -181,11 +181,8 @@ export class SCXMLToXStateConverter {
       getElements
     );
 
-    // Apply ELK force-directed layout with viz:xywh priority
-    await applyDefaultELKLayout(allNodes, edges);
-
-    // Calculate dimensions for nodes without viz:xywh width/height
-    // Track whether any nodes needed initialization
+    // Calculate dimensions for nodes without viz:xywh width/height BEFORE ELK runs,
+    // so ELK receives correct sizes and computes accurate non-overlapping positions.
     let needsInitialization = false;
 
     allNodes.forEach((node) => {
@@ -194,15 +191,68 @@ export class SCXMLToXStateConverter {
         nodeData.width !== undefined && nodeData.height !== undefined;
 
       if (!hasVizDimensions) {
-        // Calculate dimensions using the new simple logic
         const dims = nodeDimensionCalculator.calculateDimensionsFromNode(node);
 
-        // Store calculated dimensions
         nodeData.width = dims.width;
         nodeData.height = dims.height;
 
-        // Mark that this node needs initialization
+        // Also write to node.style so the ELK builder finds them via node.style?.width
+        (node as any).style = {
+          ...(node as any).style,
+          width: dims.width,
+          height: dims.height,
+        };
+
         needsInitialization = true;
+      }
+    });
+
+    // Apply ELK force-directed layout with viz:xywh priority
+    await applyDefaultELKLayout(allNodes, edges);
+
+    // Compute smart source/target handles for edges that have no saved viz:sourceHandle /
+    // viz:targetHandle. Now that node positions are finalised we can pick the side of each
+    // node that faces the other node (right/left/top/bottom) instead of always defaulting
+    // to bottom→top.
+    const nodePositionMap = new Map(allNodes.map((n) => [n.id, n]));
+    edges.forEach((edge) => {
+      const isSelfLoop = edge.source === edge.target;
+      if (isSelfLoop) return; // keep default handles for self-loops
+
+      const srcNode = nodePositionMap.get(edge.source);
+      const tgtNode = nodePositionMap.get(edge.target);
+      if (!srcNode || !tgtNode) return;
+
+      const srcW = (srcNode.data as any).width || 160;
+      const srcH = (srcNode.data as any).height || 80;
+      const tgtW = (tgtNode.data as any).width || 160;
+      const tgtH = (tgtNode.data as any).height || 80;
+
+      const srcCX = srcNode.position.x + srcW / 2;
+      const srcCY = srcNode.position.y + srcH / 2;
+      const tgtCX = tgtNode.position.x + tgtW / 2;
+      const tgtCY = tgtNode.position.y + tgtH / 2;
+
+      const dx = tgtCX - srcCX;
+      const dy = tgtCY - srcCY;
+
+      let smartSource: string;
+      let smartTarget: string;
+      if (Math.abs(dx) >= Math.abs(dy)) {
+        smartSource = dx >= 0 ? 'right' : 'left';
+        smartTarget = dx >= 0 ? 'left' : 'right';
+      } else {
+        smartSource = dy >= 0 ? 'bottom' : 'top';
+        smartTarget = dy >= 0 ? 'top' : 'bottom';
+      }
+
+      if (!edge.data?.hasExplicitSourceHandle) {
+        edge.sourceHandle = smartSource;
+        edge.data.sourceHandle = smartSource;
+      }
+      if (!edge.data?.hasExplicitTargetHandle) {
+        edge.targetHandle = smartTarget;
+        edge.data.targetHandle = smartTarget;
       }
     });
 

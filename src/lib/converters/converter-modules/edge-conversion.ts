@@ -161,7 +161,10 @@ export function convertTransitionToEdge(
   const sourceHandleAttr = getAttribute(transition, 'viz:sourceHandle');
   const targetHandleAttr = getAttribute(transition, 'viz:targetHandle');
 
-  // Set intelligent defaults: outgoing from bottom, incoming to top
+  // Track whether handles were explicitly saved — if not, they'll be computed
+  // from node positions after layout (see createHierarchicalLayout).
+  const hasExplicitSourceHandle = sourceHandleAttr !== undefined;
+  const hasExplicitTargetHandle = targetHandleAttr !== undefined;
   const sourceHandle = sourceHandleAttr || 'bottom';
   const targetHandle = targetHandleAttr || 'top';
 
@@ -182,6 +185,8 @@ export function convertTransitionToEdge(
       waypoints, // Add waypoints to edge data
       sourceHandle: sourceHandle,
       targetHandle: targetHandle,
+      hasExplicitSourceHandle,
+      hasExplicitTargetHandle,
     },
     // Add styling for better visibility
     animated: condition ? false : true, // Animate non-conditional transitions
