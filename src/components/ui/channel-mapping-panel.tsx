@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Trash2 } from 'lucide-react';
 import { extractDatamodelVariables, extractUnresolvedChannelRefs } from '@/lib/utils/datamodel-extractor';
 import { useHostAPIStore } from '@/stores/host-api-store';
 import { SearchableSelect } from '@/components/ui/searchable-select';
-import { Panel } from '@/components/ui/primitives';
+import { Panel, inputClass, FormActions, FooterAddButton, PanelEmptyState } from '@/components/ui/primitives';
 
 interface ChannelMappingPanelProps {
   isVisible: boolean;
@@ -17,6 +18,10 @@ export function ChannelMappingPanel({ isVisible, onClose, scxmlContent }: Channe
   const channelMappings = useHostAPIStore(state => state.channelMappings);
   const updateChannelMapping = useHostAPIStore(state => state.updateChannelMapping);
 
+  const [isAdding, setIsAdding] = useState(false);
+  const [newRef, setNewRef] = useState('');
+  const [newChannel, setNewChannel] = useState('');
+
   const channelNames = useMemo(() => channels.map(c => c.name), [channels]);
 
   const unresolvedRefs = useMemo(() => extractUnresolvedChannelRefs(scxmlContent, channelNames), [scxmlContent, channelNames]);
@@ -26,15 +31,63 @@ export function ChannelMappingPanel({ isVisible, onClose, scxmlContent }: Channe
     return Array.from(new Set([...channelNames, ...datamodelVars])).sort();
   }, [scxmlContent, channelNames]);
 
-  const getMapped = (scxmlRef: string) =>
-    channelMappings.find(m => m.scxmlRef === scxmlRef)?.mappedChannel ?? '';
+  const manualRows = useMemo(
+    () => channelMappings
+      .filter(m => !unresolvedRefs.includes(m.scxmlRef))
+      .sort((a, b) => a.scxmlRef.localeCompare(b.scxmlRef)),
+    [channelMappings, unresolvedRefs],
+  );
+
+  const existingRefs = useMemo(
+    () => new Set([...unresolvedRefs, ...channelMappings.map(m => m.scxmlRef)]),
+    [unresolvedRefs, channelMappings],
+  );
+
+  const mappedByRef = useMemo(
+    () => Object.fromEntries(channelMappings.map(m => [m.scxmlRef, m.mappedChannel])),
+    [channelMappings],
+  );
+
+  const handleConfirmAdd = () => {
+    const trimmed = newRef.trim();
+    if (!trimmed || existingRefs.has(trimmed) || !newChannel) return;
+    updateChannelMapping(trimmed, newChannel);
+    setNewRef('');
+    setNewChannel('');
+    setIsAdding(false);
+  };
+
+  const handleCancelAdd = () => {
+    setNewRef('');
+    setNewChannel('');
+    setIsAdding(false);
+  };
+
+  useEffect(() => {
+    if (!isVisible) {
+      setNewRef('');
+      setNewChannel('');
+      setIsAdding(false);
+    }
+  }, [isVisible]);
 
   if (!isVisible) return null;
 
+  const isEmpty = unresolvedRefs.length === 0 && manualRows.length === 0;
+
   return (
-    <Panel title='Channel Mapping' onClose={onClose}>
-      {unresolvedRefs.length === 0 ? (
-        <div className='p-4 text-xs text-muted space-y-2'>
+    <Panel
+      title='Channel Mapping'
+      onClose={onClose}
+      widthClass='w-[380px]'
+      footer={
+        !isAdding ? (
+          <FooterAddButton onClick={() => setIsAdding(true)}>Add mapping</FooterAddButton>
+        ) : undefined
+      }
+    >
+      {isEmpty && !isAdding ? (
+        <PanelEmptyState>
           <p>No unresolved channel references found in this SCXML.</p>
           <p>
             Channel references are variable names used in conditions or expressions that are not
@@ -43,34 +96,104 @@ export function ChannelMappingPanel({ isVisible, onClose, scxmlContent }: Channe
             the <code className='bg-muted px-1 rounded'>this_</code> or{' '}
             <code className='bg-muted px-1 rounded'>conf_</code> prefixes.
           </p>
-        </div>
+        </PanelEmptyState>
       ) : (
-        <table className='w-full text-xs table-fixed'>
-          <thead>
-            <tr className='bg-muted border-b border-default'>
-              <th className='text-left px-3 py-2 text-muted font-medium w-2/5'>SCXML Ref</th>
-              <th className='text-left px-3 py-2 text-muted font-medium w-3/5'>Physical Channel</th>
-            </tr>
-          </thead>
-          <tbody>
-            {unresolvedRefs.map(ref => (
-              <tr key={ref} className='border-b border-default hover:bg-muted'>
-                <td className='px-3 py-2 font-mono text-default truncate max-w-0' title={ref}>{ref}</td>
-                <td className='px-3 py-2'>
-                  {availableOptions.length === 0 ? (
-                    <span className='text-dimmed italic'>No channels available</span>
-                  ) : (
+        <ul className='divide-y divide-[var(--ui-border)]'>
+          {unresolvedRefs.map(ref => (
+            <li key={ref} className='px-3 py-2 hover:bg-muted'>
+              <div className='flex items-center gap-2'>
+                <span className='font-mono text-default text-xs truncate flex-1 min-w-0' title={ref}>{ref}</span>
+                {availableOptions.length === 0 ? (
+                  <span className='text-dimmed italic text-xs shrink-0'>No channels available</span>
+                ) : (
+                  <div className='flex-1 min-w-0'>
                     <SearchableSelect
-                      value={getMapped(ref)}
+                      value={mappedByRef[ref] ?? ''}
                       options={availableOptions}
                       onChange={v => updateChannelMapping(ref, v)}
                     />
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  </div>
+                )}
+              </div>
+            </li>
+          ))}
+
+          {manualRows.map(({ scxmlRef }) => (
+            <li key={scxmlRef} className='px-3 py-2 hover:bg-muted'>
+              <div className='flex items-center gap-2'>
+                <input
+                  type='text'
+                  defaultValue={scxmlRef}
+                  onBlur={e => {
+                    const next = e.target.value.trim();
+                    if (next && next !== scxmlRef) {
+                      updateChannelMapping(next, mappedByRef[scxmlRef] ?? '');
+                      updateChannelMapping(scxmlRef, '');
+                    } else {
+                      e.target.value = scxmlRef;
+                    }
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') e.currentTarget.blur();
+                    if (e.key === 'Escape') { e.currentTarget.value = scxmlRef; e.currentTarget.blur(); }
+                  }}
+                  className={`${inputClass} flex-1 min-w-0 font-mono`}
+                />
+                {availableOptions.length === 0 ? (
+                  <span className='text-dimmed italic text-xs shrink-0'>No channels available</span>
+                ) : (
+                  <div className='flex-1 min-w-0'>
+                    <SearchableSelect
+                      value={mappedByRef[scxmlRef] ?? ''}
+                      options={availableOptions}
+                      onChange={v => updateChannelMapping(scxmlRef, v)}
+                    />
+                  </div>
+                )}
+                <button
+                  onClick={() => updateChannelMapping(scxmlRef, '')}
+                  className='shrink-0 p-1 rounded text-dimmed hover:text-error hover:bg-muted transition-colors'
+                  title='Remove mapping'
+                  aria-label='Remove mapping'
+                >
+                  <Trash2 className='h-3 w-3' />
+                </button>
+              </div>
+            </li>
+          ))}
+
+          {isAdding && (
+            <li className='px-3 py-2 bg-primary-muted'>
+              <div className='flex items-center gap-2 mb-1.5'>
+                <input
+                  autoFocus
+                  type='text'
+                  value={newRef}
+                  onChange={e => setNewRef(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') handleConfirmAdd();
+                    if (e.key === 'Escape') handleCancelAdd();
+                  }}
+                  placeholder='ref_name'
+                  className={`${inputClass} flex-1 min-w-0`}
+                />
+                <div className='flex-1 min-w-0'>
+                  <SearchableSelect
+                    value={newChannel}
+                    options={availableOptions}
+                    onChange={setNewChannel}
+                  />
+                </div>
+              </div>
+              <FormActions
+                onApply={handleConfirmAdd}
+                onDiscard={handleCancelAdd}
+                applyDisabled={!newRef.trim() || existingRefs.has(newRef.trim()) || !newChannel}
+                className='justify-end mt-1.5'
+              />
+            </li>
+          )}
+        </ul>
       )}
     </Panel>
   );

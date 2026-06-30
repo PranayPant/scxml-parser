@@ -461,7 +461,7 @@ export default function Home() {
         />
       </div>
 
-      <div className='w-80'>
+      <div className='shrink-0'>
         <ValidationPanel
           errors={errors}
           hostErrors={hostErrors}

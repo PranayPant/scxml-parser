@@ -1,12 +1,12 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Check, Eye, EyeOff, Plus, Trash2, X } from 'lucide-react';
+import { Eye, EyeOff, Trash2 } from 'lucide-react';
 import { useHostAPIStore } from '@/stores/host-api-store';
 import type { EventEntry } from '@/types/host-api';
 import { SearchableSelect } from './searchable-select';
 import { EVENT_FALLBACK_VALUE } from '@/lib/utils/common-utils';
-import { Panel, inputClass } from '@/components/ui/primitives';
+import { Panel, inputClass, FormActions, FooterAddButton, PanelEmptyState } from '@/components/ui/primitives';
 
 const UNITS = ['V', 'A', 'l/min', '% rh', 'g/m3', 'Hz', 'rpm', 'Vdc', 'Vac', 'ppm', 'Ohm', 'bar', 'mbar', '°C', 's', 'g/day', 'on/off', 'state'];
 
@@ -61,7 +61,7 @@ export function EventsPanel({ isVisible, onClose }: EventsPanelProps) {
     setIsAdding(false);
   };
 
-  const argInputClassExisting = `min-w-0 ${inputClass}`;
+  const argInputClass = `min-w-0 ${inputClass}`;
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') handleConfirmAdd();
@@ -74,36 +74,25 @@ export function EventsPanel({ isVisible, onClose }: EventsPanelProps) {
     <Panel
       title='User Actions'
       onClose={onClose}
+      widthClass='w-[380px]'
       footer={
         !isAdding ? (
           <div className='flex flex-col gap-1.5'>
-            <button
-              onClick={() => setIsAdding('plain')}
-              className='flex items-center gap-1 text-xs px-2 py-1.5 rounded border border-dashed border-default text-muted hover:border-primary hover:text-primary transition-colors'
-            >
-              <Plus className='h-3 w-3' />
-              Add user action
-            </button>
-            <button
-              onClick={() => setIsAdding('arg')}
-              className='flex items-center gap-1 text-xs px-2 py-1.5 rounded border border-dashed border-default text-muted hover:border-primary hover:text-primary transition-colors'
-            >
-              <Plus className='h-3 w-3' />
-              Add user action with argument
-            </button>
+            <FooterAddButton onClick={() => setIsAdding('plain')}>Add user action</FooterAddButton>
+            <FooterAddButton onClick={() => setIsAdding('arg')}>Add user action with argument</FooterAddButton>
           </div>
         ) : undefined
       }
     >
       {events.length === 0 && !isAdding ? (
-        <div className='p-4 text-xs text-muted space-y-2'>
+        <PanelEmptyState>
           <p>No user actions defined. Add a user action to create a web UI button in the operate page.</p>
           <p>User actions with an argument add a value input next to the button.</p>
-        </div>
+        </PanelEmptyState>
       ) : (
         <ul className='divide-y divide-[var(--ui-border)]'>
           {events.map((event, index) => (
-            <li key={index} className='px-3 py-2.5 hover:bg-muted group'>
+            <li key={index} className='px-3 py-2 hover:bg-muted group'>
               <div className='flex items-center gap-2'>
                 <input
                   type='text'
@@ -120,14 +109,14 @@ export function EventsPanel({ isVisible, onClose }: EventsPanelProps) {
                   }`}
                   title={event.hidden ? 'Hidden from operators — click to make visible to operators' : 'Visible to operators — click to hide from operators'}
                 >
-                  {event.hidden ? <EyeOff className='h-3.5 w-3.5' /> : <Eye className='h-3.5 w-3.5' />}
+                  {event.hidden ? <EyeOff className='h-3 w-3' /> : <Eye className='h-3 w-3' />}
                 </button>
                 <button
                   onClick={() => handleDelete(index)}
                   className='flex-shrink-0 p-1 rounded text-dimmed group-hover:text-muted hover:!text-error hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors'
                   title='Delete'
                 >
-                  <Trash2 className='h-3.5 w-3.5' />
+                  <Trash2 className='h-3 w-3' />
                 </button>
               </div>
               {event.hasArgument && (
@@ -137,21 +126,21 @@ export function EventsPanel({ isVisible, onClose }: EventsPanelProps) {
                     value={event.defaultValue ?? '0'}
                     onChange={e => update(index, { defaultValue: e.target.value })}
                     placeholder='default'
-                    className={`flex-1 ${argInputClassExisting}`}
+                    className={`flex-1 ${argInputClass}`}
                   />
                   <input
                     type='number'
                     value={event.min ?? ''}
                     onChange={e => update(index, { min: isNaN(e.target.valueAsNumber) ? undefined : e.target.valueAsNumber })}
                     placeholder='min'
-                    className={`flex-1 ${argInputClassExisting}`}
+                    className={`flex-1 ${argInputClass}`}
                   />
                   <input
                     type='number'
                     value={event.max ?? ''}
                     onChange={e => update(index, { max: isNaN(e.target.valueAsNumber) ? undefined : e.target.valueAsNumber })}
                     placeholder='max'
-                    className={`flex-1 ${argInputClassExisting}`}
+                    className={`flex-1 ${argInputClass}`}
                   />
                   <div className='flex-1'>
                     <SearchableSelect
@@ -167,7 +156,7 @@ export function EventsPanel({ isVisible, onClose }: EventsPanelProps) {
           ))}
 
           {isAdding && (
-            <li className='px-3 py-2.5 bg-primary-muted'>
+            <li className='px-3 py-2 bg-primary-muted'>
               <div className='flex items-center gap-2'>
                 <input
                   autoFocus
@@ -188,20 +177,8 @@ export function EventsPanel({ isVisible, onClose }: EventsPanelProps) {
                   }`}
                   title={newHidden ? 'Hidden from operators — click to make visible to operators' : 'Visible to operators — click to hide from operators'}
                 >
-                  {newHidden ? <EyeOff className='h-3.5 w-3.5' /> : <Eye className='h-3.5 w-3.5' />}
+                  {newHidden ? <EyeOff className='h-3 w-3' /> : <Eye className='h-3 w-3' />}
                 </button>
-                <div className='flex gap-1 flex-shrink-0'>
-                  <button
-                    onClick={handleConfirmAdd}
-                    disabled={!newName.trim()}
-                    className='p-1 rounded text-success hover:bg-primary-muted disabled:opacity-30 disabled:cursor-not-allowed'
-                  >
-                    <Check className='h-3.5 w-3.5' />
-                  </button>
-                  <button onClick={resetForm} className='p-1 rounded text-dimmed hover:bg-muted'>
-                    <X className='h-3.5 w-3.5' />
-                  </button>
-                </div>
               </div>
               {isAdding === 'arg' && (
                 <div className='flex items-center gap-1.5 mt-1.5'>
@@ -239,6 +216,12 @@ export function EventsPanel({ isVisible, onClose }: EventsPanelProps) {
                   </div>
                 </div>
               )}
+              <FormActions
+                onApply={handleConfirmAdd}
+                onDiscard={resetForm}
+                applyDisabled={!newName.trim()}
+                className='justify-end mt-1.5'
+              />
             </li>
           )}
         </ul>

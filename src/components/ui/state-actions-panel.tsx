@@ -5,7 +5,7 @@ import { extractDatamodelVariables } from '@/lib/utils/datamodel-extractor';
 import { useHostAPIStore } from '@/stores/host-api-store';
 import { Plus, X } from 'lucide-react';
 import React from 'react';
-import { Panel, inputClass } from '@/components/ui/primitives';
+import { Panel, inputClass, FormActions, PanelEmptyState } from '@/components/ui/primitives';
 
 interface AssignActionRow { type: 'assign'; location: string; expr: string; }
 interface SendActionRow   { type: 'send'; event: string; delayType: 'delay' | 'delayexpr'; delayValue: string; }
@@ -245,7 +245,7 @@ export function StateActionsPanel({
 
   // Inline form shared between expanded rows and the new-action form
   const inlineForm = (
-    <div className='bg-primary-muted ring-1 ring-primary rounded p-2 space-y-1.5'>
+    <div className='bg-primary-muted rounded p-2 space-y-1.5'>
       {/* reactions: event field + type toggle */}
       {activeTab === 'reactions' && (
         <>
@@ -351,29 +351,19 @@ export function StateActionsPanel({
         />
       </div>
 
-      {/* Apply / Discard */}
-      <div className='flex justify-end gap-1.5'>
-        <button
-          onClick={resetForm}
-          className='text-xs px-2.5 py-1 rounded border border-default text-muted hover:bg-muted'
-        >
-          Discard
-        </button>
-        <button
-          onClick={handleApply}
-          disabled={isApplyDisabled}
-          className='text-xs px-2.5 py-1 rounded bg-primary text-primary-fg hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed'
-        >
-          Apply
-        </button>
-      </div>
+      <FormActions
+        onApply={handleApply}
+        onDiscard={resetForm}
+        applyDisabled={isApplyDisabled}
+        className='justify-end'
+      />
     </div>
   );
 
   if (!isVisible) return null;
 
   return (
-    <Panel title='State Actions' onClose={onClose}>
+    <Panel title='State Actions' onClose={onClose} widthClass='w-[380px]'>
       <div className='flex flex-col h-full'>
         {/* Sub-header: stateId + add button */}
         <div className='flex items-center justify-between px-3 py-1.5 border-b border-default bg-muted flex-shrink-0'>
@@ -414,7 +404,7 @@ export function StateActionsPanel({
         {activeTab === 'reactions' ? (
           <>
             {localReactions.length === 0 && formMode !== 'adding' && (
-              <p className='text-xs text-dimmed italic px-1 py-2'>No reactions yet</p>
+              <PanelEmptyState><p>No reactions yet.</p></PanelEmptyState>
             )}
             {localReactions.map((row, index) =>
               formMode === 'editing' && editingRowIndex === index ? (
@@ -423,7 +413,7 @@ export function StateActionsPanel({
                 <div
                   key={index}
                   onClick={() => handleReactionsRowClick(row, index)}
-                  className='flex items-start justify-between px-2 py-1.5 rounded text-xs cursor-pointer group bg-muted hover:bg-elevated'
+                  className='flex items-start justify-between px-2 py-1.5 rounded text-xs cursor-pointer group hover:bg-muted'
                 >
                   <div className='flex flex-col min-w-0'>
                     <div className='flex items-center gap-1'>
@@ -453,7 +443,7 @@ export function StateActionsPanel({
         ) : (
           <>
             {currentList.length === 0 && formMode !== 'adding' && (
-              <p className='text-xs text-dimmed italic px-1 py-2'>No actions yet</p>
+              <PanelEmptyState><p>No actions yet.</p></PanelEmptyState>
             )}
 
             {currentList.map((row, index) =>
@@ -463,7 +453,7 @@ export function StateActionsPanel({
                 <div
                   key={index}
                   onClick={() => handleRowClick(row, index)}
-                  className='flex items-center justify-between px-2 py-1.5 rounded text-xs cursor-pointer group bg-muted hover:bg-elevated'
+                  className='flex items-center justify-between px-2 py-1.5 rounded text-xs cursor-pointer group hover:bg-muted'
                 >
                   {row.type === 'assign' && (
                     <span className='font-mono truncate text-default'>
