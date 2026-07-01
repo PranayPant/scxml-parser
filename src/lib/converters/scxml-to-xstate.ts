@@ -30,6 +30,7 @@ import {
   getAttribute,
   getElements,
   writeLayoutToSCXML,
+  type EdgeHandleEntry,
 } from './converter-modules/visual-metadata';
 
 /**
@@ -256,11 +257,74 @@ export class SCXMLToXStateConverter {
       }
     });
 
-    // If any nodes needed initialization, write back to SCXML
-    if (needsInitialization && this.originalScxmlContent) {
+    // Fix bidirectional edge overlap: when A→B and B→A both exist they compute the
+    // same endpoint pair (A.right↔B.left for a horizontal layout), producing
+    // geometrically identical paths. Re-route the "return" leg through perpendicular
+    // same-side handles so the two edges take visually distinct paths:
+    //   • horizontal pair → return leg arcs via bottom→bottom (below both nodes)
+    //   • vertical pair   → return leg arcs via right→right  (right of both nodes)
+    //
+    // "Forward" direction: source < target lexicographically — keeps face-to-face handles.
+    // "Return" direction:  source > target — overridden with perpendicular handles.
+    // Edges with explicit saved handles are never overridden.
+    {
+      const allPairKeys = new Set(edges.map((e) => `${e.source}\0${e.target}`));
+
+      // Collect forward-direction keys that have a reverse counterpart, and record
+      // the source handle of each forward direction for axis detection.
+      const forwardHandleMap = new Map<string, string>(); // "fwd-src\0fwd-tgt" → sourceHandle
+      for (const edge of edges) {
+        if (edge.source >= edge.target) continue; // only process source < target
+        const revKey = `${edge.target}\0${edge.source}`;
+        if (!allPairKeys.has(revKey)) continue;
+        // All forward edges between the same pair share the same axis; last write wins (same value).
+        forwardHandleMap.set(`${edge.source}\0${edge.target}`, edge.sourceHandle as string);
+      }
+
+      if (forwardHandleMap.size > 0) {
+        for (const edge of edges) {
+          if (edge.source <= edge.target) continue; // skip forward and same-id edges
+          if (edge.data?.hasExplicitSourceHandle || edge.data?.hasExplicitTargetHandle) continue;
+
+          // revKey is the forward direction for this return edge
+          const revKey = `${edge.target}\0${edge.source}`;
+          const fwdSrcHandle = forwardHandleMap.get(revKey);
+          if (fwdSrcHandle === undefined) continue; // no bidirectional counterpart
+
+          const isHorizontal = fwdSrcHandle === 'left' || fwdSrcHandle === 'right';
+          const perpHandle = isHorizontal ? 'bottom' : 'right';
+
+          edge.sourceHandle = perpHandle;
+          edge.data!.sourceHandle = perpHandle;
+          edge.targetHandle = perpHandle;
+          edge.data!.targetHandle = perpHandle;
+        }
+      }
+    }
+
+    // Write back to SCXML when nodes lack viz:xywh OR any edge lacks viz:sourceHandle/targetHandle.
+    // This persists the computed handles once so subsequent re-parses (e.g. after node drag)
+    // find hasExplicitSourceHandle=true and skip smart handle recomputation entirely.
+    const edgesNeedHandles = edges.some(
+      (e) => !e.data?.hasExplicitSourceHandle || !e.data?.hasExplicitTargetHandle
+    );
+
+    if ((needsInitialization || edgesNeedHandles) && this.originalScxmlContent) {
+      const edgeHandles: EdgeHandleEntry[] = edges
+        .filter((e) => e.sourceHandle && e.targetHandle)
+        .map((e) => ({
+          source: e.source,
+          target: e.target,
+          event: e.data?.event,
+          condition: e.data?.condition,
+          sourceHandle: e.sourceHandle as string,
+          targetHandle: e.targetHandle as string,
+        }));
+
       this.initializedSCXML = writeLayoutToSCXML(
         allNodes,
-        this.originalScxmlContent
+        this.originalScxmlContent,
+        edgeHandles
       );
     }
 

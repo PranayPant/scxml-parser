@@ -52,13 +52,24 @@ export function extractVisualMetadata(
   return metadata;
 }
 
+export interface EdgeHandleEntry {
+  source: string;
+  target: string;
+  event?: string;
+  condition?: string;
+  sourceHandle: string;
+  targetHandle: string;
+}
+
 /**
- * Write calculated layout (position + dimensions) back to SCXML as viz:xywh attributes
- * This initializes SCXML files that arrive without viz:xywh
+ * Write calculated layout (position + dimensions) back to SCXML as viz:xywh attributes,
+ * and optionally write computed edge handles as viz:sourceHandle / viz:targetHandle.
+ * This initializes SCXML files that arrive without viz:xywh or without handle attributes.
  */
 export function writeLayoutToSCXML(
   nodes: HierarchicalNode[],
-  originalScxmlContent: string
+  originalScxmlContent: string,
+  edgeHandles?: EdgeHandleEntry[]
 ): string {
   if (!originalScxmlContent) {
     console.warn('No original SCXML content available for write-back');
@@ -131,6 +142,33 @@ export function writeLayoutToSCXML(
       const vizXywh = `${x},${y},${width},${height}`;
       stateElement.setAttribute('viz:xywh', vizXywh);
     });
+
+    // Write viz:sourceHandle / viz:targetHandle to transition elements
+    if (edgeHandles && edgeHandles.length > 0) {
+      for (const entry of edgeHandles) {
+        const sourceEl = doc.querySelector(
+          `state[id="${entry.source}"], parallel[id="${entry.source}"], final[id="${entry.source}"]`
+        );
+        if (!sourceEl) continue;
+
+        const transitions = Array.from(sourceEl.querySelectorAll(':scope > transition'));
+        for (const transition of transitions) {
+          const tgt = transition.getAttribute('target');
+          const evt = transition.getAttribute('event') ?? undefined;
+          const cond = transition.getAttribute('cond') ?? undefined;
+
+          const targetMatches = tgt === entry.target;
+          const eventMatches = (evt ?? '') === (entry.event ?? '');
+          const condMatches = (cond ?? '') === (entry.condition ?? '');
+
+          if (targetMatches && eventMatches && condMatches) {
+            transition.setAttribute('viz:sourceHandle', entry.sourceHandle);
+            transition.setAttribute('viz:targetHandle', entry.targetHandle);
+            break;
+          }
+        }
+      }
+    }
 
     // Serialize back to string
     const serializer = new XMLSerializer();
