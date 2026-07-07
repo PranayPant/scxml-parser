@@ -34,7 +34,7 @@ export function ValidationPanel({
   const showTabs = hostCount > 0;
 
   return (
-    <div className='bg-elevated border border-default rounded-lg shadow-sm'>
+    <div className='w-80 bg-elevated border border-default rounded-lg shadow-sm h-full flex flex-col'>
       <div className='flex items-center justify-between px-4 pt-4 pb-0'>
         <h3 className='font-medium text-default'>Errors</h3>
         <button
@@ -76,7 +76,7 @@ export function ValidationPanel({
         </div>
       )}
 
-      <div className='p-4'>
+      <div className='p-4 flex-1 overflow-y-auto'>
         {!showTabs || activeTab === 'validation' ? (
           <ValidationTab errors={errors} onErrorClick={onErrorClick} />
         ) : (

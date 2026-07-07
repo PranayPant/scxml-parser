@@ -1,175 +1,79 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
-import { XMLEditor, type XMLEditorRef } from '@/components/editor';
-import { FileUpload } from '@/components/file-operations';
+import { type XMLEditorRef } from '@/components/editor';
 import { TwoTabLayout, type TabType } from '@/components/layout';
-import { VisualDiagram } from '@/components/diagram';
-import { ChannelMappingPanel, ConfigPanel, ErrorBoundary, EventsPanel, ValidationPanel, UndoRedoControls } from '@/components/ui';
-import { SCXMLParser, SCXMLValidator } from '@/lib';
-import { updateConfigFieldExpr, deleteConfigField, extractUnresolvedChannelRefs } from '@/lib/utils/datamodel-extractor';
+import { ErrorBoundary, UndoRedoControls } from '@/components/ui';
+import { StatusDot } from '@/components/ui/primitives';
+import { HistoryManager } from '@/lib/history/history-manager';
 import { hasVisualMetadata } from '@/lib/utils';
 import { useEditorStore } from '@/stores/editor-store';
-import { usePanelStore } from '@/stores/panel-store';
-import { HistoryManager } from '@/lib/history/history-manager';
-import type { FileInfo, ValidationError } from '@/types/common';
-import type { ActionType } from '@/types/history';
-import { DEFAULT_SCXML_TEMPLATE } from '@/lib/consts/default_scxml_template';
 import { useHostAPIStore } from '@/stores/host-api-store';
-import type { ChannelInfo, ChannelMapping, ConfigValue, EventEntry, ScxmlEditorAPI } from '@/types/host-api';
-import { EVENT_FALLBACK_VALUE } from '@/lib/utils/common-utils';
-import { useIsDark } from '@/lib/theme/use-is-dark';
-import { MoreVertical, Upload as UploadIcon, Download, Database, Eye } from 'lucide-react';
-import { StatusDot } from '@/components/ui/primitives';
+import { usePanelStore } from '@/stores/panel-store';
+import type { ValidationError } from '@/types/common';
+import { Download, Eye, MoreVertical, Upload as UploadIcon } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import { CodeEditorPane } from './_components/code-editor-pane';
+import { VisualEditorPane } from './_components/visual-editor-pane';
+import { WelcomeScreen } from './_components/welcome-screen';
+import { useContentValidation } from './_hooks/use-content-validation';
+import { useDownload } from './_hooks/use-download';
+import { useFileOperations } from './_hooks/use-file-operations';
+import { useHistoryRestore } from './_hooks/use-history-restore';
+import { useHostAPIBridge } from './_hooks/use-host-api-bridge';
+import { useInitialLoad } from './_hooks/use-initial-load';
+import { useMoreMenu } from './_hooks/use-more-menu';
 
 export default function Home() {
-  const {
-    content,
-    errors,
-    fileInfo,
-    isDirty,
-    setContent,
-    setErrors,
-    setFileInfo,
-    navigateToRoot,
-  } = useEditorStore();
-
-  const parser = useMemo(() => new SCXMLParser(), []);
-  const validator = useMemo(() => new SCXMLValidator(), []);
-  const historyManager = useMemo(() => HistoryManager.getInstance(), []);
-  const { markReady, onReady, registerCommand, showFeedback, setRequestedValidationTab, dismissHostError, clearHostErrors } = useHostAPIStore();
+  // --- Store subscriptions ---
+  const { content, errors, fileInfo, isDirty, setContent } = useEditorStore();
+  const { activePanel, setActivePanel } = usePanelStore();
   const hostErrors = useHostAPIStore(state => state.hostErrors);
   const requestedValidationTab = useHostAPIStore(state => state.requestedValidationTab);
+  const { setRequestedValidationTab } = useHostAPIStore();
 
-  const { activePanel, setActivePanel, togglePanel } = usePanelStore();
+  // --- Stable instances ---
+  const historyManager = useMemo(() => HistoryManager.getInstance(), []);
 
-  const editorRef = useRef<XMLEditorRef>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const contentRef = useRef(content);
-  useEffect(() => { contentRef.current = content; }, [content]);
-  const configValuesRef = useRef<ConfigValue[]>([]);
-  const channelMappingsRef = useRef<ChannelMapping[]>([]);
-  const storeChannelMappings = useHostAPIStore(state => state.channelMappings);
-  useEffect(() => { channelMappingsRef.current = storeChannelMappings; }, [storeChannelMappings]);
-  const eventsRef = useRef<EventEntry[]>([]);
-  const storeEvents = useHostAPIStore(state => state.events);
-  useEffect(() => { eventsRef.current = storeEvents; }, [storeEvents]);
-  useEffect(() => {
-    if (requestedValidationTab !== null) {
-      setValidationPanelTab(requestedValidationTab);
-      setActivePanel('validation');
-      setRequestedValidationTab(null);
-    }
-  }, [requestedValidationTab, setRequestedValidationTab, setActivePanel]);
+  // --- Custom hooks ---
+  const { isInitialLoading } = useInitialLoad();
+  const { isUpdatingFromHistory, currentHistoryActionType, handleHistoryRestore } = useHistoryRestore();
+  const { fileInputRef, handleFileLoad, handleFileError, handleCreateNewDocument, handleNewFileUpload, handleFileInputChange } = useFileOperations();
+  const { handleDownloadClean, handleDownloadWithVisualData } = useDownload();
+  const { isMoreMenuOpen, setIsMoreMenuOpen, moreMenuRef } = useMoreMenu();
+  const { handleEntriesChange } = useHostAPIBridge();
+  useContentValidation();
 
-  const [isInitialLoading, setIsInitialLoading] = React.useState(true);
-  const [isUpdatingFromHistory, setIsUpdatingFromHistory] = React.useState(false);
-  const [currentHistoryActionType, setCurrentHistoryActionType] = React.useState<ActionType | undefined>(undefined);
+  // --- Local state ---
   const [validationPanelTab, setValidationPanelTab] = React.useState<'validation' | 'host-alerts'>('validation');
-  const [isMoreMenuOpen, setIsMoreMenuOpen] = React.useState(false);
-  const moreMenuRef = React.useRef<HTMLDivElement>(null);
 
-  const isDark = useIsDark();
+  // --- Refs ---
+  const editorRef = useRef<XMLEditorRef>(null);
 
-
-  const validateContent = useCallback(
-    (xmlContent: string) => {
-      if (!xmlContent.trim()) {
-        setErrors([]);
-        return;
-      }
-
-      const parseResult = parser.parse(xmlContent);
-
-      let allErrors = [...parseResult.errors];
-
-      if (parseResult.success && parseResult.data) {
-        const validationErrors = validator.validate(
-          parseResult.data.scxml,
-          xmlContent
-        );
-        allErrors = [...allErrors, ...validationErrors];
-      }
-
-      setErrors(allErrors);
-    },
-    [parser, validator, setErrors]
+  // --- Derived ---
+  const totalErrors = useMemo(
+    () => errors.filter(e => e.severity === 'error').length + hostErrors.filter(e => e.level === 'error').length,
+    [errors, hostErrors]
   );
-
-  // Auto-load main.scxml on mount when served via LoopControl
-  useEffect(() => {
-    fetch('/scxml-editor/program')
-      .then(r => r.ok ? r.text() : null)
-      .then(xml => {
-        if (!xml) return;
-        setContent(xml);
-        setErrors([]);
-        historyManager.initialize(xml, 'Auto-loaded');
-        navigateToRoot();
-      })
-      .catch(() => {})
-      .finally(() => setIsInitialLoading(false));
-  }, []);
-
-  // Initialize history on mount if there's existing content
-  useEffect(() => {
-    if (content && !historyManager.canUndo() && !historyManager.canRedo()) {
-      historyManager.initialize(content, 'Initial state');
-    }
-  }, []); // Run only once on mount
-
-  useEffect(() => {
-    const debounceTimer = setTimeout(() => {
-      validateContent(content);
-    }, 500);
-
-    return () => clearTimeout(debounceTimer);
-  }, [content, validateContent]);
-
-  const handleFileLoad = useCallback(
-    (loadedFileInfo: FileInfo) => {
-      setFileInfo(loadedFileInfo);
-      // Initialize history with the loaded file
-      historyManager.initialize(loadedFileInfo.content, `Loaded ${loadedFileInfo.name}`);
-      // Reset breadcrumb navigation to root
-      navigateToRoot();
-    },
-    [setFileInfo, historyManager, navigateToRoot]
+  const totalWarnings = useMemo(
+    () => errors.filter(e => e.severity === 'warning').length + hostErrors.filter(e => e.level === 'warning').length,
+    [errors, hostErrors]
   );
+  const hasErrors = totalErrors > 0;
+  const hasWarnings = totalWarnings > 0;
 
-  const handleFileError = useCallback(
-    (errorMessages: string[]) => {
-      const errors: ValidationError[] = errorMessages.map((message) => ({
-        message,
-        severity: 'error' as const,
-      }));
-      setErrors(errors);
-      setActivePanel('validation');
-    },
-    [setErrors, setActivePanel]
-  );
-
+  // --- Handlers ---
   const handleContentChange = useCallback(
     (newContent: string) => {
       setContent(newContent);
-
-      // Track history for text edits (with debouncing)
-      if (!isUpdatingFromHistory) {
-        historyManager.trackTextEdit(newContent);
-      }
+      if (!isUpdatingFromHistory) historyManager.trackTextEdit(newContent);
     },
     [setContent, historyManager, isUpdatingFromHistory]
   );
 
   const handleSCXMLChangeFromDiagram = useCallback(
     (newContent: string, changeType?: 'position' | 'structure' | 'property' | 'resize') => {
-      // Update content from visual diagram changes
       setContent(newContent);
-
-      // Track history for diagram changes with appropriate handling
-      if (!isUpdatingFromHistory) {
-        historyManager.trackDiagramChange(newContent, undefined, changeType);
-      }
+      if (!isUpdatingFromHistory) historyManager.trackDiagramChange(newContent, undefined, changeType);
     },
     [setContent, historyManager, isUpdatingFromHistory]
   );
@@ -180,403 +84,99 @@ export default function Home() {
     }
   }, []);
 
-  const handleCreateNewDocument = useCallback(() => {
-    const fileInfo: FileInfo = {
-      name: 'new-document.scxml',
-      size: DEFAULT_SCXML_TEMPLATE.length,
-      lastModified: new Date(),
-      content: DEFAULT_SCXML_TEMPLATE,
-    };
+  const handleValidationClose = useCallback(() => {
+    setActivePanel(null);
+    setValidationPanelTab('validation');
+  }, [setActivePanel]);
 
-    setContent(DEFAULT_SCXML_TEMPLATE);
-    setFileInfo(fileInfo);
-    setErrors([]);
-    // Initialize history with new document
-    historyManager.initialize(DEFAULT_SCXML_TEMPLATE, 'New document created');
-    // Reset breadcrumb navigation to root
-    navigateToRoot();
-  }, [setContent, setFileInfo, setErrors, historyManager, navigateToRoot]);
-
-  // Undo/Redo handlers
-  const handleUndo = useCallback(
-    (restoredContent: string, actionType: ActionType) => {
-      setIsUpdatingFromHistory(true);
-      setCurrentHistoryActionType(actionType);
-      setContent(restoredContent);
-
-      setTimeout(() => {
-        setIsUpdatingFromHistory(false);
-        setCurrentHistoryActionType(undefined);
-      }, 100);
-    },
-    [setContent]
-  );
-
-  const handleRedo = useCallback(
-    (restoredContent: string, actionType: ActionType) => {
-      setIsUpdatingFromHistory(true);
-      setCurrentHistoryActionType(actionType);
-      setContent(restoredContent);
-
-      setTimeout(() => {
-        setIsUpdatingFromHistory(false);
-        setCurrentHistoryActionType(undefined);
-      }, 100);
-    },
-    [setContent]
-  );
-
-  const handleNewFileUpload = useCallback(() => {
-    fileInputRef.current?.click();
-  }, []);
-
-  const handleFileInputChange = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0];
-      if (file) {
-        // Basic file validation
-        if (file.size > 10 * 1024 * 1024) {
-          // 10MB limit
-          const errors: ValidationError[] = [
-            {
-              message: 'File size too large. Maximum size is 10MB.',
-              severity: 'error',
-            },
-          ];
-          setErrors(errors);
-          setActivePanel('validation');
-          return;
-        }
-
-        if (!file.name.match(/\.(scxml|xml)$/i)) {
-          const errors: ValidationError[] = [
-            {
-              message: 'Invalid file type. Please select an SCXML or XML file.',
-              severity: 'error',
-            },
-          ];
-          setErrors(errors);
-          setActivePanel('validation');
-          return;
-        }
-
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const content = e.target?.result as string;
-          if (content) {
-            const fileInfo: FileInfo = {
-              name: file.name,
-              size: file.size,
-              lastModified: new Date(file.lastModified),
-              content,
-            };
-            setContent(content);
-            setFileInfo(fileInfo);
-            setErrors([]);
-            // Initialize history with the uploaded file
-            historyManager.initialize(content, `Uploaded ${file.name}`);
-          }
-        };
-
-        reader.onerror = () => {
-          const errors: ValidationError[] = [
-            {
-              message: 'Failed to read file. Please try again.',
-              severity: 'error',
-            },
-          ];
-          setErrors(errors);
-          setActivePanel('validation');
-        };
-
-        reader.readAsText(file);
-
-        // Reset the input so the same file can be selected again
-        event.target.value = '';
-      }
-    },
-    [setContent, setFileInfo, setErrors, setActivePanel, historyManager]
-  );
-
+  // --- Effects ---
+  // Open requested validation tab driven by host API
   useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const stub = window.ScxmlEditorAPI as any;
-
-    const realApi: ScxmlEditorAPI = {
-      onReady,
-      loadScxml: (xml: string) => {
-        setContent(xml);
-        setErrors([]);
-        historyManager.initialize(xml, 'Loaded from host');
-        navigateToRoot();
-      },
-      getScxml: () => contentRef.current,
-      getConfigValues: () => configValuesRef.current,
-      registerCommand,
-      showFeedback,
-      setChannels: (channels: ChannelInfo[]) => useHostAPIStore.getState().setChannels(channels),
-      toggleConfigPanel: () => togglePanel('config'),
-      getChannelMappings: () => {
-        const channelNames = useHostAPIStore.getState().channels.map(c => c.name);
-        const activeRefs = new Set(extractUnresolvedChannelRefs(contentRef.current, channelNames));
-        return channelMappingsRef.current.filter(m => activeRefs.has(m.scxmlRef));
-      },
-      setChannelMappings: (mappings) => useHostAPIStore.getState().setChannelMappings(mappings),
-      toggleChannelMappingPanel: () => togglePanel('channelMapping'),
-      setEvents: (events: EventEntry[]) => useHostAPIStore.getState().setEvents(events.map(e => ({ ...e, type: e.type ?? EVENT_FALLBACK_VALUE }))),
-      getEvents: () => eventsRef.current,
-      toggleEventsPanel: () => togglePanel('events'),
-      setActiveTab: (tab) => useHostAPIStore.getState().setRequestedTab(tab),
-      showErrors: (errors) => useHostAPIStore.getState().showErrors(errors),
-      clearErrors: () => useHostAPIStore.getState().clearHostErrors(),
-    };
-
-    if (stub?._q) {
-      // Upgrade the stub object in place so any host reference already captured
-      // (e.g. `var api = iframe.contentWindow.ScxmlEditorAPI` in a load handler)
-      // automatically gets the real methods without needing to re-read the property.
-      const queue = stub._q as { ready: (() => void)[]; commands: any[]; feedback: [string, any][]; channels?: ChannelInfo[]; channelMappings?: ChannelMapping[]; events?: EventEntry[]; hostErrors?: Array<{ message: string; level?: string }>; clearErrors?: boolean };
-      Object.assign(stub, realApi);
-      delete stub._q;
-      queue.ready.forEach(cb => onReady(cb));
-      queue.commands.forEach(o => registerCommand(o));
-      queue.feedback.forEach(([m, l]) => showFeedback(m, l));
-      if (queue.channels) useHostAPIStore.getState().setChannels(queue.channels);
-      if (queue.channelMappings) useHostAPIStore.getState().setChannelMappings(queue.channelMappings);
-      if (queue.events) useHostAPIStore.getState().setEvents(queue.events.map(e => ({ ...e, type: e.type ?? EVENT_FALLBACK_VALUE })));
-      if (queue.clearErrors) useHostAPIStore.getState().clearHostErrors();
-      if (queue.hostErrors?.length) useHostAPIStore.getState().showErrors(queue.hostErrors as Array<{ message: string; level?: 'info' | 'warning' | 'error' }>);
-    } else {
-      window.ScxmlEditorAPI = realApi;
+    if (requestedValidationTab !== null) {
+      setValidationPanelTab(requestedValidationTab);
+      setActivePanel('validation');
+      setRequestedValidationTab(null);
     }
-    // Fire onReady callbacks now — before TwoTabLayout renders (which waits for the
-    // async auto-load fetch). This lets the host's onReady callback set requestedTab
-    // so TwoTabLayout can read it via its useState lazy initializer on first render.
-    markReady();
-  }, []);
+  }, [requestedValidationTab, setRequestedValidationTab, setActivePanel]);
 
-  const getDownloadFilename = () => {
-    if (fileInfo?.name) {
-      return fileInfo.name;
-    }
-    return 'document.scxml';
-  };
-
-  useEffect(() => {
-    if (!isMoreMenuOpen) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
-        setIsMoreMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isMoreMenuOpen]);
-
-  const downloadBlob = useCallback((fileContent: string, fileName: string) => {
-    const blob = new Blob([fileContent], { type: 'application/xml' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }, []);
-
-  const handleMenuDownload = useCallback(() => {
-    downloadBlob(content, getDownloadFilename());
-    setIsMoreMenuOpen(false);
-  }, [content, downloadBlob]);
-
-  const handleMenuDownloadClean = useCallback(async () => {
-    try {
-      const { removeVisualMetadataFromXML } = await import('@/lib/utils/visual-metadata-utils');
-      const { SCXMLParser: Parser } = await import('@/lib/parsers/scxml-parser');
-      const parser = new Parser();
-      const parseResult = parser.parse(content);
-      const cleanName = getDownloadFilename().replace(/\.(scxml|xml)$/i, '-clean.$1');
-      if (parseResult.success && parseResult.data) {
-        downloadBlob(parser.serialize(parseResult.data, false), cleanName);
-      } else {
-        downloadBlob(removeVisualMetadataFromXML(content), cleanName);
-      }
-    } catch {
-      downloadBlob(content, getDownloadFilename());
-    }
-    setIsMoreMenuOpen(false);
-  }, [content, downloadBlob]);
-
-  const handleMenuDownloadWithVisualData = useCallback(() => {
-    downloadBlob(content, getDownloadFilename());
-    setIsMoreMenuOpen(false);
-  }, [content, downloadBlob]);
-
-  const totalErrors = errors.filter(e => e.severity === 'error').length + hostErrors.filter(e => e.level === 'error').length;
-  const totalWarnings = errors.filter(e => e.severity === 'warning').length + hostErrors.filter(e => e.level === 'warning').length;
-  const hasErrors = totalErrors > 0;
-  const hasWarnings = totalWarnings > 0;
-
-  const renderSidePanels = () => (
-    <>
-      <ConfigPanel
-        isVisible={activePanel === 'config'}
-        onClose={() => setActivePanel(null)}
-        scxmlContent={content}
-        onEntriesChange={(values) => { configValuesRef.current = values; }}
-        onFieldChange={(name, newValue) => {
-          handleContentChange(updateConfigFieldExpr(content, name, newValue));
-        }}
-        onAddField={(name, defaultValue) => {
-          const node = `\n    <data id="conf_${name}" expr="${defaultValue}"/>`;
-          const next = content.includes('</datamodel>')
-            ? content.replace('</datamodel>', `${node}\n  </datamodel>`)
-            : content.replace('</scxml>', `\n  <datamodel>${node}\n  </datamodel>\n</scxml>`);
-          handleContentChange(next);
-        }}
-      />
-      <ChannelMappingPanel
-        isVisible={activePanel === 'channelMapping'}
-        onClose={() => setActivePanel(null)}
-        scxmlContent={content}
-      />
-      <EventsPanel
-        isVisible={activePanel === 'events'}
-        onClose={() => setActivePanel(null)}
-      />
-    </>
-  );
-
-  const renderCodeEditor = () => (
-    <div className='flex gap-4 h-[calc(100vh-200px)]'>
-      <div className='flex-1'>
-        <XMLEditor
-          ref={editorRef}
-          value={content}
-          onChange={handleContentChange}
-          errors={errors}
-          height='80vh'
-          theme={isDark ? 'dark' : 'light'}
+  // --- Render ---
+  const renderActions = useCallback(
+    (activeTab: TabType, setActiveTab: (tab: TabType) => void) => (
+      <>
+        <input
+          ref={fileInputRef}
+          type='file'
+          accept='.scxml,.xml'
+          onChange={handleFileInputChange}
+          className='hidden'
         />
-      </div>
 
-      <div className='shrink-0'>
-        <ValidationPanel
-          errors={errors}
-          hostErrors={hostErrors}
-          isVisible={activePanel === 'validation'}
-          activeTab={validationPanelTab}
-          onClose={() => { setActivePanel(null); setValidationPanelTab('validation'); }}
-          onTabChange={setValidationPanelTab}
-          onErrorClick={handleErrorClick}
-          onDismissHostError={dismissHostError}
-          onClearHostErrors={clearHostErrors}
-        />
-        {renderSidePanels()}
-      </div>
-    </div>
-  );
+        <UndoRedoControls onUndo={handleHistoryRestore} onRedo={handleHistoryRestore} />
 
-  const renderVisualDiagram = () => (
-    <div className='h-full relative'>
-      <VisualDiagram
-        scxmlContent={content}
-        onNodeChange={(nodes) => {
-          // console.log('Nodes changed:', nodes);
-        }}
-        onEdgeChange={(edges) => {
-          // console.log('Edges changed:', edges);
-        }}
-        onSCXMLChange={handleSCXMLChangeFromDiagram}
-        isUpdatingFromHistory={isUpdatingFromHistory}
-        historyActionType={currentHistoryActionType}
-      />
-      <div className='absolute right-0 top-0 h-full flex pointer-events-none z-20'>
-        <div className='pointer-events-auto h-full flex'>
-          {renderSidePanels()}
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderActions = (
-    activeTab: TabType,
-    setActiveTab: (tab: TabType) => void,
-  ) => (
-    <>
-      <input
-        ref={fileInputRef}
-        type='file'
-        accept='.scxml,.xml'
-        onChange={handleFileInputChange}
-        className='hidden'
-      />
-
-      <UndoRedoControls
-        onUndo={handleUndo}
-        onRedo={handleRedo}
-      />
-
-      {/* Validation status dot */}
-      <button
-        onClick={() => {
-          if (activeTab === 'visual') setActiveTab('code');
-          const opening = activePanel !== 'validation';
-          setActivePanel(opening ? 'validation' : null);
-          if (!opening) setValidationPanelTab('validation');
-        }}
-        title={
-          totalErrors === 0 && totalWarnings === 0
-            ? 'No issues'
-            : `${totalErrors} error${totalErrors !== 1 ? 's' : ''}, ${totalWarnings} warning${totalWarnings !== 1 ? 's' : ''}`
-        }
-        className='p-2 rounded-md hover:bg-muted transition-colors'
-      >
-        <StatusDot status={hasErrors ? 'error' : hasWarnings ? 'warning' : 'success'} />
-      </button>
-
-      <div className='h-6 w-px bg-[var(--ui-border)]' />
-
-      {/* ⋮ More menu */}
-      <div className='relative' ref={moreMenuRef}>
         <button
-          onClick={() => setIsMoreMenuOpen((v) => !v)}
-          className='p-2 rounded-md text-muted hover:bg-muted hover:text-default transition-colors'
-          title='More options'
+          onClick={() => {
+            if (activeTab === 'visual') setActiveTab('code');
+            const opening = activePanel !== 'validation';
+            setActivePanel(opening ? 'validation' : null);
+            if (!opening) setValidationPanelTab('validation');
+          }}
+          title={
+            totalErrors === 0 && totalWarnings === 0
+              ? 'No issues'
+              : `${totalErrors} error${totalErrors !== 1 ? 's' : ''}, ${totalWarnings} warning${totalWarnings !== 1 ? 's' : ''}`
+          }
+          className='p-2 rounded-md hover:bg-muted transition-colors'
         >
-          <MoreVertical className='h-4 w-4' />
+          <StatusDot status={hasErrors ? 'error' : hasWarnings ? 'warning' : 'success'} />
         </button>
 
-        {isMoreMenuOpen && (
-          <div className='absolute right-0 top-full mt-1 w-48 bg-elevated border border-default rounded-lg shadow-lg z-50 py-1'>
-            <button
-              onClick={() => { handleNewFileUpload(); setIsMoreMenuOpen(false); }}
-              className='w-full flex items-center gap-3 px-4 py-2 text-sm text-default hover:bg-muted transition-colors'
-            >
-              <UploadIcon className='h-4 w-4 text-muted' />
-              Upload
-            </button>
-            <button
-              onClick={handleMenuDownloadClean}
-              className='w-full flex items-center gap-3 px-4 py-2 text-sm text-default hover:bg-muted transition-colors'
-            >
-              <Download className='h-4 w-4 text-muted' />
-              Clean SCXML
-            </button>
-            {hasVisualMetadata(content) && (
+        <div className='h-6 w-px bg-[var(--ui-border)]' />
+
+        <div className='relative' ref={moreMenuRef}>
+          <button
+            onClick={() => setIsMoreMenuOpen(v => !v)}
+            className='p-2 rounded-md text-muted hover:bg-muted hover:text-default transition-colors'
+            title='More options'
+          >
+            <MoreVertical className='h-4 w-4' />
+          </button>
+
+          {isMoreMenuOpen && (
+            <div className='absolute right-0 top-full mt-1 w-48 bg-elevated border border-default rounded-lg shadow-lg z-50 py-1'>
               <button
-                onClick={handleMenuDownloadWithVisualData}
+                onClick={() => { handleNewFileUpload(); setIsMoreMenuOpen(false); }}
                 className='w-full flex items-center gap-3 px-4 py-2 text-sm text-default hover:bg-muted transition-colors'
               >
-                <Eye className='h-4 w-4 text-muted' />
-                With Visual Data
+                <UploadIcon className='h-4 w-4 text-muted' />
+                Upload
               </button>
-            )}
-          </div>
-        )}
-      </div>
-    </>
+              <button
+                onClick={() => { handleDownloadClean(); setIsMoreMenuOpen(false); }}
+                className='w-full flex items-center gap-3 px-4 py-2 text-sm text-default hover:bg-muted transition-colors'
+              >
+                <Download className='h-4 w-4 text-muted' />
+                Clean SCXML
+              </button>
+              {hasVisualMetadata(content) && (
+                <button
+                  onClick={() => { handleDownloadWithVisualData(); setIsMoreMenuOpen(false); }}
+                  className='w-full flex items-center gap-3 px-4 py-2 text-sm text-default hover:bg-muted transition-colors'
+                >
+                  <Eye className='h-4 w-4 text-muted' />
+                  With Visual Data
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </>
+    ),
+    [
+      fileInputRef, handleFileInputChange, handleHistoryRestore,
+      activePanel, setActivePanel, totalErrors, totalWarnings, hasErrors, hasWarnings,
+      moreMenuRef, isMoreMenuOpen, setIsMoreMenuOpen,
+      handleNewFileUpload, handleDownloadClean, handleDownloadWithVisualData, content,
+    ]
   );
 
   return (
@@ -587,109 +187,35 @@ export default function Home() {
             <div className='h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin' />
           </div>
         ) : !content ? (
-          <div className='container mx-auto px-4 py-8'>
-            <div className='mb-8'>
-              <h1 className='text-3xl font-bold text-default mb-2'>
-                Visual SCXML Editor
-              </h1>
-              <p className='text-muted'>
-                Edit SCXML files with syntax highlighting, validation, and
-                interactive visual diagrams
-              </p>
-            </div>
-
-            <div className='grid grid-cols-1 lg:grid-cols-2 gap-8'>
-              <div className='bg-elevated border border-default rounded-lg shadow-sm p-6'>
-                <FileUpload
-                  onFileLoad={handleFileLoad}
-                  onError={handleFileError}
-                />
-              </div>
-
-              <div className='space-y-6'>
-                <div className='bg-elevated border border-default rounded-lg shadow-sm p-6'>
-                  <h3 className='text-lg font-semibold text-default mb-4'>
-                    Getting Started
-                  </h3>
-                  <div className='space-y-4 text-sm text-muted'>
-                    <div className='flex items-start space-x-3'>
-                      <div className='flex-shrink-0 w-6 h-6 bg-primary-muted text-primary rounded-full flex items-center justify-center text-xs font-medium'>
-                        1
-                      </div>
-                      <p>
-                        Upload an SCXML file or{' '}
-                        <button
-                          type='button'
-                          onClick={handleCreateNewDocument}
-                          className='inline text-primary cursor-pointer hover:text-primary-hover underline transition-colors focus:outline-none'
-                          aria-label='Create new SCXML document'
-                        >
-                          create a new one
-                        </button>
-                      </p>
-                    </div>
-                    <div className='flex items-start space-x-3'>
-                      <div className='flex-shrink-0 w-6 h-6 bg-primary-muted text-primary rounded-full flex items-center justify-center text-xs font-medium'>
-                        2
-                      </div>
-                      <p>
-                        Edit with syntax highlighting and real-time validation
-                      </p>
-                    </div>
-                    <div className='flex items-start space-x-3'>
-                      <div className='flex-shrink-0 w-6 h-6 bg-primary-muted text-primary rounded-full flex items-center justify-center text-xs font-medium'>
-                        3
-                      </div>
-                      <p>Switch to visual diagram for interactive editing</p>
-                    </div>
-                    <div className='flex items-start space-x-3'>
-                      <div className='flex-shrink-0 w-6 h-6 bg-primary-muted text-primary rounded-full flex items-center justify-center text-xs font-medium'>
-                        4
-                      </div>
-                      <p>Download your validated SCXML file</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className='bg-elevated border border-default rounded-lg shadow-sm p-6'>
-                  <h3 className='text-lg font-semibold text-default mb-4'>
-                    Features
-                  </h3>
-                  <ul className='space-y-2 text-sm text-muted'>
-                    <li className='flex items-center space-x-2'>
-                      <div className='w-1.5 h-1.5 bg-success rounded-full'></div>
-                      <span>Two-way synchronization (Code ↔ Visual)</span>
-                    </li>
-                    <li className='flex items-center space-x-2'>
-                      <div className='w-1.5 h-1.5 bg-success rounded-full'></div>
-                      <span>Interactive state diagram editing</span>
-                    </li>
-                    <li className='flex items-center space-x-2'>
-                      <div className='w-1.5 h-1.5 bg-success rounded-full'></div>
-                      <span>SCXML-specific autocomplete</span>
-                    </li>
-                    <li className='flex items-center space-x-2'>
-                      <div className='w-1.5 h-1.5 bg-success rounded-full'></div>
-                      <span>Real-time validation</span>
-                    </li>
-                    <li className='flex items-center space-x-2'>
-                      <div className='w-1.5 h-1.5 bg-success rounded-full'></div>
-                      <span>Visual metadata preservation</span>
-                    </li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </div>
+          <WelcomeScreen
+            onFileLoad={handleFileLoad}
+            onFileError={handleFileError}
+            onCreateNew={handleCreateNewDocument}
+          />
         ) : (
           <div className='h-screen relative'>
             <TwoTabLayout
-              codeEditor={renderCodeEditor()}
-              visualDiagram={renderVisualDiagram()}
-              fileInfo={{
-                name: fileInfo?.name,
-                isDirty,
-              }}
+              codeEditor={
+                <CodeEditorPane
+                  editorRef={editorRef}
+                  onContentChange={handleContentChange}
+                  onErrorClick={handleErrorClick}
+                  validationPanelTab={validationPanelTab}
+                  onValidationTabChange={setValidationPanelTab}
+                  onValidationClose={handleValidationClose}
+                  onEntriesChange={handleEntriesChange}
+                />
+              }
+              visualDiagram={
+                <VisualEditorPane
+                  onSCXMLChange={handleSCXMLChangeFromDiagram}
+                  isUpdatingFromHistory={isUpdatingFromHistory}
+                  historyActionType={currentHistoryActionType}
+                  onEntriesChange={handleEntriesChange}
+                  onContentChange={handleContentChange}
+                />
+              }
+              fileInfo={{ name: fileInfo?.name, isDirty }}
               actions={renderActions}
             />
           </div>

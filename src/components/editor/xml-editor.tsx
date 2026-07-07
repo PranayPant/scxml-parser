@@ -226,14 +226,13 @@ export const XMLEditor = forwardRef<XMLEditorRef, XMLEditorProps>(
     if (!monacoReady) {
       return (
         <div
-          className='border rounded-lg'
-          style={{ height: typeof height === 'number' ? `${height}px` : height }}
+          className='border rounded-lg h-full'
         />
       );
     }
 
     return (
-      <div className='border rounded-lg overflow-hidden'>
+      <div className='border rounded-lg overflow-hidden h-full'>
         <Editor
           height={height}
           language='xml'
