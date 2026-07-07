@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "deploy": "powershell -ExecutionPolicy Bypass -File deploy.ps1"
+    "deploy": "powershell -ExecutionPolicy Bypass -File deploy.ps1",
+    "release": "powershell -ExecutionPolicy Bypass -File release.ps1"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

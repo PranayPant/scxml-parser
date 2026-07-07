@@ -12,24 +12,18 @@ git status   # should be clean
 - `minor` — new features (0.1.1 → 0.2.0)
 - `major` — breaking changes (0.1.1 → 1.0.0)
 
-**3. Bump the version in `package.json`**
+**3. Run the release script**
 ```bash
-npm version patch --no-git-tag-version
+npm run release -- patch
 # replace "patch" with "minor" or "major" as needed
 ```
+This bumps the version in `package.json`/`package-lock.json`, commits with
+`chore: bump version to X.Y.Z`, and creates the annotated tag `vX.Y.Z` — all
+locally. It aborts if the working tree isn't clean or you're not on `main`.
 
-**4. Commit the version bump**
-```bash
-git add package.json package-lock.json
-git commit -m "chore: bump version to 0.1.2"
-```
+**4. Push the commit and the tag**
 
-**5. Create a git tag**
-```bash
-git tag -a v0.1.2 -m "Release v0.1.2"
-```
-
-**6. Push the commit and the tag**
+The script prints the exact commands, e.g.:
 ```bash
 git push origin main
 git push origin v0.1.2
