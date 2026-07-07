@@ -1,9 +1,74 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { ChevronDown } from 'lucide-react';
 import { extractConfigFields, type ConfigField } from '@/lib/utils/datamodel-extractor';
 import type { ConfigValue } from '@/types/host-api';
 import { Panel, inputClass, FormActions, FooterAddButton, PanelEmptyState } from '@/components/ui/primitives';
+
+const CONF_TYPES: ConfigField['type'][] = ['int', 'double', 'bool', 'string'];
+
+function TypeSelect({ value, onChange }: { value: ConfigField['type']; onChange: (t: ConfigField['type']) => void }) {
+  const [open, setOpen] = useState(false);
+  const [style, setStyle] = useState<React.CSSProperties>({});
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (!btnRef.current?.contains(e.target as Node) && !menuRef.current?.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', handler); document.removeEventListener('keydown', onKey); };
+  }, [open]);
+
+  const handleOpen = () => {
+    if (btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect();
+      setStyle({ position: 'fixed', top: r.bottom + 4, right: window.innerWidth - r.right, zIndex: 9999 });
+    }
+    setOpen(o => !o);
+  };
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        onClick={handleOpen}
+        className='flex items-center gap-0.5 text-primary font-mono text-[10px] cursor-pointer hover:opacity-80 transition-opacity'
+      >
+        {value}
+        <ChevronDown className={`h-3 w-3 transition-transform duration-150 ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && createPortal(
+        <div
+          ref={menuRef}
+          style={style}
+          className='bg-elevated border border-default rounded-md shadow-xl overflow-hidden py-0.5'
+        >
+          {CONF_TYPES.map(t => (
+            <button
+              key={t}
+              onClick={() => { onChange(t); setOpen(false); }}
+              className={`w-full text-left px-3 py-1.5 font-mono text-[11px] transition-colors ${
+                t === value ? 'bg-primary-muted text-primary font-medium' : 'text-default hover:bg-muted'
+              }`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
 
 interface ConfigPanelProps {
   isVisible: boolean;
@@ -11,6 +76,7 @@ interface ConfigPanelProps {
   scxmlContent: string;
   onAddField: (name: string, defaultValue: string) => void;
   onFieldChange: (name: string, newDefaultValue: string) => void;
+  onTypeChange: (name: string, newType: ConfigField['type']) => void;
   onEntriesChange?: (values: ConfigValue[]) => void;
 }
 
@@ -19,7 +85,7 @@ interface OverrideEntry {
   override: string;
 }
 
-export function ConfigPanel({ isVisible, onClose, scxmlContent, onAddField, onFieldChange, onEntriesChange }: ConfigPanelProps) {
+export function ConfigPanel({ isVisible, onClose, scxmlContent, onAddField, onFieldChange, onTypeChange, onEntriesChange }: ConfigPanelProps) {
   const [entries, setEntries] = useState<OverrideEntry[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [newName, setNewName] = useState('');
@@ -121,7 +187,17 @@ export function ConfigPanel({ isVisible, onClose, scxmlContent, onAddField, onFi
                 <span className='font-medium text-default text-xs truncate' title={field.name}>
                   {field.name}
                 </span>
-                <span className='shrink-0 text-primary font-mono text-[10px]'>{field.type}</span>
+                <TypeSelect
+                  value={field.type}
+                  onChange={newType => {
+                    setEntries(prev =>
+                      prev.map(en =>
+                        en.field.name === field.name ? { ...en, field: { ...en.field, type: newType } } : en,
+                      ),
+                    );
+                    onTypeChange(field.name, newType);
+                  }}
+                />
               </div>
               <div className='flex items-center gap-1.5'>
                 <span className='text-[10px] text-dimmed whitespace-nowrap shrink-0'>Data Model</span>

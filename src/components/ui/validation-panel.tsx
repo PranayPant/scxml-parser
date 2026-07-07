@@ -76,7 +76,7 @@ export function ValidationPanel({
         </div>
       )}
 
-      <div className='p-4 flex-1 overflow-y-auto'>
+      <div className='p-4 flex-1 overflow-y-auto scrollbar-thin'>
         {!showTabs || activeTab === 'validation' ? (
           <ValidationTab errors={errors} onErrorClick={onErrorClick} />
         ) : (
@@ -134,7 +134,7 @@ function ValidationTab({ errors, onErrorClick }: ValidationTabProps) {
           </div>
         )}
       </div>
-      <div className='space-y-2 max-h-96 overflow-y-auto'>
+      <div className='space-y-2'>
         {sortedErrors.map((error, index) => (
           <ValidationErrorItem key={index} error={error} onClick={onErrorClick} />
         ))}
@@ -174,7 +174,7 @@ function HostAlertsTab({ hostErrors, onDismiss, onClearAll }: HostAlertsTabProps
           Clear all
         </button>
       </div>
-      <div className='space-y-2 max-h-96 overflow-y-auto'>
+      <div className='space-y-2'>
         {hostErrors.map(item => (
           <HostErrorCard key={item.id} item={item} onDismiss={onDismiss} />
         ))}

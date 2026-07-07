@@ -2,7 +2,7 @@
 
 import { useCallback } from 'react';
 import { ChannelMappingPanel, ConfigPanel, EventsPanel } from '@/components/ui';
-import { updateConfigFieldExpr } from '@/lib/utils/datamodel-extractor';
+import { updateConfigFieldExpr, updateConfigFieldType } from '@/lib/utils/datamodel-extractor';
 import { useEditorStore } from '@/stores/editor-store';
 import { usePanelStore } from '@/stores/panel-store';
 import type { ConfigValue } from '@/types/host-api';
@@ -27,8 +27,11 @@ export function SidePanels({ onEntriesChange, onContentChange }: SidePanelsProps
         onFieldChange={(name, newValue) => {
           onContentChange(updateConfigFieldExpr(content, name, newValue));
         }}
+        onTypeChange={(name, newType) => {
+          onContentChange(updateConfigFieldType(content, name, newType));
+        }}
         onAddField={(name, defaultValue) => {
-          const node = `\n    <data id="conf_${name}" expr="${defaultValue}"/>`;
+          const node = `\n    <data id="conf_${name}" expr="${defaultValue}" confType="string"/>`;
           const next = content.includes('</datamodel>')
             ? content.replace('</datamodel>', `${node}\n  </datamodel>`)
             : content.replace('</scxml>', `\n  <datamodel>${node}\n  </datamodel>\n</scxml>`);

@@ -2,6 +2,7 @@
 
 import React, { useCallback, useMemo, useRef } from 'react';
 import { HistoryManager } from '@/lib/history/history-manager';
+import { annotateLegacyConfTypes } from '@/lib/utils/datamodel-extractor';
 import { DEFAULT_SCXML_TEMPLATE } from '@/lib/consts/default_scxml_template';
 import { useEditorStore } from '@/stores/editor-store';
 import { usePanelStore } from '@/stores/panel-store';
@@ -15,8 +16,10 @@ export function useFileOperations() {
 
   const handleFileLoad = useCallback(
     (loadedFileInfo: FileInfo) => {
-      setFileInfo(loadedFileInfo);
-      historyManager.initialize(loadedFileInfo.content, `Loaded ${loadedFileInfo.name}`);
+      const annotatedContent = annotateLegacyConfTypes(loadedFileInfo.content);
+      const fileInfo: FileInfo = { ...loadedFileInfo, content: annotatedContent };
+      setFileInfo(fileInfo);
+      historyManager.initialize(annotatedContent, `Loaded ${fileInfo.name}`);
       navigateToRoot();
     },
     [setFileInfo, historyManager, navigateToRoot]
@@ -72,16 +75,17 @@ export function useFileOperations() {
       reader.onload = (e) => {
         const fileContent = e.target?.result as string;
         if (fileContent) {
+          const annotatedContent = annotateLegacyConfTypes(fileContent);
           const uploadedFileInfo: FileInfo = {
             name: file.name,
             size: file.size,
             lastModified: new Date(file.lastModified),
-            content: fileContent,
+            content: annotatedContent,
           };
-          setContent(fileContent);
+          setContent(annotatedContent);
           setFileInfo(uploadedFileInfo);
           setErrors([]);
-          historyManager.initialize(fileContent, `Uploaded ${file.name}`);
+          historyManager.initialize(annotatedContent, `Uploaded ${file.name}`);
         }
       };
       reader.onerror = () => {

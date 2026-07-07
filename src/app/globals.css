@@ -135,6 +135,18 @@ button:hover {
   cursor: pointer;
 }
 
+/* Thin scrollbar utility */
+@utility scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ui-border) transparent;
+  &::-webkit-scrollbar { width: 4px; height: 4px; }
+  &::-webkit-scrollbar-track { background: transparent; }
+  &::-webkit-scrollbar-thumb {
+    background-color: var(--ui-border);
+    border-radius: 9999px;
+  }
+}
+
 .dark .react-flow__controls {
   background: var(--ui-bg-elevated);
   border: 1px solid var(--ui-border);

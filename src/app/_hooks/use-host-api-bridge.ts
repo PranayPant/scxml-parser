@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { HistoryManager } from '@/lib/history/history-manager';
-import { extractUnresolvedChannelRefs } from '@/lib/utils/datamodel-extractor';
+import { annotateLegacyConfTypes, extractUnresolvedChannelRefs } from '@/lib/utils/datamodel-extractor';
 import { EVENT_FALLBACK_VALUE } from '@/lib/utils/common-utils';
 import { useEditorStore } from '@/stores/editor-store';
 import { usePanelStore } from '@/stores/panel-store';
@@ -41,9 +41,10 @@ export function useHostAPIBridge() {
     const realApi: ScxmlEditorAPI = {
       onReady,
       loadScxml: (xml: string) => {
-        setContent(xml);
+        const annotated = annotateLegacyConfTypes(xml);
+        setContent(annotated);
         setErrors([]);
-        historyManager.initialize(xml, 'Loaded from host');
+        historyManager.initialize(annotated, 'Loaded from host');
         navigateToRoot();
       },
       getScxml: () => contentRef.current,

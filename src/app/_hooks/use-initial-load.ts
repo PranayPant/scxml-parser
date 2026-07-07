@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { HistoryManager } from '@/lib/history/history-manager';
+import { annotateLegacyConfTypes } from '@/lib/utils/datamodel-extractor';
 import { useEditorStore } from '@/stores/editor-store';
 
 export function useInitialLoad() {
@@ -15,9 +16,10 @@ export function useInitialLoad() {
       .then(r => r.ok ? r.text() : null)
       .then(xml => {
         if (!xml) return;
-        setContent(xml);
+        const annotated = annotateLegacyConfTypes(xml);
+        setContent(annotated);
         setErrors([]);
-        historyManager.initialize(xml, 'Auto-loaded');
+        historyManager.initialize(annotated, 'Auto-loaded');
         navigateToRoot();
       })
       .catch(() => {})

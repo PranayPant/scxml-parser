@@ -85,6 +85,7 @@ export interface DataElement {
   '@_id': string;
   '@_src'?: string;
   '@_expr'?: string;
+  '@_confType'?: string;
   '#text'?: string;
 }
 

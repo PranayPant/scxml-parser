@@ -52,13 +52,19 @@ function inferType(value: string): ConfigField['type'] {
   return 'int';
 }
 
+const VALID_CONF_TYPES: ReadonlySet<string> = new Set(['int', 'double', 'bool', 'string']);
+
 export function extractConfigFields(xmlContent: string): ConfigField[] {
   const res =  parseDataNodes(xmlContent)
     .filter((node) => node["@_id"]?.startsWith("conf_"))
     .map((node) => {
       const name = node["@_id"].slice(5);
       const defaultValue = node["@_expr"] ?? "";
-      return { name, type: inferType(defaultValue), defaultValue };
+      const explicitType = node["@_confType"];
+      const type = explicitType && VALID_CONF_TYPES.has(explicitType)
+        ? explicitType as ConfigField['type']
+        : inferType(defaultValue);
+      return { name, type, defaultValue };
     });
     return res;
 }
@@ -109,6 +115,72 @@ export function updateConfigFieldExpr(xmlContent: string, name: string, newValue
 
   walk(doc);
   return updateBuilder.build(doc);
+}
+
+export function updateConfigFieldType(xmlContent: string, name: string, newType: ConfigField['type']): string {
+  let doc: unknown[];
+  try {
+    doc = updateParser.parse(xmlContent) as unknown[];
+  } catch {
+    return xmlContent;
+  }
+
+  const targetId = `conf_${name}`;
+
+  function walk(nodes: unknown[]): void {
+    for (const node of nodes) {
+      if (!node || typeof node !== "object") continue;
+      const nodeObj = node as Record<string, unknown>;
+      if ("data" in nodeObj) {
+        const attrs = nodeObj[":@"] as Record<string, string> | undefined;
+        if (attrs?.["@_id"] === targetId) attrs["@_confType"] = newType;
+      } else {
+        for (const [key, val] of Object.entries(nodeObj)) {
+          if (key !== ":@" && Array.isArray(val)) walk(val);
+        }
+      }
+    }
+  }
+
+  walk(doc);
+  return updateBuilder.build(doc);
+}
+
+/**
+ * Ensures every conf_ field carries an explicit confType attribute, computing it via the
+ * same inferType heuristic used for legacy files that predate the attribute. Called once at
+ * import time so the guess is captured explicitly rather than re-derived from expr on every load.
+ */
+export function annotateLegacyConfTypes(xmlContent: string): string {
+  let doc: unknown[];
+  try {
+    doc = updateParser.parse(xmlContent) as unknown[];
+  } catch {
+    return xmlContent;
+  }
+
+  let changed = false;
+
+  function walk(nodes: unknown[]): void {
+    for (const node of nodes) {
+      if (!node || typeof node !== "object") continue;
+      const nodeObj = node as Record<string, unknown>;
+      if ("data" in nodeObj) {
+        const attrs = nodeObj[":@"] as Record<string, string> | undefined;
+        if (attrs?.["@_id"]?.startsWith("conf_") && !attrs["@_confType"]) {
+          attrs["@_confType"] = inferType(attrs["@_expr"] ?? "");
+          changed = true;
+        }
+      } else {
+        for (const [key, val] of Object.entries(nodeObj)) {
+          if (key !== ":@" && Array.isArray(val)) walk(val);
+        }
+      }
+    }
+  }
+
+  walk(doc);
+  return changed ? updateBuilder.build(doc) : xmlContent;
 }
 
 export function deleteConfigField(xmlContent: string, name: string): string {
