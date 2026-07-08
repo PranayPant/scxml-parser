@@ -15,6 +15,17 @@ export interface SCXMLElement {
   parallel?: ParallelElement | ParallelElement[];
   final?: FinalElement | FinalElement[];
   script?: ScriptElement | ScriptElement[];
+  'viz:note'?: VizNoteElement | VizNoteElement[];
+}
+
+/**
+ * Post-it note annotation element (viz namespace, ignored by SCXML engines).
+ * '#text' may be parsed as a number when the note contains only digits.
+ */
+export interface VizNoteElement {
+  '@_viz:id'?: string;
+  '@_viz:xywh'?: string;
+  '#text'?: string | number;
 }
 
 export interface StateElement {

@@ -8,7 +8,7 @@
  * - Clean separation of business logic from UI
  */
 
-import { VISUAL_METADATA_CONSTANTS } from '@/types/visual-metadata';
+import { VISUAL_METADATA_CONSTANTS, isNoteId } from '@/types/visual-metadata';
 import { formatXML } from '@/lib/utils/format-utils';
 
 export interface CommandResult {
@@ -104,6 +104,41 @@ export abstract class BaseCommand implements Command {
     return doc.querySelector(
       `state[id="${stateId}"], parallel[id="${stateId}"], final[id="${stateId}"]`
     );
+  }
+
+  /**
+   * Whether a node id refers to a post-it note annotation
+   */
+  protected isNoteId(nodeId: string): boolean {
+    return isNoteId(nodeId);
+  }
+
+  /**
+   * Find a <viz:note> element by its viz:id.
+   * Uses getElementsByTagName because CSS selectors cannot match the
+   * qualified name of a namespaced element. Supports the transient
+   * "note:idx-N" fallback ids (N-th note in document order) used before
+   * ids are persisted.
+   */
+  protected findNoteElement(doc: Document, noteId: string): Element | null {
+    const notes = doc.getElementsByTagName(
+      VISUAL_METADATA_CONSTANTS.NOTE.ELEMENT_NAME
+    );
+    for (let i = 0; i < notes.length; i++) {
+      if (notes[i].getAttribute('viz:id') === noteId) {
+        return notes[i];
+      }
+    }
+    const indexMatch = noteId.match(/^note:idx-(\d+)$/);
+    if (indexMatch) {
+      const index = parseInt(indexMatch[1], 10);
+      const candidate = notes[index];
+      // Only trust the positional fallback if that note has no persisted id
+      if (candidate && !candidate.getAttribute('viz:id')) {
+        return candidate;
+      }
+    }
+    return null;
   }
 
   /**

@@ -1,4 +1,5 @@
 import { BaseCommand, type CommandResult } from './base-command';
+import { VISUAL_METADATA_CONSTANTS } from '@/types/visual-metadata';
 
 /**
  * UpdatePositionCommand
@@ -31,11 +32,14 @@ export class UpdatePositionCommand extends BaseCommand {
     // Ensure viz namespace exists
     this.ensureVizNamespace(doc);
 
-    // Find the state element
-    const stateElement = this.findStateElement(doc, this.nodeId);
+    // Find the state or note element
+    const isNote = this.isNoteId(this.nodeId);
+    const stateElement = isNote
+      ? this.findNoteElement(doc, this.nodeId)
+      : this.findStateElement(doc, this.nodeId);
     if (!stateElement) {
       return this.createFailureResult(
-        `State element not found: ${this.nodeId}`,
+        `${isNote ? 'Note' : 'State'} element not found: ${this.nodeId}`,
         scxmlContent
       );
     }
@@ -55,6 +59,12 @@ export class UpdatePositionCommand extends BaseCommand {
         width = parts[2];
         height = parts[3];
       }
+    }
+
+    // Notes always store the fixed size (also migrates legacy custom sizes)
+    if (isNote) {
+      width = VISUAL_METADATA_CONSTANTS.NOTE.WIDTH;
+      height = VISUAL_METADATA_CONSTANTS.NOTE.HEIGHT;
     }
 
     // Update viz:xywh with new position but same dimensions

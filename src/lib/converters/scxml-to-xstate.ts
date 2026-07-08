@@ -32,6 +32,11 @@ import {
   writeLayoutToSCXML,
   type EdgeHandleEntry,
 } from './converter-modules/visual-metadata';
+import {
+  ensureNoteIds,
+  extractNoteNodes,
+  notesNeedIds,
+} from './converter-modules/note-conversion';
 
 /**
  * Converts SCXML documents to XState v5 machine configurations and React Flow diagram data
@@ -130,8 +135,23 @@ export class SCXMLToXStateConverter {
       layoutManager
     );
 
+    // Append post-it note nodes AFTER layout so ELK, dimension calculation
+    // and the layout write-back never touch them
+    const noteNodes = extractNoteNodes(scxml);
+
+    // Persist ids for legacy notes that lack viz:id, piggybacking on the
+    // initialization write-back (the diagram re-derives from the result)
+    if (notesNeedIds(scxml)) {
+      const withNoteIds = ensureNoteIds(
+        this.initializedSCXML || this.originalScxmlContent
+      );
+      if (withNoteIds) {
+        this.initializedSCXML = withNoteIds;
+      }
+    }
+
     return {
-      nodes: hierarchicalLayout.nodes,
+      nodes: [...hierarchicalLayout.nodes, ...noteNodes],
       edges: hierarchicalLayout.edges,
       initializedSCXML: this.initializedSCXML,
     };

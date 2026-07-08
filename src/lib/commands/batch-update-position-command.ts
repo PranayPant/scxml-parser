@@ -1,4 +1,5 @@
 import { BaseCommand, type CommandResult } from './base-command';
+import { VISUAL_METADATA_CONSTANTS } from '@/types/visual-metadata';
 
 /**
  * BatchUpdatePositionCommand
@@ -31,9 +32,14 @@ export class BatchUpdatePositionCommand extends BaseCommand {
 
     // Process all position updates
     for (const update of this.updates) {
-      const stateElement = this.findStateElement(doc, update.nodeId);
+      const isNote = this.isNoteId(update.nodeId);
+      const stateElement = isNote
+        ? this.findNoteElement(doc, update.nodeId)
+        : this.findStateElement(doc, update.nodeId);
       if (!stateElement) {
-        console.warn(`State element not found: ${update.nodeId}`);
+        console.warn(
+          `${isNote ? 'Note' : 'State'} element not found: ${update.nodeId}`
+        );
         continue;
       }
 
@@ -51,6 +57,12 @@ export class BatchUpdatePositionCommand extends BaseCommand {
           width = parts[2];
           height = parts[3];
         }
+      }
+
+      // Notes always store the fixed size (also migrates legacy custom sizes)
+      if (isNote) {
+        width = VISUAL_METADATA_CONSTANTS.NOTE.WIDTH;
+        height = VISUAL_METADATA_CONSTANTS.NOTE.HEIGHT;
       }
 
       // Update viz:xywh with new position but same dimensions

@@ -334,4 +334,28 @@ export const VISUAL_METADATA_CONSTANTS = {
     x: 100,
     y: 100,
   },
+  /** Post-it note annotation settings */
+  NOTE: {
+    /** Fixed note width in px (notes are not user-resizable) */
+    WIDTH: 500,
+    /** Base note height in px */
+    HEIGHT: 500,
+    /** Font size used until text overflows, in px */
+    FONT_SIZE_LARGE: 20,
+    /** Font size used after large-font overflow, in px */
+    FONT_SIZE_SMALL: 12,
+    /** Node id prefix; ':' is not valid in SCXML state ids, so this cannot collide */
+    ID_PREFIX: 'note:',
+    /** Qualified element name in the viz namespace */
+    ELEMENT_NAME: 'viz:note',
+    /** Vertical growth factor applied when small font still overflows */
+    HEIGHT_EXPANSION_FACTOR: 2,
+  },
 } as const;
+
+/**
+ * Whether a React Flow node id refers to a post-it note annotation
+ */
+export function isNoteId(id: string): boolean {
+  return id.startsWith(VISUAL_METADATA_CONSTANTS.NOTE.ID_PREFIX);
+}

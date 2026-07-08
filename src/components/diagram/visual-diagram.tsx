@@ -44,9 +44,12 @@ import {
   type NodeTypes,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
+import { v4 as uuidv4 } from 'uuid';
+import { isNoteId, VISUAL_METADATA_CONSTANTS } from '@/types/visual-metadata';
 import { SCXMLTransitionEdge } from './edges/scxml-transition-edge';
 import { HistoryWrapperNode } from './nodes/history-wrapper-node';
 import { SCXMLStateNode } from './nodes/scxml-state-node';
+import { StickyNoteNode } from './nodes/sticky-note-node';
 import { StateActionsPanel } from '@/components/ui/state-actions-panel';
 import { TransitionPanel, type TransitionApplyArgs } from './transition-panel';
 import { useIsDark } from '@/lib/theme/use-is-dark';
@@ -71,6 +74,7 @@ interface VisualDiagramProps {
 const nodeTypes: NodeTypes = {
   scxmlState: SCXMLStateNode,
   scxmlHistory: HistoryWrapperNode,
+  scxmlNote: StickyNoteNode,
 };
 
 // Custom edge types for SCXML transitions
@@ -425,19 +429,62 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
 
       try {
         // Use command pattern for unified SCXML updates
-        const { DeleteNodeCommand } = require('@/lib/commands');
-        const command = new DeleteNodeCommand(nodeIds);
+        const { DeleteNodeCommand, DeleteNoteCommand } = require('@/lib/commands');
+
+        // Notes and states live in different elements; route each to its command
+        const allIds = Array.isArray(nodeIds) ? nodeIds : [nodeIds];
+        const noteIds = allIds.filter((id) => isNoteId(id));
+        const stateIds = allIds.filter((id) => !isNoteId(id));
+
+        let content = scxmlContent;
+
+        if (stateIds.length > 0) {
+          const result = new DeleteNodeCommand(stateIds).execute(content);
+          if (!result.success) {
+            console.error('Failed to delete node:', result.error);
+            return;
+          }
+          content = result.newContent;
+        }
+
+        if (noteIds.length > 0) {
+          const result = new DeleteNoteCommand(noteIds).execute(content);
+          if (!result.success) {
+            console.error('Failed to delete note:', result.error);
+            return;
+          }
+          content = result.newContent;
+        }
+
+        if (content !== scxmlContent) {
+          onSCXMLChange(content, 'structure');
+          setActiveStates(new Set());
+        }
+      } catch (error) {
+        console.error('Failed to delete node:', error);
+      }
+    },
+    [scxmlContent, onSCXMLChange]
+  );
+
+  // ==================== NOTE HANDLERS ====================
+  const handleNoteTextChange = React.useCallback(
+    (noteId: string, newText: string) => {
+      if (!onSCXMLChange || !scxmlContent) return;
+
+      try {
+        const { UpdateNoteTextCommand } = require('@/lib/commands');
+        const command = new UpdateNoteTextCommand(noteId, newText);
 
         const result = command.execute(scxmlContent);
 
         if (result.success) {
-          onSCXMLChange(result.newContent, 'structure');
-          setActiveStates(new Set());
+          onSCXMLChange(result.newContent, 'property');
         } else {
-          console.error('Failed to delete node:', result.error);
+          console.error('Failed to update note text:', result.error);
         }
       } catch (error) {
-        console.error('Failed to delete node:', error);
+        console.error('Failed to update note text:', error);
       }
     },
     [scxmlContent, onSCXMLChange]
@@ -867,7 +914,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
   const clickCountRef = React.useRef<number>(0);
 
   const handleStateClick = useCallback(
-    (stateId: string, event?: React.MouseEvent) => {
+    (stateId: string, event?: React.MouseEvent, nodeType?: string) => {
       // Increment click count
       clickCountRef.current++;
 
@@ -907,8 +954,9 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
                 newStates.add(stateId);
 
                 // Show actions editor for single selected state
+                // (notes are annotations - they select but have no actions panel)
                 const node = nodes.find((n) => n.id === stateId);
-                if (node && node.data) {
+                if (node && node.data && nodeType !== 'scxmlNote') {
                   const parseActions = (actions: string[]): ParsedActionRow[] => {
                     return actions.flatMap((a): ParsedActionRow[] => {
                       if (a.startsWith('assign|')) {
@@ -1500,6 +1548,21 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
           }
 
           const enhancedNodes = nodes.map((node) => {
+            // Notes keep the converter's position and fixed size; they only
+            // need delete and text-edit callbacks (no visual styles, resize
+            // or label wiring)
+            if (node.type === 'scxmlNote') {
+              return {
+                ...node,
+                data: {
+                  ...node.data,
+                  onDelete: () => handleNodeDelete(node.id),
+                  onTextChange: (newText: string) =>
+                    handleNoteTextChange(node.id, newText),
+                },
+              };
+            }
+
             const visualMetadata = metadataManager.getVisualMetadata(node.id);
             const nodeUpdate: any = { ...node };
 
@@ -1785,6 +1848,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
     handleNodeStateTypeChange,
     handleNodeDelete,
     handleNodeResize,
+    handleNoteTextChange,
   ]);
 
   // ==================== HIERARCHY NAVIGATION ====================
@@ -1972,6 +2036,51 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
     fitView,
   ]);
 
+  const handleAddNote = React.useCallback(() => {
+    if (!onSCXMLChange || !scxmlContent) {
+      console.error('Cannot add note: SCXML not available');
+      return;
+    }
+
+    try {
+      const noteId = `${VISUAL_METADATA_CONSTANTS.NOTE.ID_PREFIX}${uuidv4().slice(0, 8)}`;
+
+      // Place to the right of existing root nodes (notes always live at
+      // root level, mirroring the add-state placement heuristic)
+      let x = 100;
+      let y = 100;
+      const rootNodes = nodes.filter((n) => !n.parentId);
+      if (rootNodes.length > 0) {
+        const maxX = Math.max(
+          ...rootNodes.map((n) => n.position.x + (n.width || 160))
+        );
+        x = maxX + 100;
+      }
+
+      const { AddNoteCommand } = require('@/lib/commands');
+      const command = new AddNoteCommand(noteId, x, y);
+      const result = command.execute(scxmlContent);
+
+      if (result.success) {
+        onSCXMLChange(result.newContent, 'structure');
+
+        setTimeout(() => {
+          fitView({
+            padding: 0.3,
+            includeHiddenNodes: false,
+            minZoom: 0.5,
+            maxZoom: 2,
+            duration: 600,
+          });
+        }, 200);
+      } else {
+        console.error('Failed to add note:', result.error);
+      }
+    } catch (error) {
+      console.error('Failed to add note:', error);
+    }
+  }, [scxmlContent, onSCXMLChange, nodes, fitView]);
+
   // ==================== NODE ENHANCEMENTS ====================
   const nodeEnhancements = React.useMemo(() => {
     const enhancements = new Map();
@@ -2000,6 +2109,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
           onStateTypeChange: node.data?.onStateTypeChange,
           onActionsChange: node.data?.onActionsChange,
           onDelete: node.data?.onDelete,
+          onTextChange: node.data?.onTextChange,
         },
         style: {
           ...node.style,
@@ -2267,11 +2377,16 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
             onEdgesChange={handleEdgesChange}
             onConnect={onConnect}
             onReconnect={onReconnect}
-            onNodeClick={(event, node) => handleStateClick(node.id, event)}
+            onNodeClick={(event, node) =>
+              handleStateClick(node.id, event, node.type)
+            }
             onNodeDoubleClick={(event, node) => {
               event.stopPropagation();
               const nodeElement = nodes.find((n) => n.id === node.id);
-              if (nodeElement?.data?.onLabelChange) {
+              if (
+                nodeElement?.data?.onLabelChange ||
+                nodeElement?.type === 'scxmlNote'
+              ) {
                 setNodes((nds) =>
                   nds.map((n) => {
                     if (n.id === node.id) {
@@ -2376,6 +2491,14 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
                 className='text-muted hover:text-default'
               >
                 S
+              </ControlButton>
+              <ControlButton
+                onClick={handleAddNote}
+                title='Add Note'
+                aria-label='Add Note'
+                className='text-muted hover:text-default'
+              >
+                N
               </ControlButton>
             </Controls>
             <MiniMap
