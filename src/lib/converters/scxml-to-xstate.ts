@@ -232,95 +232,142 @@ export class SCXMLToXStateConverter {
     await applyDefaultELKLayout(allNodes, edges);
 
     // Compute smart source/target handles for edges that have no saved viz:sourceHandle /
-    // viz:targetHandle. Now that node positions are finalised we can pick the side of each
-    // node that faces the other node (right/left/top/bottom) instead of always defaulting
-    // to bottom→top.
+    // viz:targetHandle. Handles are chosen with a traffic-aware cost model: each candidate
+    // (sourceHandle, targetHandle) pair is scored by how directly it faces the other node,
+    // plus how much other traffic already uses those same handles — globally, across the
+    // whole diagram, not just within one node pair — so a busy handle gets avoided in favor
+    // of a quieter one, the way traffic routes around a congested lane. Edges with saved
+    // handles are never overridden, but they still count as traffic that later edges route
+    // around.
     const nodePositionMap = new Map(allNodes.map((n) => [n.id, n]));
+
+    const getNodeCenter = (id: string) => {
+      const node = nodePositionMap.get(id);
+      if (!node) return undefined;
+      const w = (node.data as any).width || 160;
+      const h = (node.data as any).height || 80;
+      return { x: node.position.x + w / 2, y: node.position.y + h / 2 };
+    };
+
+    type HandleSide = 'top' | 'bottom' | 'left' | 'right';
+
+    // generalUsage: how many edges of any kind already use a given handle on a given node
+    // — the broad "how busy is this lane" signal.
+    const generalUsage = new Map<string, number>();
+    const generalKey = (nodeId: string, side: string) => `${nodeId}\0${side}`;
+    const bumpGeneral = (nodeId: string, side: string) => {
+      const key = generalKey(nodeId, side);
+      generalUsage.set(key, (generalUsage.get(key) || 0) + 1);
+    };
+    const getGeneral = (nodeId: string, side: string) => generalUsage.get(generalKey(nodeId, side)) || 0;
+
+    // pairUsage: how many edges already use this exact physical slot — the same two
+    // node+handle anchor points — between these two specific nodes. Direction-independent:
+    // A→B and B→A landing on mirrored handles count as the same slot, since they'd overlap
+    // on the same two physical points.
+    const pairUsage = new Map<string, number>();
+    const pairKey = (a: string, aSide: string, b: string, bSide: string) =>
+      [`${a}:${aSide}`, `${b}:${bSide}`].sort().join('|');
+    const bumpPair = (a: string, aSide: string, b: string, bSide: string) => {
+      const key = pairKey(a, aSide, b, bSide);
+      pairUsage.set(key, (pairUsage.get(key) || 0) + 1);
+    };
+    const getPair = (a: string, aSide: string, b: string, bSide: string) =>
+      pairUsage.get(pairKey(a, aSide, b, bSide)) || 0;
+
+    // Seed both registries from edges that don't need computed handles (explicit
+    // saves, self-loops) so newly computed handles route around already-fixed traffic too.
     edges.forEach((edge) => {
       const isSelfLoop = edge.source === edge.target;
-      if (isSelfLoop) return; // keep default handles for self-loops
+      const needsSource = !edge.data?.hasExplicitSourceHandle;
+      const needsTarget = !edge.data?.hasExplicitTargetHandle;
+      if (!isSelfLoop && (needsSource || needsTarget)) return; // computed below instead
 
-      const srcNode = nodePositionMap.get(edge.source);
-      const tgtNode = nodePositionMap.get(edge.target);
-      if (!srcNode || !tgtNode) return;
-
-      const srcW = (srcNode.data as any).width || 160;
-      const srcH = (srcNode.data as any).height || 80;
-      const tgtW = (tgtNode.data as any).width || 160;
-      const tgtH = (tgtNode.data as any).height || 80;
-
-      const srcCX = srcNode.position.x + srcW / 2;
-      const srcCY = srcNode.position.y + srcH / 2;
-      const tgtCX = tgtNode.position.x + tgtW / 2;
-      const tgtCY = tgtNode.position.y + tgtH / 2;
-
-      const dx = tgtCX - srcCX;
-      const dy = tgtCY - srcCY;
-
-      let smartSource: string;
-      let smartTarget: string;
-      if (Math.abs(dx) >= Math.abs(dy)) {
-        smartSource = dx >= 0 ? 'right' : 'left';
-        smartTarget = dx >= 0 ? 'left' : 'right';
-      } else {
-        smartSource = dy >= 0 ? 'bottom' : 'top';
-        smartTarget = dy >= 0 ? 'top' : 'bottom';
-      }
-
-      if (!edge.data?.hasExplicitSourceHandle) {
-        edge.sourceHandle = smartSource;
-        edge.data.sourceHandle = smartSource;
-      }
-      if (!edge.data?.hasExplicitTargetHandle) {
-        edge.targetHandle = smartTarget;
-        edge.data.targetHandle = smartTarget;
+      if (edge.sourceHandle) bumpGeneral(edge.source, edge.sourceHandle);
+      if (edge.targetHandle) bumpGeneral(edge.target, edge.targetHandle);
+      if (!isSelfLoop && edge.sourceHandle && edge.targetHandle) {
+        bumpPair(edge.source, edge.sourceHandle, edge.target, edge.targetHandle);
       }
     });
 
-    // Fix bidirectional edge overlap: when A→B and B→A both exist they compute the
-    // same endpoint pair (A.right↔B.left for a horizontal layout), producing
-    // geometrically identical paths. Re-route the "return" leg through perpendicular
-    // same-side handles so the two edges take visually distinct paths:
-    //   • horizontal pair → return leg arcs via bottom→bottom (below both nodes)
-    //   • vertical pair   → return leg arcs via right→right  (right of both nodes)
-    //
-    // "Forward" direction: source < target lexicographically — keeps face-to-face handles.
-    // "Return" direction:  source > target — overridden with perpendicular handles.
-    // Edges with explicit saved handles are never overridden.
-    {
-      const allPairKeys = new Set(edges.map((e) => `${e.source}\0${e.target}`));
+    // Perpendicular candidates cost more than a direct face-to-face route geometrically,
+    // but repeated use of the *same exact slot* between the same two nodes costs far more
+    // than generic handle load elsewhere in the diagram — this keeps normal fan-outs (many
+    // distinct neighbors sharing one handle) untouched while still strongly separating
+    // genuine parallel/bidirectional edges between the same pair.
+    const GEOMETRIC_PENALTY_PERP = 6;
+    const SAME_PAIR_WEIGHT = 8;
+    const GENERAL_LOAD_WEIGHT = 1;
 
-      // Collect forward-direction keys that have a reverse counterpart, and record
-      // the source handle of each forward direction for axis detection.
-      const forwardHandleMap = new Map<string, string>(); // "fwd-src\0fwd-tgt" → sourceHandle
-      for (const edge of edges) {
-        if (edge.source >= edge.target) continue; // only process source < target
-        const revKey = `${edge.target}\0${edge.source}`;
-        if (!allPairKeys.has(revKey)) continue;
-        // All forward edges between the same pair share the same axis; last write wins (same value).
-        forwardHandleMap.set(`${edge.source}\0${edge.target}`, edge.sourceHandle as string);
-      }
+    edges.forEach((edge) => {
+      if (edge.source === edge.target) return; // self-loops keep their default bottom→top handles
+      const needsSource = !edge.data?.hasExplicitSourceHandle;
+      const needsTarget = !edge.data?.hasExplicitTargetHandle;
+      if (!needsSource && !needsTarget) return; // fully explicit, already seeded above
 
-      if (forwardHandleMap.size > 0) {
-        for (const edge of edges) {
-          if (edge.source <= edge.target) continue; // skip forward and same-id edges
-          if (edge.data?.hasExplicitSourceHandle || edge.data?.hasExplicitTargetHandle) continue;
+      const srcCenter = getNodeCenter(edge.source);
+      const tgtCenter = getNodeCenter(edge.target);
+      if (!srcCenter || !tgtCenter) return;
 
-          // revKey is the forward direction for this return edge
-          const revKey = `${edge.target}\0${edge.source}`;
-          const fwdSrcHandle = forwardHandleMap.get(revKey);
-          if (fwdSrcHandle === undefined) continue; // no bidirectional counterpart
+      const edx = tgtCenter.x - srcCenter.x;
+      const edy = tgtCenter.y - srcCenter.y;
+      const isHorizontal = Math.abs(edx) >= Math.abs(edy);
 
-          const isHorizontal = fwdSrcHandle === 'left' || fwdSrcHandle === 'right';
-          const perpHandle = isHorizontal ? 'bottom' : 'right';
+      // Direct: face the other node, mirrors per this edge's own direction.
+      const directSource: HandleSide = isHorizontal
+        ? edx >= 0 ? 'right' : 'left'
+        : edy >= 0 ? 'bottom' : 'top';
+      const directTarget: HandleSide = isHorizontal
+        ? edx >= 0 ? 'left' : 'right'
+        : edy >= 0 ? 'top' : 'bottom';
+      // Perpendicular slots use the same side name for both nodes ('right'↔'right' or
+      // 'bottom'↔'bottom'), so they don't depend on edge direction.
+      const perpASide: HandleSide = isHorizontal ? 'bottom' : 'right';
+      const perpBSide: HandleSide = isHorizontal ? 'top' : 'left';
 
-          edge.sourceHandle = perpHandle;
-          edge.data!.sourceHandle = perpHandle;
-          edge.targetHandle = perpHandle;
-          edge.data!.targetHandle = perpHandle;
+      const candidates: Array<{ source: HandleSide; target: HandleSide; penalty: number; isDirect: boolean }> = [
+        { source: directSource, target: directTarget, penalty: 0, isDirect: true },
+        { source: perpASide, target: perpASide, penalty: GEOMETRIC_PENALTY_PERP, isDirect: false },
+        { source: perpBSide, target: perpBSide, penalty: GEOMETRIC_PENALTY_PERP, isDirect: false },
+      ];
+
+      let best: (typeof candidates)[number] | undefined;
+      let bestCost = Infinity;
+      for (const candidate of candidates) {
+        const pairCount = getPair(edge.source, candidate.source, edge.target, candidate.target);
+        // The direct route is the tight face-to-face gap between the two nodes — there's
+        // barely any room for a second edge to visibly bow away from the first one there.
+        // The perpendicular loops travel all the way around a node's side and have real
+        // room to separate, so once direct is taken, every further edge cycles between
+        // the two perpendicular loops instead of ever doubling up on direct again.
+        if (candidate.isDirect && pairCount >= 1) continue;
+
+        const cost =
+          candidate.penalty +
+          SAME_PAIR_WEIGHT * pairCount +
+          GENERAL_LOAD_WEIGHT *
+            (getGeneral(edge.source, candidate.source) + getGeneral(edge.target, candidate.target));
+        if (cost < bestCost) {
+          bestCost = cost;
+          best = candidate;
         }
       }
-    }
+      if (!best) best = candidates[0]; // unreachable safety fallback
+
+      if (needsSource) {
+        edge.sourceHandle = best.source;
+        edge.data!.sourceHandle = best.source;
+      }
+      if (needsTarget) {
+        edge.targetHandle = best.target;
+        edge.data!.targetHandle = best.target;
+      }
+
+      // Record this edge as traffic so subsequent edges route around it too.
+      bumpGeneral(edge.source, best.source);
+      bumpGeneral(edge.target, best.target);
+      bumpPair(edge.source, best.source, edge.target, best.target);
+    });
 
     // Write back to SCXML when nodes lack viz:xywh OR any edge lacks viz:sourceHandle/targetHandle.
     // This persists the computed handles once so subsequent re-parses (e.g. after node drag)

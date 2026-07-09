@@ -20,7 +20,8 @@ export interface SCXMLTransitionEdgeData {
   actions?: string[];
   labelOffset?: { x: number; y: number };
   offset?: number; // Path offset for parallel edges
-  labelOffsetY?: number; // Label Y-axis offset for parallel edges
+  labelOffsetX?: number; // Label X-axis offset — used when the edge bows horizontally (top/bottom handles)
+  labelOffsetY?: number; // Label Y-axis offset — used when the edge bows vertically (left/right handles)
   fullLabel?: string; // Full label text for tooltip
   displayEvent?: string; // "after 2s" / "after 714ms" / "after (expr) s" for _t_ time-transition edges
   waypoints?: Waypoint[]; // Waypoint control points for edge routing
@@ -187,6 +188,7 @@ export const SCXMLTransitionEdge: React.FC<
   const actions = data?.actions || [];
   const labelOffset = data?.labelOffset || { x: 0, y: 0 };
   const offset = data?.offset || 0;
+  const labelOffsetX = data?.labelOffsetX || 0;
   const labelOffsetY = data?.labelOffsetY || 0;
   const displayEvent = data?.displayEvent;
   const waypoints = data?.waypoints || [];
@@ -338,7 +340,7 @@ export const SCXMLTransitionEdge: React.FC<
           <foreignObject
             width={maxLabelWidth}
             height={26}
-            x={labelX - maxLabelWidth / 2 + labelOffset.x}
+            x={labelX - maxLabelWidth / 2 + labelOffset.x + labelOffsetX}
             y={labelY - 13 + labelOffset.y + labelOffsetY}
             style={{
               overflow: 'hidden',

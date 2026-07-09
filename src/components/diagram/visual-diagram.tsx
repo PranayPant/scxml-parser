@@ -1657,9 +1657,20 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
             return nodeUpdate;
           });
 
+          // Group by the physical pair of connection points (node+handle), not by
+          // direction, so the curvature/offset fan-out below applies whenever two edges
+          // share the same two anchor points — including an A→B / B→A pair that landed
+          // on the same mirrored handle slot — not just literal duplicate (source,
+          // target, sourceHandle, targetHandle) tuples. Edges distributed onto genuinely
+          // different sides during handle assignment won't share a key and are left alone.
+          const edgeSlotKey = (edge: Edge) =>
+            [`${edge.source}:${edge.sourceHandle}`, `${edge.target}:${edge.targetHandle}`]
+              .sort()
+              .join('|');
+
           const edgeGroups = new Map<string, any[]>();
           edges.forEach((edge) => {
-            const key = `${edge.source}-${edge.target}`;
+            const key = edgeSlotKey(edge);
             if (!edgeGroups.has(key)) {
               edgeGroups.set(key, []);
             }
@@ -1669,7 +1680,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
 
           const edgesWithMarkers = edges.map((edge) => {
             const edgeMetadata = metadataManager.getVisualMetadata(edge.id);
-            const edgeKey = `${edge.source}-${edge.target}`;
+            const edgeKey = edgeSlotKey(edge);
             const parallelEdges = edgeGroups.get(edgeKey) || [];
             const edgeIndex = parallelEdges.findIndex((e) => e.id === edge.id);
             const hasParallelEdges = parallelEdges.length > 1;
@@ -1693,13 +1704,21 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
                 offset = (edgeIndex - (parallelEdges.length - 1) / 2) * 60;
               }
 
-              const labelOffsetY =
-                (edgeIndex - (parallelEdges.length - 1) / 2) * 25;
+              // The path bows perpendicular to its connection axis, so the label needs
+              // to separate along that same perpendicular axis: a vertical connection
+              // (top/bottom handles) bows left/right, so the label must offset in X;
+              // a horizontal connection (left/right handles) bows up/down, so it must
+              // offset in Y.
+              const labelSpread = (edgeIndex - (parallelEdges.length - 1) / 2) * 25;
+              const isVerticalConnection =
+                edge.sourceHandle === 'top' || edge.sourceHandle === 'bottom';
+
               pathOptions = {
                 offset,
                 borderRadius: 20 + edgeIndex * 10,
                 curvature: 0.25 + edgeIndex * 0.1,
-                labelOffsetY,
+                labelOffsetX: isVerticalConnection ? labelSpread : 0,
+                labelOffsetY: isVerticalConnection ? 0 : labelSpread,
               };
             }
 
@@ -1738,6 +1757,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
                 fullLabel,
                 displayEvent,
                 offset: pathOptions.offset,
+                labelOffsetX: pathOptions.labelOffsetX,
                 labelOffsetY: pathOptions.labelOffsetY,
                 onWaypointDrag: handleWaypointDrag,
                 onWaypointDragEnd: handleWaypointDragEnd,
