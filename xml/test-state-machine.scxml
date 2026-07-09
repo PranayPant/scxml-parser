@@ -1,218 +1,490 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="idle" name="TestStateMachine" datamodel="ecmascript" binding="early">
-  
-  <!-- Data model with various data types -->
-  <datamodel>
-    <data id="counter" expr="0" />
-    <data id="userName" expr="'anonymous'" />
-    <data id="isActive" expr="false" />
-    <data id="config" expr="{ timeout: 5000, maxRetries: 3 }" />
-  </datamodel>
-
-  <!-- Initial idle state -->
-  <state id="idle">
-    <onentry>
-      <log label="System" expr="'Entering idle state'" />
-      <assign location="isActive" expr="false" />
-    </onentry>
-    
-    <!-- Transition to active state -->
-    <transition event="start" target="active">
-      <assign location="counter" expr="counter + 1" />
-      <log label="Transition" expr="'Starting system, count: ' + counter" />
-    </transition>
-    
-    <!-- Conditional transition based on data -->
-    <transition event="quick.start" cond="counter &gt; 5" target="processing">
-      <log label="QuickStart" expr="'Fast track activated'" />
-    </transition>
-    
-    <!-- Transition to configuration -->
-    <transition event="configure" target="configuration" />
-  </state>
-
-  <!-- Active state with nested states -->
-  <state id="active" initial="ready">
-    <onentry>
-      <assign location="isActive" expr="true" />
-      <send event="status.update" delay="1s" />
-    </onentry>
-    
-    <onexit>
-      <assign location="isActive" expr="false" />
-      <log label="System" expr="'Leaving active state'" />
-    </onexit>
-
-    <!-- Nested ready state -->
-    <state id="ready">
-      <onentry>
-        <log label="Ready" expr="'System ready for processing'" />
-      </onentry>
-      
-      <transition event="process" target="processing" />
-      <transition event="pause" target="paused" />
-      <transition event="stop" target="idle" />
-      
-      <!-- Internal transition (doesn't exit/re-enter state) -->
-      <transition event="refresh" type="internal">
-        <log label="Refresh" expr="'Refreshing data...'" />
-        <raise event="data.updated" />
-      </transition>
-    </state>
-
-    <!-- Processing state -->
-    <state id="processing">
-      <onentry>
-        <log label="Processing" expr="'Starting processing...'" />
-        <send event="timeout" delay="10s" id="processingTimer" />
-      </onentry>
-      
-      <onexit>
-        <cancel sendid="processingTimer" />
-      </onexit>
-      
-      <transition event="complete" target="ready">
-        <log label="Processing" expr="'Processing completed successfully'" />
-      </transition>
-      
-      <transition event="error" target="error">
-        <assign location="counter" expr="counter - 1" />
-      </transition>
-      
-      <transition event="timeout" target="error">
-        <log label="Error" expr="'Processing timed out'" />
-      </transition>
-      
-      <transition event="pause" target="paused" />
-    </state>
-
-    <!-- Paused state -->
-    <state id="paused">
-      <onentry>
-        <log label="Paused" expr="'System paused'" />
-      </onentry>
-      
-      <transition event="resume" target="ready" />
-      <transition event="stop" target="idle" />
-    </state>
-
-    <!-- Error state with conditional logic -->
-    <state id="error">
-      <onentry>
-        <log label="Error" expr="'Error occurred, counter: ' + counter" />
-        <if cond="counter &gt; 0">
-          <send event="retry" delay="2s" />
-        <else />
-          <send event="fail" delay="1s" />
-        </if>
-      </onentry>
-      
-      <transition event="retry" cond="counter &gt; 0" target="ready">
-        <log label="Retry" expr="'Retrying operation'" />
-      </transition>
-      
-      <transition event="fail" target="failed" />
-      <transition event="reset" target="idle">
-        <assign location="counter" expr="0" />
-      </transition>
-    </state>
-  </state>
-
-  <!-- Configuration state with parallel regions -->
-  <state id="configuration">
-    <onentry>
-      <log label="Config" expr="'Entering configuration mode'" />
-    </onentry>
-    
-    <parallel id="configSections">
-      <!-- User settings section -->
-      <state id="userSettings" initial="editingName">
-        <state id="editingName">
-          <transition event="name.changed" target="editingPrefs">
-            <assign location="userName" expr="_event.data.name" />
-          </transition>
-        </state>
-        
-        <state id="editingPrefs">
-          <transition event="prefs.saved" target="editingName" />
-        </state>
-      </state>
-      
-      <!-- System settings section -->
-      <state id="systemSettings" initial="basic">
-        <state id="basic">
-          <transition event="advanced" target="advanced" />
-        </state>
-        
-        <state id="advanced">
-          <transition event="basic" target="basic" />
-        </state>
-      </state>
-    </parallel>
-    
-    <transition event="config.done" target="idle">
-      <log label="Config" expr="'Configuration completed'" />
-    </transition>
-  </state>
-
-  <!-- Failed final state -->
-  <state id="failed">
-    <onentry>
-      <log label="Failed" expr="'System failed - manual intervention required'" />
-    </onentry>
-    
-    <transition event="manual.fix" target="idle">
-      <assign location="counter" expr="0" />
-      <log label="Recovery" expr="'System manually recovered'" />
-    </transition>
-    
-    <transition event="shutdown" target="terminated" />
-  </state>
-
-  <!-- Success final state with done data -->
-  <final id="terminated">
-    <onentry>
-      <log label="Shutdown" expr="'System shutting down gracefully'" />
-    </onentry>
-    
-    <donedata>
-      <param name="finalCount" expr="counter" />
-      <param name="userName" expr="userName" />
-      <param name="shutdownTime" expr="new Date().toISOString()" />
-    </donedata>
-  </final>
-
-  <!-- History state example -->
-  <state id="maintenance">
-    <history id="maintenanceHistory" type="deep">
-      <transition target="idle" />
-    </history>
-    
-    <state id="diagnostics" initial="memoryCheck">
-      <state id="memoryCheck">
-        <transition event="memory.ok" target="diskCheck" />
-      </state>
-      
-      <state id="diskCheck">
-        <transition event="disk.ok" target="networkCheck" />
-      </state>
-      
-      <state id="networkCheck">
-        <transition event="network.ok" target="diagnosticsComplete" />
-      </state>
-      
-      <final id="diagnosticsComplete" />
-    </state>
-    
-    <transition event="maintenance.complete" target="maintenanceHistory" />
-    <transition event="exit.maintenance" target="idle" />
-  </state>
-
-  <!-- Global transitions -->
-  <transition event="emergency.stop" target="failed">
-    <log label="Emergency" expr="'Emergency stop activated!'" />
-  </transition>
-  
-  <transition event="maintenance.mode" target="maintenance" />
-
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="CFS_tank">
+	<datamodel>
+		<data expr="false" id="eStopOk" />
+		<data expr="0.0" id="light_green_onoff" />
+		<data expr="0.0" id="light_yellow_onoff" />
+		<data expr="0.0" id="light_red_onoff" />
+		<data expr="0.0" id="light_sirene_onoff" />
+		<data expr="false" id="gasCabinetBoardError" />
+		<data expr="0.0" id="GS01_GasSampler_GasIn_mode" />
+		<data expr="0.0" id="GS01_GasSampler_GasIn_pres_abs_bar" />
+		<data expr="0.0" id="GS01_GasSampler_GasIn_O2_ppm" />
+		<data expr="0.0" id="GS01_GasSampler_GasIn_hum_abs_g_m3" />
+		<data expr="0.0" id="GS02_GasSampler_FilterOut_mode" />
+		<data expr="0.0" id="GS02_GasSampler_FilterOut_pres_abs_bar" />
+		<data expr="0.0" id="GS02_GasSampler_FilterOut_O2_ppm" />
+		<data expr="0.0" id="GS02_GasSampler_FilterOut_hum_abs_g_m3" />
+		<data expr="0.0" id="pressure_max_barG" />
+		<data expr="0.0" id="pressure_min_barG" />
+		<data expr="0.0" id="V04_Valve_GasIn_FC_onoff" />
+		<data expr="0.0" id="V07_Valve_GasOut_FO_onoff" />
+		<data expr="0.0" id="P01_VacuumPump_onoff" />
+		<data expr="0.0" id="ovenarea1_target" />
+		<data expr="0.0" id="ovenarea2_target" />
+		<data expr="5.0" id="conf_kO" />
+		<data expr="1.0" id="conf_kI" />
+		<data expr="100.0" id="conf_oxygenErrorTriggerThreshold_ppm" />
+		<data expr="20.0" id="conf_oxygenErrorClearThreshold_ppm" />
+		<data expr="1.4" id="conf_supplyPressureTriggerThreshold_bar" />
+		<data expr="1.6" id="conf_supplyPressureClearThreshold_bar" />
+		<data expr="0.0" id="this_p_error_bar" />
+		<data expr="0.0" id="this_p_target_bar" />
+		<data expr="false" id="this_oxygenTooHigh_error" />
+		<data expr="false" id="this_supplyPressureTooLow_error" />
+		<data expr="false" id="this_gasCabinetBoardError_alert" />
+	</datamodel>
+	<state id="main_region">
+		<initial>
+			<transition target="init" type="internal">
+			</transition>
+		</initial>
+		<state id="init">
+			<transition  cond="eStopOk" target="Operation">
+			</transition>
+		</state>
+		<state id="Operation">
+			<initial>
+				<transition target="normal" type="internal">
+				</transition>
+			</initial>
+			<state id="normal">
+				<onentry>
+					 <assign location="light_green_onoff" expr="1"/>
+					 <assign location="light_yellow_onoff" expr="0"/>
+					 <assign location="light_red_onoff" expr="0"/>
+					 <assign location="light_sirene_onoff" expr="0"/>
+					 <assign location="this_oxygenTooHigh_error" expr="false"/>
+					 <assign location="this_supplyPressureTooLow_error" expr="false"/>
+					 <assign location="this_gasCabinetBoardError_alert" expr="false"/>
+				</onentry>
+				<initial>
+					<transition target="over_pressure" type="internal">
+					</transition>
+				</initial>
+				<state id="over_pressure">
+					<onentry>
+						 <assign location="P01_VacuumPump_onoff" expr="0.0"/>
+						 <assign location="V04_Valve_GasIn_FC_onoff" expr="0.0"/>
+						 <assign location="GS01_GasSampler_GasIn_mode" expr="2.0"/>
+						 <assign location="GS02_GasSampler_FilterOut_mode" expr="0.0"/>
+					</onentry>
+					<onentry>
+						 <assign location="V07_Valve_GasOut_FO_onoff" expr="1.0"/>
+						 <assign location="this_p_error_bar" expr="pressure_max_barG - this_p_target_bar"/>
+						 <assign location="light_green_onoff" expr="1"/>
+					</onentry>
+					<transition event ="vector"  type="internal" >
+						 <assign location="V07_Valve_GasOut_FO_onoff" expr="1.0"/>
+						 <assign location="this_p_error_bar" expr="pressure_max_barG - this_p_target_bar"/>
+						 <assign location="light_green_onoff" expr="1"/>
+					</transition>
+					<transition  cond="pressure_min_barG &lt; 0.08 &amp;&amp; this_p_target_bar &lt; 0" target="under_pressure">
+					</transition>
+					<transition  cond="this_p_error_bar &gt; 0.05" target="over_pressure_gas_sampler_out_open">
+					</transition>
+					<transition  cond="this_p_error_bar &lt; -0.02" target="over_pressure_valve_in_open">
+					</transition>
+				</state>
+				<state id="under_pressure">
+					<onentry>
+						 <assign location="V04_Valve_GasIn_FC_onoff" expr="0.0"/>
+						 <assign location="GS02_GasSampler_FilterOut_mode" expr="0.0"/>
+					</onentry>
+					<onentry>
+						 <assign location="V07_Valve_GasOut_FO_onoff" expr="1.0"/>
+						 <assign location="this_p_error_bar" expr="pressure_min_barG - this_p_target_bar"/>
+						 <assign location="light_green_onoff" expr="1"/>
+					</onentry>
+					<transition event ="vector"  type="internal" >
+						 <assign location="V07_Valve_GasOut_FO_onoff" expr="1.0"/>
+						 <assign location="this_p_error_bar" expr="pressure_min_barG - this_p_target_bar"/>
+						 <assign location="light_green_onoff" expr="1"/>
+					</transition>
+					<transition  cond="pressure_min_barG &gt; 0.09" target="over_pressure">
+					</transition>
+					<transition  cond="this_p_error_bar &lt; -0.02" target="under_pressure_valve_in_open">
+					</transition>
+					<transition  cond="this_p_error_bar &gt; 0.02" target="under_pressure_vacuum_pump_on">
+					</transition>
+				</state>
+				<state id="over_pressure_gas_sampler_out_open">
+					<onentry>
+						<send event="over pressure gas sampler out open_t_0_timeEvent_0" delay="1s"/>
+					</onentry>
+					<onexit>
+						<cancel sendid="over pressure gas sampler out open_t_0_timeEvent_0" />
+					</onexit>
+					<onentry>
+						 <assign location="GS02_GasSampler_FilterOut_mode" expr="1.0"/>
+					</onentry>
+					<onentry>
+						 <assign location="V07_Valve_GasOut_FO_onoff" expr="1.0"/>
+						 <assign location="light_green_onoff" expr="1"/>
+					</onentry>
+					<transition event ="vector"  type="internal" >
+						 <assign location="V07_Valve_GasOut_FO_onoff" expr="1.0"/>
+						 <assign location="light_green_onoff" expr="1"/>
+					</transition>
+					<transition event="over pressure gas sampler out open_t_0_timeEvent_0"  target="over_pressure_valve_out_open">
+					</transition>
+				</state>
+				<state id="over_pressure_valve_in_open">
+					<onentry>
+						<send event="over pressure valve in open_t_0_timeEvent_0" delayexpr="Math.floor(((-this_p_error_bar * conf_kI) &lt; 2.0 ? 2.0 : (-this_p_error_bar * conf_kI))) * 1000"/>
+					</onentry>
+					<onexit>
+						<cancel sendid="over pressure valve in open_t_0_timeEvent_0" />
+					</onexit>
+					<onentry>
+						 <assign location="V07_Valve_GasOut_FO_onoff" expr="1.0"/>
+						 <assign location="V04_Valve_GasIn_FC_onoff" expr="1.0"/>
+						 <assign location="light_green_onoff" expr="1"/>
+					</onentry>
+					<transition event ="vector"  type="internal" >
+						 <assign location="V07_Valve_GasOut_FO_onoff" expr="1.0"/>
+						 <assign location="V04_Valve_GasIn_FC_onoff" expr="1.0"/>
+						 <assign location="light_green_onoff" expr="1"/>
+					</transition>
+					<transition event="over pressure valve in open_t_0_timeEvent_0"  target="over_pressure">
+					</transition>
+				</state>
+				<state id="under_pressure_valve_in_open">
+					<onentry>
+						<send event="under pressure valve in open_t_0_timeEvent_0" delayexpr="Math.floor(((-this_p_error_bar * conf_kI) &lt; 2.0 ? 2.0 : (-this_p_error_bar * conf_kI))) * 1000"/>
+					</onentry>
+					<onexit>
+						<cancel sendid="under pressure valve in open_t_0_timeEvent_0" />
+					</onexit>
+					<onentry>
+						 <assign location="V04_Valve_GasIn_FC_onoff" expr="1.0"/>
+						 <assign location="light_green_onoff" expr="1"/>
+					</onentry>
+					<transition event ="vector"  type="internal" >
+						 <assign location="V04_Valve_GasIn_FC_onoff" expr="1.0"/>
+						 <assign location="light_green_onoff" expr="1"/>
+					</transition>
+					<transition event="under pressure valve in open_t_0_timeEvent_0"  target="under_pressure">
+					</transition>
+				</state>
+				<state id="under_pressure_vacuum_pump_on">
+					<onentry>
+						<send event="under pressure vacuum pump on_t_0_timeEvent_0" delay="3s"/>
+					</onentry>
+					<onexit>
+						<cancel sendid="under pressure vacuum pump on_t_0_timeEvent_0" />
+					</onexit>
+					<onentry>
+						 <assign location="GS02_GasSampler_FilterOut_mode" expr="1.0"/>
+					</onentry>
+					<onentry>
+						 <assign location="V07_Valve_GasOut_FO_onoff" expr="1.0"/>
+						 <assign location="P01_VacuumPump_onoff" expr="1.0"/>
+						 <assign location="light_green_onoff" expr="1"/>
+					</onentry>
+					<transition event ="vector"  type="internal" >
+						 <assign location="V07_Valve_GasOut_FO_onoff" expr="1.0"/>
+						 <assign location="P01_VacuumPump_onoff" expr="1.0"/>
+						 <assign location="light_green_onoff" expr="1"/>
+					</transition>
+					<transition event="under pressure vacuum pump on_t_0_timeEvent_0"  target="under_pressure_valve_out_open">
+					</transition>
+				</state>
+				<state id="under_pressure_vacuum_pump_off">
+					<onentry>
+						 <assign location="P01_VacuumPump_onoff" expr="0.0"/>
+						 <assign location="V07_Valve_GasOut_FO_onoff" expr="1.0"/>
+					</onentry>
+					<transition   target="under_pressure">
+					</transition>
+				</state>
+				<state id="under_pressure_valve_out_open">
+					<onentry>
+						 <assign location="V07_Valve_GasOut_FO_onoff" expr="0.0"/>
+						 <assign location="GS02_GasSampler_FilterOut_mode" expr="0.0"/>
+					</onentry>
+					<onentry>
+						 <assign location="P01_VacuumPump_onoff" expr="1.0"/>
+						 <assign location="this_p_error_bar" expr="pressure_min_barG - this_p_target_bar"/>
+						 <assign location="light_green_onoff" expr="1"/>
+					</onentry>
+					<transition event ="vector"  type="internal" >
+						 <assign location="P01_VacuumPump_onoff" expr="1.0"/>
+						 <assign location="this_p_error_bar" expr="pressure_min_barG - this_p_target_bar"/>
+						 <assign location="light_green_onoff" expr="1"/>
+					</transition>
+					<transition  cond="this_p_error_bar &lt; -0.01" target="under_pressure_vacuum_pump_off">
+					</transition>
+				</state>
+				<state id="over_pressure_valve_out_open">
+					<onentry>
+						<send event="over pressure valve out open_t_0_timeEvent_0" delayexpr="Math.floor(((this_p_error_bar * conf_kO) &lt; 2.0 ? 2.0 : (this_p_error_bar * conf_kO))) * 1000"/>
+					</onentry>
+					<onexit>
+						<cancel sendid="over pressure valve out open_t_0_timeEvent_0" />
+					</onexit>
+					<onentry>
+						 <assign location="V07_Valve_GasOut_FO_onoff" expr="0.0"/>
+						 <assign location="GS02_GasSampler_FilterOut_mode" expr="0.0"/>
+					</onentry>
+					<onentry>
+						 <assign location="light_green_onoff" expr="1"/>
+					</onentry>
+					<transition event ="vector"  type="internal" >
+						 <assign location="light_green_onoff" expr="1"/>
+					</transition>
+					<transition event="over pressure valve out open_t_0_timeEvent_0"  target="over_pressure">
+					</transition>
+				</state>
+				<transition  cond="false &amp;&amp; GS01_GasSampler_GasIn_O2_ppm &gt; conf_oxygenErrorTriggerThreshold_ppm" target="oxygen_too_high">
+				</transition>
+				<transition  cond="GS01_GasSampler_GasIn_pres_abs_bar &lt; conf_supplyPressureTriggerThreshold_bar" target="supply_pressure_too_low">
+				</transition>
+				<transition event="set_target_pressure"  target="set_target_pressure">
+				</transition>
+				<transition event="set_area1_target_temperature"  target="set_area1_target_temperature">
+				</transition>
+				<transition event="set_area2_target_temperature"  target="set_area2_target_temperature">
+				</transition>
+				<transition  cond="gasCabinetBoardError" target="gas_cabinet_board_error">
+				</transition>
+			</state>
+			<state id="oxygen_too_high">
+				<onentry>
+					<send event="oxygen too high_t_0_timeEvent_0" delay="1s"/>
+				</onentry>
+				<onexit>
+					<cancel sendid="oxygen too high_t_0_timeEvent_0" />
+				</onexit>
+				<onentry>
+					 <assign location="light_green_onoff" expr="0"/>
+					 <assign location="light_red_onoff" expr="1"/>
+					 <assign location="light_sirene_onoff" expr="1"/>
+					 <assign location="ovenarea1_target" expr="0"/>
+					 <assign location="ovenarea2_target" expr="0"/>
+					 <assign location="this_p_target_bar" expr="0.01"/>
+					 <assign location="V04_Valve_GasIn_FC_onoff" expr="0.0"/>
+					 <assign location="V07_Valve_GasOut_FO_onoff" expr="0.0"/>
+					 <assign location="P01_VacuumPump_onoff" expr="0.0"/>
+					 <assign location="GS02_GasSampler_FilterOut_mode" expr="0.0"/>
+					 <assign location="this_oxygenTooHigh_error" expr="true"/>
+				</onentry>
+				<transition event ="vector"  type="internal" >
+					 <assign location="light_green_onoff" expr="0"/>
+					 <assign location="light_red_onoff" expr="1"/>
+					 <assign location="light_sirene_onoff" expr="1"/>
+					 <assign location="ovenarea1_target" expr="0"/>
+					 <assign location="ovenarea2_target" expr="0"/>
+					 <assign location="this_p_target_bar" expr="0.01"/>
+					 <assign location="V04_Valve_GasIn_FC_onoff" expr="0.0"/>
+					 <assign location="V07_Valve_GasOut_FO_onoff" expr="0.0"/>
+					 <assign location="P01_VacuumPump_onoff" expr="0.0"/>
+					 <assign location="GS02_GasSampler_FilterOut_mode" expr="0.0"/>
+					 <assign location="this_oxygenTooHigh_error" expr="true"/>
+				</transition>
+				<transition event="oxygen too high_t_0_timeEvent_0"  target="oxygen_too_high_blink">
+				</transition>
+				<transition  cond="GS01_GasSampler_GasIn_O2_ppm &lt; conf_oxygenErrorClearThreshold_ppm" target="normal">
+				</transition>
+			</state>
+			<state id="oxygen_too_high_blink">
+				<onentry>
+					<send event="oxygen too high blink_t_0_timeEvent_0" delay="1s"/>
+				</onentry>
+				<onexit>
+					<cancel sendid="oxygen too high blink_t_0_timeEvent_0" />
+				</onexit>
+				<onentry>
+					 <assign location="light_red_onoff" expr="0"/>
+				</onentry>
+				<transition event="oxygen too high blink_t_0_timeEvent_0"  target="oxygen_too_high">
+				</transition>
+			</state>
+			<state id="supply_pressure_too_low">
+				<onentry>
+					<send event="supply pressure too low_t_1_timeEvent_0" delay="1s"/>
+				</onentry>
+				<onexit>
+					<cancel sendid="supply pressure too low_t_1_timeEvent_0" />
+				</onexit>
+				<onentry>
+					 <assign location="light_green_onoff" expr="0"/>
+					 <assign location="light_red_onoff" expr="1"/>
+					 <assign location="light_sirene_onoff" expr="1"/>
+					 <assign location="ovenarea1_target" expr="0"/>
+					 <assign location="ovenarea2_target" expr="0"/>
+					 <assign location="this_p_target_bar" expr="0.01"/>
+					 <assign location="V04_Valve_GasIn_FC_onoff" expr="0.0"/>
+					 <assign location="V07_Valve_GasOut_FO_onoff" expr="0.0"/>
+					 <assign location="P01_VacuumPump_onoff" expr="0.0"/>
+					 <assign location="GS02_GasSampler_FilterOut_mode" expr="0.0"/>
+					 <assign location="this_supplyPressureTooLow_error" expr="true"/>
+				</onentry>
+				<transition event ="vector"  type="internal" >
+					 <assign location="light_green_onoff" expr="0"/>
+					 <assign location="light_red_onoff" expr="1"/>
+					 <assign location="light_sirene_onoff" expr="1"/>
+					 <assign location="ovenarea1_target" expr="0"/>
+					 <assign location="ovenarea2_target" expr="0"/>
+					 <assign location="this_p_target_bar" expr="0.01"/>
+					 <assign location="V04_Valve_GasIn_FC_onoff" expr="0.0"/>
+					 <assign location="V07_Valve_GasOut_FO_onoff" expr="0.0"/>
+					 <assign location="P01_VacuumPump_onoff" expr="0.0"/>
+					 <assign location="GS02_GasSampler_FilterOut_mode" expr="0.0"/>
+					 <assign location="this_supplyPressureTooLow_error" expr="true"/>
+				</transition>
+				<transition  cond="GS01_GasSampler_GasIn_pres_abs_bar &gt; conf_supplyPressureClearThreshold_bar" target="normal">
+				</transition>
+				<transition event="supply pressure too low_t_1_timeEvent_0"  target="supply_pressure_too_low_blink">
+				</transition>
+			</state>
+			<state id="set_target_pressure">
+				<onentry>
+					 <assign location="this_p_target_bar" expr="_event.data"/>
+				</onentry>
+				<transition   target="normal">
+				</transition>
+			</state>
+			<state id="set_area1_target_temperature">
+				<onentry>
+					 <assign location="ovenarea1_target" expr="_event.data"/>
+				</onentry>
+				<transition   target="normal">
+				</transition>
+			</state>
+			<state id="supply_pressure_too_low_blink">
+				<onentry>
+					<send event="supply pressure too low blink_t_0_timeEvent_0" delay="1s"/>
+				</onentry>
+				<onexit>
+					<cancel sendid="supply pressure too low blink_t_0_timeEvent_0" />
+				</onexit>
+				<onentry>
+					 <assign location="light_red_onoff" expr="0"/>
+				</onentry>
+				<transition event="supply pressure too low blink_t_0_timeEvent_0"  target="supply_pressure_too_low">
+				</transition>
+			</state>
+			<state id="set_area2_target_temperature">
+				<onentry>
+					 <assign location="ovenarea2_target" expr="_event.data"/>
+				</onentry>
+				<transition   target="normal">
+				</transition>
+			</state>
+			<state id="gas_cabinet_board_error">
+				<onentry>
+					<send event="gas cabinet board error_t_1_timeEvent_0" delay="1s"/>
+				</onentry>
+				<onexit>
+					<cancel sendid="gas cabinet board error_t_1_timeEvent_0" />
+				</onexit>
+				<onentry>
+					 <assign location="light_green_onoff" expr="0"/>
+					 <assign location="light_yellow_onoff" expr="1"/>
+					 <assign location="light_sirene_onoff" expr="0"/>
+					 <assign location="ovenarea1_target" expr="0"/>
+					 <assign location="ovenarea2_target" expr="0"/>
+					 <assign location="this_p_target_bar" expr="0.01"/>
+					 <assign location="V04_Valve_GasIn_FC_onoff" expr="0.0"/>
+					 <assign location="V07_Valve_GasOut_FO_onoff" expr="0.0"/>
+					 <assign location="P01_VacuumPump_onoff" expr="0.0"/>
+					 <assign location="GS02_GasSampler_FilterOut_mode" expr="0.0"/>
+					 <assign location="this_gasCabinetBoardError_alert" expr="true"/>
+				</onentry>
+				<transition event ="vector"  type="internal" >
+					 <assign location="light_green_onoff" expr="0"/>
+					 <assign location="light_yellow_onoff" expr="1"/>
+					 <assign location="light_sirene_onoff" expr="0"/>
+					 <assign location="ovenarea1_target" expr="0"/>
+					 <assign location="ovenarea2_target" expr="0"/>
+					 <assign location="this_p_target_bar" expr="0.01"/>
+					 <assign location="V04_Valve_GasIn_FC_onoff" expr="0.0"/>
+					 <assign location="V07_Valve_GasOut_FO_onoff" expr="0.0"/>
+					 <assign location="P01_VacuumPump_onoff" expr="0.0"/>
+					 <assign location="GS02_GasSampler_FilterOut_mode" expr="0.0"/>
+					 <assign location="this_gasCabinetBoardError_alert" expr="true"/>
+				</transition>
+				<transition  cond="!gasCabinetBoardError" target="normal">
+				</transition>
+				<transition event="gas cabinet board error_t_1_timeEvent_0"  target="gas_cabinet_board_error_blink">
+				</transition>
+			</state>
+			<state id="gas_cabinet_board_error_blink">
+				<onentry>
+					<send event="gas cabinet board error blink_t_0_timeEvent_0" delay="1s"/>
+				</onentry>
+				<onexit>
+					<cancel sendid="gas cabinet board error blink_t_0_timeEvent_0" />
+				</onexit>
+				<onentry>
+					 <assign location="light_yellow_onoff" expr="0"/>
+				</onentry>
+				<transition event="gas cabinet board error blink_t_0_timeEvent_0"  target="gas_cabinet_board_error">
+				</transition>
+			</state>
+			<transition  cond="!eStopOk" target="emergency_stop">
+			</transition>
+			<transition event="eStop"  target="software_estop">
+			</transition>
+		</state>
+		<state id="emergency_stop">
+			<onentry>
+				 <assign location="light_green_onoff" expr="0"/>
+				 <assign location="light_yellow_onoff" expr="0"/>
+				 <assign location="light_red_onoff" expr="1"/>
+				 <assign location="light_sirene_onoff" expr="0"/>
+				 <assign location="ovenarea1_target" expr="0"/>
+				 <assign location="ovenarea2_target" expr="0"/>
+				 <assign location="this_p_target_bar" expr="0.01"/>
+				 <assign location="GS01_GasSampler_GasIn_mode" expr="2.0"/>
+				 <assign location="GS02_GasSampler_FilterOut_mode" expr="0.0"/>
+			</onentry>
+			<transition event ="vector"  type="internal" >
+				 <assign location="light_green_onoff" expr="0"/>
+				 <assign location="light_yellow_onoff" expr="0"/>
+				 <assign location="light_red_onoff" expr="1"/>
+				 <assign location="light_sirene_onoff" expr="0"/>
+				 <assign location="ovenarea1_target" expr="0"/>
+				 <assign location="ovenarea2_target" expr="0"/>
+				 <assign location="this_p_target_bar" expr="0.01"/>
+				 <assign location="GS01_GasSampler_GasIn_mode" expr="2.0"/>
+				 <assign location="GS02_GasSampler_FilterOut_mode" expr="0.0"/>
+			</transition>
+			<transition  cond="eStopOk" target="Operation">
+			</transition>
+		</state>
+		<state id="software_estop">
+			<onentry>
+				 <assign location="light_green_onoff" expr="0"/>
+				 <assign location="light_yellow_onoff" expr="0"/>
+				 <assign location="light_red_onoff" expr="1"/>
+				 <assign location="light_sirene_onoff" expr="0"/>
+				 <assign location="ovenarea1_target" expr="0"/>
+				 <assign location="ovenarea2_target" expr="0"/>
+				 <assign location="this_p_target_bar" expr="0.01"/>
+				 <assign location="GS01_GasSampler_GasIn_mode" expr="2.0"/>
+				 <assign location="GS02_GasSampler_FilterOut_mode" expr="0.0"/>
+				 <assign location="V04_Valve_GasIn_FC_onoff" expr="0.0"/>
+				 <assign location="V07_Valve_GasOut_FO_onoff" expr="0.0"/>
+				 <assign location="P01_VacuumPump_onoff" expr="0.0"/>
+			</onentry>
+			<transition event ="vector"  type="internal" >
+				 <assign location="light_green_onoff" expr="0"/>
+				 <assign location="light_yellow_onoff" expr="0"/>
+				 <assign location="light_red_onoff" expr="1"/>
+				 <assign location="light_sirene_onoff" expr="0"/>
+				 <assign location="ovenarea1_target" expr="0"/>
+				 <assign location="ovenarea2_target" expr="0"/>
+				 <assign location="this_p_target_bar" expr="0.01"/>
+				 <assign location="GS01_GasSampler_GasIn_mode" expr="2.0"/>
+				 <assign location="GS02_GasSampler_FilterOut_mode" expr="0.0"/>
+				 <assign location="V04_Valve_GasIn_FC_onoff" expr="0.0"/>
+				 <assign location="V07_Valve_GasOut_FO_onoff" expr="0.0"/>
+				 <assign location="P01_VacuumPump_onoff" expr="0.0"/>
+			</transition>
+			<transition event="Exit_eStop"  target="Operation">
+			</transition>
+		</state>
+	</state>
 </scxml>

@@ -8,6 +8,8 @@
 import type { HierarchicalNode } from '@/types/hierarchical-node';
 import type { Edge } from 'reactflow';
 import { elkLayoutService } from '@/lib/layout/elk-layout-service';
+import { computeAdaptiveSpacing } from '@/lib/layout/adaptive-spacing';
+import { computeHubCentroidNudges } from '@/lib/layout/hub-centroid-nudge';
 import type { StateRegistryEntry } from './state-registry';
 
 /**
@@ -130,14 +132,41 @@ export async function applyDefaultELKLayout(
       (e) => levelNodeIds.has(e.source) && levelNodeIds.has(e.target)
     );
 
+    // A level with a hub (one node whose degree is a clear outlier among its
+    // siblings) gets more node-node spacing than a plain chain/tree — that
+    // hub's many neighbors need room to fan their edges and labels apart.
+    // Ordinary levels keep ELK's default spacing untouched.
+    const levelSpacing = computeAdaptiveSpacing(levelNodes, levelEdges);
+    const levelOptions = {
+      ...ELK_OPTIONS,
+      spacing: { ...ELK_OPTIONS.spacing, nodeNode: levelSpacing },
+    };
+
     const levelPositions = await elkLayoutService.computeLayout(
       levelNodes,
       levelEdges,
-      ELK_OPTIONS
+      levelOptions
     );
 
+    // ELK's layered algorithm has no notion of hub centrality — a node with
+    // far more neighbors than its siblings can end up off to one side of its
+    // spokes, forcing every edge on that side into a long detour. Nudge only
+    // genuine degree outliers back toward the horizontal centroid of their
+    // neighbors; every other node keeps its ELK position untouched.
+    const nudgeNodes = levelNodes
+      .map((n) => {
+        const pos = levelPositions.get(n.id);
+        if (!pos) return null;
+        const width = (n.data as any).width || 160;
+        const height = (n.data as any).height || 80;
+        return { id: n.id, x: pos.x, y: pos.y, width, height };
+      })
+      .filter((n): n is NonNullable<typeof n> => n !== null);
+    const nudges = computeHubCentroidNudges(nudgeNodes, levelEdges);
+
     levelPositions.forEach((pos, id) => {
-      allPositions.set(id, { x: pos.x, y: pos.y });
+      const nudge = nudges.get(id);
+      allPositions.set(id, nudge ?? { x: pos.x, y: pos.y });
     });
   }
 

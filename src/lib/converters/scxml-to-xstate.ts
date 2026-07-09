@@ -37,6 +37,12 @@ import {
   extractNoteNodes,
   notesNeedIds,
 } from './converter-modules/note-conversion';
+import {
+  approximateOrthogonalRoute,
+  countRouteCrossings,
+  getHandleAnchor,
+  type Rect,
+} from '@/lib/layout/edge-obstacle-utils';
 
 /**
  * Converts SCXML documents to XState v5 machine configurations and React Flow diagram data
@@ -236,18 +242,45 @@ export class SCXMLToXStateConverter {
     // (sourceHandle, targetHandle) pair is scored by how directly it faces the other node,
     // plus how much other traffic already uses those same handles — globally, across the
     // whole diagram, not just within one node pair — so a busy handle gets avoided in favor
-    // of a quieter one, the way traffic routes around a congested lane. Edges with saved
-    // handles are never overridden, but they still count as traffic that later edges route
-    // around.
+    // of a quieter one, the way traffic routes around a congested lane. Candidates whose
+    // approximate route would cut through sibling nodes pay an extra per-node penalty, so
+    // a clear perpendicular route beats a direct one that's blocked by a node in between.
+    // Edges with saved handles are never overridden, but they still count as traffic that
+    // later edges route around.
     const nodePositionMap = new Map(allNodes.map((n) => [n.id, n]));
 
-    const getNodeCenter = (id: string) => {
+    const getNodeRect = (id: string): Rect | undefined => {
       const node = nodePositionMap.get(id);
       if (!node) return undefined;
-      const w = (node.data as any).width || 160;
-      const h = (node.data as any).height || 80;
-      return { x: node.position.x + w / 2, y: node.position.y + h / 2 };
+      return {
+        x: node.position.x,
+        y: node.position.y,
+        width: (node.data as any).width || 160,
+        height: (node.data as any).height || 80,
+      };
     };
+
+    const getNodeCenter = (id: string) => {
+      const rect = getNodeRect(id);
+      if (!rect) return undefined;
+      return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+    };
+
+    // Sibling node rects grouped by parent — the obstacle set for an edge is the
+    // other nodes at its own hierarchy level (source and target always share a
+    // parent here; cross-hierarchy transitions were filtered during conversion).
+    // Child positions are parent-relative, so only same-parent rects are in the
+    // same coordinate frame as the edge's anchors anyway.
+    const siblingRectsByParent = new Map<string, Array<{ id: string; rect: Rect }>>();
+    allNodes.forEach((node) => {
+      const rect = getNodeRect(node.id);
+      if (!rect) return;
+      const parentKey = node.parentId || '';
+      if (!siblingRectsByParent.has(parentKey)) {
+        siblingRectsByParent.set(parentKey, []);
+      }
+      siblingRectsByParent.get(parentKey)!.push({ id: node.id, rect });
+    });
 
     type HandleSide = 'top' | 'bottom' | 'left' | 'right';
 
@@ -294,10 +327,13 @@ export class SCXMLToXStateConverter {
     // but repeated use of the *same exact slot* between the same two nodes costs far more
     // than generic handle load elsewhere in the diagram — this keeps normal fan-outs (many
     // distinct neighbors sharing one handle) untouched while still strongly separating
-    // genuine parallel/bidirectional edges between the same pair.
+    // genuine parallel/bidirectional edges between the same pair. Cutting through a node
+    // costs more than the perpendicular geometric penalty, so a single blocked node is
+    // enough to push an edge onto a clear perpendicular route instead.
     const GEOMETRIC_PENALTY_PERP = 6;
     const SAME_PAIR_WEIGHT = 8;
     const GENERAL_LOAD_WEIGHT = 1;
+    const NODE_CROSSING_WEIGHT = 12;
 
     edges.forEach((edge) => {
       if (edge.source === edge.target) return; // self-loops keep their default bottom→top handles
@@ -305,9 +341,16 @@ export class SCXMLToXStateConverter {
       const needsTarget = !edge.data?.hasExplicitTargetHandle;
       if (!needsSource && !needsTarget) return; // fully explicit, already seeded above
 
-      const srcCenter = getNodeCenter(edge.source);
-      const tgtCenter = getNodeCenter(edge.target);
-      if (!srcCenter || !tgtCenter) return;
+      const srcRect = getNodeRect(edge.source);
+      const tgtRect = getNodeRect(edge.target);
+      if (!srcRect || !tgtRect) return;
+      const srcCenter = getNodeCenter(edge.source)!;
+      const tgtCenter = getNodeCenter(edge.target)!;
+
+      const sourceParentKey = nodePositionMap.get(edge.source)?.parentId || '';
+      const obstacleRects = (siblingRectsByParent.get(sourceParentKey) || [])
+        .filter((sibling) => sibling.id !== edge.source && sibling.id !== edge.target)
+        .map((sibling) => sibling.rect);
 
       const edx = tgtCenter.x - srcCenter.x;
       const edy = tgtCenter.y - srcCenter.y;
@@ -342,9 +385,18 @@ export class SCXMLToXStateConverter {
         // the two perpendicular loops instead of ever doubling up on direct again.
         if (candidate.isDirect && pairCount >= 1) continue;
 
+        const route = approximateOrthogonalRoute(
+          getHandleAnchor(srcRect, candidate.source),
+          candidate.source,
+          getHandleAnchor(tgtRect, candidate.target),
+          candidate.target
+        );
+        const nodeCrossings = countRouteCrossings(route, obstacleRects);
+
         const cost =
           candidate.penalty +
           SAME_PAIR_WEIGHT * pairCount +
+          NODE_CROSSING_WEIGHT * nodeCrossings +
           GENERAL_LOAD_WEIGHT *
             (getGeneral(edge.source, candidate.source) + getGeneral(edge.target, candidate.target));
         if (cost < bestCost) {

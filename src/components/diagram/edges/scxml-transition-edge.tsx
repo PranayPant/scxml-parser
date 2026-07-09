@@ -7,12 +7,31 @@ import {
   getSmoothStepPath,
   type EdgeProps,
   type EdgeMarker,
+  type Node,
   MarkerType,
   Position,
+  useNodes,
   useReactFlow,
 } from 'reactflow';
+import {
+  getSmartEdge,
+  pathfindingAStarNoDiagonal,
+  type PathFindingFunction,
+  type SVGDrawFunction,
+} from '@tisoap/react-flow-smart-edge';
 import type { Waypoint } from '@/types/visual-metadata';
-import { buildSmoothBezierPath } from '@/lib/layout/path-builders';
+import {
+  buildRoundedOrthogonalPath,
+  buildSelfLoopPath,
+  buildSmoothBezierPath,
+} from '@/lib/layout/path-builders';
+import {
+  approximateOrthogonalRoute,
+  routeIntersectsAnyRect,
+  simplifyOrthogonalGridPath,
+  type HandleSide,
+  type Rect,
+} from '@/lib/layout/edge-obstacle-utils';
 
 export interface SCXMLTransitionEdgeData {
   event?: string;
@@ -42,6 +61,24 @@ export interface SCXMLTransitionEdgeData {
     insertIndex: number
   ) => void;
 }
+
+// A* over the routing grid with orthogonal moves only. The library's own
+// variants run PF.Util.smoothenPath on the result, which cuts line-of-sight
+// *diagonal* shortcuts — instead, apply rectilinear smoothing to the raw grid
+// walk: staircases collapse into long straight segments and single L-bends,
+// verified cell-by-cell against the grid so the path keeps avoiding nodes.
+const generateOrthogonalPath: PathFindingFunction = (grid, start, end) => {
+  const result = pathfindingAStarNoDiagonal(grid, start, end);
+  if (!result) return null;
+  const simplified = simplifyOrthogonalGridPath(result.fullPath, (x, y) =>
+    grid.isWalkableAt(x, y)
+  );
+  return { fullPath: result.fullPath, smoothedPath: simplified };
+};
+
+// Draw the grid walk in smoothstep style: orthogonal segments, rounded corners
+const drawSmoothStepPath: SVGDrawFunction = (source, target, path) =>
+  buildRoundedOrthogonalPath(source, target, path, 8);
 
 /**
  * Calculate an offset smoothstep path for parallel edges
@@ -171,6 +208,8 @@ export const SCXMLTransitionEdge: React.FC<
   EdgeProps<SCXMLTransitionEdgeData>
 > = ({
   id,
+  source,
+  target,
   sourceX,
   sourceY,
   targetX,
@@ -196,6 +235,103 @@ export const SCXMLTransitionEdge: React.FC<
   const onWaypointDragEnd = data?.onWaypointDragEnd;
   const onWaypointDelete = data?.onWaypointDelete;
 
+  const nodes = useNodes();
+  const isSelfLoop = source === target;
+
+  // Self-loops default to bottom/top handles on the SAME node — those two
+  // points are vertically aligned through the node's own body, so a plain
+  // smoothstep path between them cuts straight through it. Route a small
+  // loop out past the node's right edge instead.
+  const selfLoopPath = React.useMemo(() => {
+    if (!isSelfLoop || waypoints.length > 0) return null;
+    const node = nodes.find((n) => n.id === source);
+    if (!node || !node.width || !node.height) return null;
+    const pos = node.positionAbsolute ?? node.position;
+    return buildSelfLoopPath(
+      sourceX,
+      sourceY,
+      targetX,
+      targetY,
+      pos.x,
+      pos.y,
+      node.width,
+      node.height
+    );
+  }, [isSelfLoop, waypoints.length, nodes, source, sourceX, sourceY, targetX, targetY]);
+
+  // Obstacle-avoiding path for the default (no waypoints, no parallel offset)
+  // case: when the plain smoothstep route would cut through a sibling node,
+  // fall back to A* pathfinding around node bounding boxes. Null means "no
+  // collision (or pathfinding unavailable) — keep the plain smoothstep path".
+  const smartPath = React.useMemo(() => {
+    if (isSelfLoop || waypoints.length > 0 || offset !== 0) return null;
+
+    const sourceNode = nodes.find((n) => n.id === source);
+    if (!sourceNode) return null;
+
+    // Only nodes at the edge's own hierarchy level count as obstacles —
+    // including an enclosing container would wall off routing inside it.
+    const siblings = nodes.filter(
+      (n) => n.parentNode === sourceNode.parentNode && !n.hidden
+    );
+
+    const nodeRect = (n: Node): Rect | null => {
+      const pos = n.positionAbsolute ?? n.position;
+      if (!n.width || !n.height) return null;
+      return { x: pos.x, y: pos.y, width: n.width, height: n.height };
+    };
+
+    const obstacles = siblings
+      .filter((n) => n.id !== source && n.id !== target)
+      .map(nodeRect)
+      .filter((r): r is Rect => r !== null);
+    if (obstacles.length === 0) return null;
+
+    // Cheap pre-check: approximate the smoothstep route and only run A* when
+    // it actually crosses a node.
+    const directRoute = approximateOrthogonalRoute(
+      { x: sourceX, y: sourceY },
+      sourcePosition as unknown as HandleSide,
+      { x: targetX, y: targetY },
+      targetPosition as unknown as HandleSide
+    );
+    if (!routeIntersectsAnyRect(directRoute, obstacles)) return null;
+
+    try {
+      return getSmartEdge({
+        sourceX,
+        sourceY,
+        targetX,
+        targetY,
+        sourcePosition,
+        targetPosition,
+        nodes: siblings,
+        options: {
+          // Orthogonal step routing drawn with rounded corners to match the
+          // smoothstep style of the other edges — the defaults produce
+          // diagonal smoothed curves.
+          generatePath: generateOrthogonalPath,
+          drawEdge: drawSmoothStepPath,
+        },
+      });
+    } catch {
+      return null;
+    }
+  }, [
+    isSelfLoop,
+    nodes,
+    waypoints.length,
+    offset,
+    source,
+    target,
+    sourceX,
+    sourceY,
+    targetX,
+    targetY,
+    sourcePosition,
+    targetPosition,
+  ]);
+
   // Calculate edge path - prioritize waypoints over other rendering modes
   let edgePath: string;
   let labelX: number;
@@ -209,6 +345,8 @@ export const SCXMLTransitionEdge: React.FC<
       targetX,
       targetY
     );
+  } else if (selfLoopPath) {
+    [edgePath, labelX, labelY] = selfLoopPath;
   } else if (offset > 0) {
     // Use smoothstep path with offset for parallel edges
     [edgePath, labelX, labelY] = getOffsetSmoothStepPath({
@@ -220,6 +358,11 @@ export const SCXMLTransitionEdge: React.FC<
       targetPosition,
       offset,
     });
+  } else if (smartPath) {
+    // Direct route would cut through a sibling node — use the A* path around it
+    edgePath = smartPath.svgPathString;
+    labelX = smartPath.edgeCenterX;
+    labelY = smartPath.edgeCenterY;
   } else {
     // Standard smoothstep path for single edges
     [edgePath, labelX, labelY] = getSmoothStepPath({
