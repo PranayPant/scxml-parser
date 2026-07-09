@@ -6,7 +6,11 @@ const NOTE = VISUAL_METADATA_CONSTANTS.NOTE;
 /**
  * AddNoteCommand
  *
- * Appends a <viz:note> annotation element to the SCXML root.
+ * Appends a <viz:note> annotation element as a child of the SCXML root, or
+ * of a specific state when parentStateId is given. The containing element
+ * determines the note's hierarchy level in the diagram (same mechanism as
+ * regular child states), so a note added while drilled into a state stays
+ * visible only at that level.
  * Notes live in the viz namespace so SCXML engines ignore them.
  * Dimensions are always the fixed NOTE.WIDTH × NOTE.HEIGHT.
  */
@@ -15,7 +19,8 @@ export class AddNoteCommand extends BaseCommand {
     private noteId: string,
     private x: number,
     private y: number,
-    private text: string = ''
+    private text: string = '',
+    private parentStateId?: string
   ) {
     super();
   }
@@ -31,6 +36,16 @@ export class AddNoteCommand extends BaseCommand {
 
     this.ensureVizNamespace(doc);
 
+    const parentElement = this.parentStateId
+      ? this.findStateElement(doc, this.parentStateId)
+      : doc.documentElement;
+    if (!parentElement) {
+      return this.createFailureResult(
+        `Parent state element not found: ${this.parentStateId}`,
+        scxmlContent
+      );
+    }
+
     // createElementNS guarantees the serializer emits a valid prefix binding
     const noteElement = doc.createElementNS(
       VISUAL_METADATA_CONSTANTS.NAMESPACE_URI,
@@ -42,7 +57,7 @@ export class AddNoteCommand extends BaseCommand {
       `${Math.round(this.x)},${Math.round(this.y)},${NOTE.WIDTH},${NOTE.HEIGHT}`
     );
     noteElement.textContent = this.text;
-    doc.documentElement.appendChild(noteElement);
+    parentElement.appendChild(noteElement);
 
     const newContent = this.serializeXML(doc);
     return this.createSuccessResult(newContent, [this.noteId]);

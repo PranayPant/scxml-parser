@@ -2045,20 +2045,28 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
     try {
       const noteId = `${VISUAL_METADATA_CONSTANTS.NOTE.ID_PREFIX}${uuidv4().slice(0, 8)}`;
 
-      // Place to the right of existing root nodes (notes always live at
-      // root level, mirroring the add-state placement heuristic)
+      // Place to the right of nodes already visible at the current
+      // hierarchy level (root, or whichever state we've navigated into).
+      // `nodes` only ever holds the currently displayed level's nodes.
       let x = 100;
       let y = 100;
-      const rootNodes = nodes.filter((n) => !n.parentId);
-      if (rootNodes.length > 0) {
+      if (nodes.length > 0) {
         const maxX = Math.max(
-          ...rootNodes.map((n) => n.position.x + (n.width || 160))
+          ...nodes.map((n) => n.position.x + (n.width || 160))
         );
         x = maxX + 100;
       }
 
       const { AddNoteCommand } = require('@/lib/commands');
-      const command = new AddNoteCommand(noteId, x, y);
+      // currentParentId is set when the user has drilled into a state; the
+      // note is stored as a child of that state so it only appears there.
+      const command = new AddNoteCommand(
+        noteId,
+        x,
+        y,
+        '',
+        currentParentId || undefined
+      );
       const result = command.execute(scxmlContent);
 
       if (result.success) {
@@ -2079,7 +2087,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
     } catch (error) {
       console.error('Failed to add note:', error);
     }
-  }, [scxmlContent, onSCXMLChange, nodes, fitView]);
+  }, [scxmlContent, onSCXMLChange, nodes, fitView, currentParentId]);
 
   // ==================== NODE ENHANCEMENTS ====================
   const nodeEnhancements = React.useMemo(() => {
