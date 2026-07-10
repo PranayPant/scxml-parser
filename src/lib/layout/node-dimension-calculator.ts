@@ -132,12 +132,14 @@ export class NodeDimensionCalculator {
     const label = node.data?.label || node.id || '';
     const stateType = this.getStateType(node.data);
     const actions = this.countActions(node.data);
+    const isInitial = Boolean(node.data?.isInitial);
 
     return this.calculateDimensions(
       label,
       stateType,
       actions.onentry,
-      actions.onexit
+      actions.onexit,
+      isInitial
     );
   }
 }
