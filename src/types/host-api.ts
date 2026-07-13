@@ -33,6 +33,11 @@ export interface ConfigValue {
   override: string;
 }
 
+export interface ConfigOverride {
+  name: string;
+  override: string;
+}
+
 export interface ChannelMapping {
   scxmlRef: string;
   mappedChannel: string;
@@ -59,6 +64,7 @@ export interface ScxmlEditorAPI {
   loadScxml: (content: string) => void;
   getScxml: () => string;
   getConfigValues: () => ConfigValue[];
+  setConfigValues: (values: ConfigOverride[]) => void;
   registerCommand: (options: CommandOptions) => void;
   showFeedback: (message: string, level?: FeedbackItem['level']) => void;
   setChannels: (channels: ChannelInfo[]) => void;

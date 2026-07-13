@@ -1,10 +1,12 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown } from 'lucide-react';
 import { extractConfigFields, type ConfigField } from '@/lib/utils/datamodel-extractor';
+import { mergeConfigEntries, type OverrideEntry } from '@/lib/utils/config-overrides';
 import type { ConfigValue } from '@/types/host-api';
+import { useHostAPIStore } from '@/stores/host-api-store';
 import { Panel, inputClass, FormActions, FooterAddButton, PanelEmptyState } from '@/components/ui/primitives';
 
 const CONF_TYPES: ConfigField['type'][] = ['int', 'double', 'bool', 'string'];
@@ -80,46 +82,20 @@ interface ConfigPanelProps {
   onEntriesChange?: (values: ConfigValue[]) => void;
 }
 
-interface OverrideEntry {
-  field: ConfigField;
-  override: string;
-}
-
 export function ConfigPanel({ isVisible, onClose, scxmlContent, onAddField, onFieldChange, onTypeChange, onEntriesChange }: ConfigPanelProps) {
+  const configOverrides = useHostAPIStore(state => state.configOverrides);
+  const configOverridesLoaded = useHostAPIStore(state => state.configOverridesLoaded);
   const [entries, setEntries] = useState<OverrideEntry[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDefault, setNewDefault] = useState('');
   const [newOverride, setNewOverride] = useState('');
-  const fetchOverrides = useCallback(async (fields: ConfigField[]) => {
-    if (fields.length === 0) {
-      setEntries([]);
-      return;
-    }
-    try {
-      const res = await fetch('/scxml-editor/config');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data: { name: string; override: string | null }[] = await res.json();
-      const serverOverrideMap = Object.fromEntries(data.map(d => [d.name, d.override ?? '']));
-      setEntries(prev => {
-        const localOverrideMap = Object.fromEntries(prev.map(e => [e.field.name, e.override]));
-        return fields.map(f => ({
-          field: f,
-          override: localOverrideMap[f.name] ?? serverOverrideMap[f.name] ?? '',
-        }));
-      });
-    } catch {
-      setEntries(prev => {
-        const localOverrideMap = Object.fromEntries(prev.map(e => [e.field.name, e.override]));
-        return fields.map(f => ({ field: f, override: localOverrideMap[f.name] ?? '' }));
-      });
-    }
-  }, []);
 
   useEffect(() => {
+    if (!configOverridesLoaded) return;
     const fields = extractConfigFields(scxmlContent);
-    fetchOverrides(fields);
-  }, [scxmlContent, fetchOverrides]);
+    setEntries(prev => mergeConfigEntries(fields, configOverrides, prev));
+  }, [scxmlContent, configOverrides, configOverridesLoaded]);
 
   useEffect(() => {
     onEntriesChange?.(entries.map(e => ({
@@ -134,8 +110,8 @@ export function ConfigPanel({ isVisible, onClose, scxmlContent, onAddField, onFi
     const trimmed = newName.trim();
     if (!trimmed) return;
     const override = newOverride.trim();
-    // Optimistically seed the override into entries so fetchOverrides preserves it
-    // via localOverrideMap when it rebuilds after the SCXML update.
+    // Optimistically seed the override into entries so mergeConfigEntries preserves it
+    // via previous/localOverrideMap when it rebuilds after the SCXML update.
     if (override) {
       setEntries(prev => [...prev, { field: { name: trimmed, type: 'string' as const, defaultValue: newDefault.trim() }, override }]);
     }

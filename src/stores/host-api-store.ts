@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
-import type { ChannelInfo, ChannelMapping, CommandOptions, EventEntry, FeedbackItem, HostErrorItem, RegisteredCommand } from '@/types/host-api';
+import type { ChannelInfo, ChannelMapping, CommandOptions, ConfigOverride, EventEntry, FeedbackItem, HostErrorItem, RegisteredCommand } from '@/types/host-api';
 
 interface HostAPIState {
   commands: RegisteredCommand[];
@@ -10,6 +10,8 @@ interface HostAPIState {
   channels: ChannelInfo[];
   channelMappings: ChannelMapping[];
   events: EventEntry[];
+  configOverrides: ConfigOverride[];
+  configOverridesLoaded: boolean;
   requestedTab: 'code' | 'visual' | null;
   hostErrors: HostErrorItem[];
   requestedValidationTab: 'validation' | 'host-alerts' | null;
@@ -26,6 +28,7 @@ interface HostAPIActions {
   setChannelMappings: (mappings: ChannelMapping[]) => void;
   updateChannelMapping: (scxmlRef: string, mappedChannel: string) => void;
   setEvents: (events: EventEntry[]) => void;
+  setConfigOverrides: (values: ConfigOverride[]) => void;
   setRequestedTab: (tab: 'code' | 'visual' | null) => void;
   showErrors: (errors: Array<{ message: string; level?: HostErrorItem['level'] }>) => void;
   dismissHostError: (id: string) => void;
@@ -41,6 +44,8 @@ export const useHostAPIStore = create<HostAPIState & HostAPIActions>((set, get) 
   channels: [],
   channelMappings: [],
   events: [],
+  configOverrides: [],
+  configOverridesLoaded: false,
   requestedTab: null,
   hostErrors: [],
   requestedValidationTab: null,
@@ -114,6 +119,8 @@ export const useHostAPIStore = create<HostAPIState & HostAPIActions>((set, get) 
   setChannelMappings: (mappings: ChannelMapping[]) => set({ channelMappings: mappings }),
 
   setEvents: (events: EventEntry[]) => set({ events }),
+
+  setConfigOverrides: (values: ConfigOverride[]) => set({ configOverrides: values, configOverridesLoaded: true }),
 
   setRequestedTab: (tab) => set({ requestedTab: tab }),
 
