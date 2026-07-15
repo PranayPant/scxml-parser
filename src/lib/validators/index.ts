@@ -14,3 +14,4 @@ export * from './validator-utils';
 export * from './state-validator';
 export * from './transition-validator';
 export * from './w3c-validator';
+export * from './parallel-validator';

@@ -27,6 +27,7 @@ import {
   validateAllElementAttributes,
   validateStateMachineSemantics,
 } from './w3c-validator';
+import { validateParallelRegionTransitions } from './parallel-validator';
 
 /**
  * Main SCXML Validator Class
@@ -89,6 +90,9 @@ export class SCXMLValidator {
       this.xmlContent,
       errors
     );
+
+    // Parallel region connectivity (Phase 3: regions must not jump to a sibling region)
+    validateParallelRegionTransitions(scxml, this.xmlContent, errors);
 
     return deduplicateErrors(errors);
   }

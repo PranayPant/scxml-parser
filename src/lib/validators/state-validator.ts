@@ -397,7 +397,13 @@ export function findDuplicateDataIds(scxml: SCXMLElement): string[] {
 }
 
 /**
- * Validate compound states have initial attributes or elements
+ * Validate compound states have initial attributes or elements.
+ *
+ * Recurses into <parallel> regions too (Phase 3: "Initial State Validation" —
+ * each region of a <parallel> is its own disconnected state machine and must
+ * resolve its own entry point exactly like any other compound state). The
+ * <parallel> element itself is exempt: per the SCXML spec it has no `initial`
+ * concept since all of its regions are entered simultaneously.
  */
 export function validateCompoundStates(
   scxml: SCXMLElement,
@@ -422,11 +428,35 @@ export function validateCompoundStates(
       const states = Array.isArray(state.state) ? state.state : [state.state];
       states.forEach((nestedState) => validateCompoundState(nestedState));
     }
+
+    // Recursively validate regions of any nested <parallel>
+    if (state.parallel) {
+      const parallels = Array.isArray(state.parallel) ? state.parallel : [state.parallel];
+      parallels.forEach((parallel) => validateParallelRegions(parallel));
+    }
+  };
+
+  const validateParallelRegions = (parallel: ParallelElement) => {
+    // The <parallel> element itself has no `initial` — only its regions do.
+    if (parallel.state) {
+      const states = Array.isArray(parallel.state) ? parallel.state : [parallel.state];
+      states.forEach((region) => validateCompoundState(region));
+    }
+    if (parallel.parallel) {
+      const nestedParallels = Array.isArray(parallel.parallel)
+        ? parallel.parallel
+        : [parallel.parallel];
+      nestedParallels.forEach((nestedParallel) => validateParallelRegions(nestedParallel));
+    }
   };
 
   if (scxml.state) {
     const states = Array.isArray(scxml.state) ? scxml.state : [scxml.state];
     states.forEach((state) => validateCompoundState(state));
+  }
+  if (scxml.parallel) {
+    const parallels = Array.isArray(scxml.parallel) ? scxml.parallel : [scxml.parallel];
+    parallels.forEach((parallel) => validateParallelRegions(parallel));
   }
 }
 

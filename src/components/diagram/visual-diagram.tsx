@@ -15,7 +15,10 @@ import {
 } from "@/lib/utils/scxml-manipulation-utils";
 import { getStateIdList } from "@/lib/utils/state-id-extractor";
 import { generateUniqueId } from "@/lib/utils/generate-unique-id";
-import { isSameParallelSiblingConnection } from "@/lib/utils/parallel-connection-validation";
+import {
+  isSameParallelSiblingConnection,
+  isDisconnectedParallelJump,
+} from "@/lib/utils/parallel-connection-validation";
 import { computeVisualStyles } from "@/lib/utils/visual-style-utils";
 import { ActionType } from "@/types/history";
 import type { SCXMLDocument, TransitionElement } from "@/types/scxml";
@@ -907,7 +910,8 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
         connection.source,
         connection.target,
         nodes,
-      ),
+      ) &&
+      !isDisconnectedParallelJump(connection.source, connection.target, nodes),
     [nodes],
   );
 
