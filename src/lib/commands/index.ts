@@ -22,3 +22,5 @@ export { AddNoteCommand, UpdateNoteTextCommand, DeleteNoteCommand } from './note
 export { ReconnectTransitionCommand } from './reconnect-transition-command';
 export { AddDataCommand } from './add-data-command';
 export { UpdateInternalEventsCommand, type InternalEventAction } from './update-internal-events-command';
+export { AddParallelStateCommand } from './add-parallel-state-command';
+export { AddRegionCommand } from './add-region-command';
