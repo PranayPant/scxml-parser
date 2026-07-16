@@ -14,6 +14,13 @@ export interface ELKLayoutOptions {
     nodeNode?: number;
     edgeNode?: number;
     edgeEdge?: number;
+    /**
+     * Gap between wrapped rows/columns (elk.layered.spacing.nodeNodeBetweenLayers).
+     * Falls back to nodeNode when omitted. Kept independent of nodeNode so
+     * widening the row gap for wrapped edge labels doesn't also push apart
+     * nodes that share a row.
+     */
+    nodeNodeBetweenLayers?: number;
   };
   padding?: {
     top?: number;
@@ -24,6 +31,11 @@ export interface ELKLayoutOptions {
   hierarchical?: boolean;
   separateConnectedComponents?: boolean;
   aspectRatio?: number;
+  /**
+   * Fold long chains into multiple rows/columns instead of stacking one node
+   * per layer forever. Only takes effect with the 'layered' algorithm.
+   */
+  wrapping?: boolean;
 }
 
 interface PositionedNode {
@@ -62,6 +74,7 @@ export class ELKLayoutService {
       hierarchical = true,
       separateConnectedComponents = true,
       aspectRatio,
+      wrapping = false,
     } = options;
 
     // Convert to ELK graph format
@@ -74,6 +87,7 @@ export class ELKLayoutService {
       hierarchical,
       separateConnectedComponents,
       aspectRatio,
+      wrapping,
     });
 
     // Run ELK layout
@@ -100,6 +114,7 @@ export class ELKLayoutService {
       hierarchical,
       separateConnectedComponents,
       aspectRatio,
+      wrapping,
     } = options;
 
     // Build layout options for ELK
@@ -118,11 +133,14 @@ export class ELKLayoutService {
     // Additional layered algorithm options for better hierarchical layout
     if (algorithm === 'layered') {
       Object.assign(layoutOptions, {
-        'elk.layered.spacing.nodeNodeBetweenLayers': String(spacing.nodeNode ?? 80),
+        'elk.layered.spacing.nodeNodeBetweenLayers': String(
+          spacing.nodeNodeBetweenLayers ?? spacing.nodeNode ?? 80
+        ),
         'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
         'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
         'elk.layered.cycleBreaking.strategy': 'GREEDY',
         'elk.layered.layering.strategy': 'NETWORK_SIMPLEX',
+        ...(wrapping && { 'elk.layered.wrapping.strategy': 'MULTI_EDGE' }),
       });
     }
 

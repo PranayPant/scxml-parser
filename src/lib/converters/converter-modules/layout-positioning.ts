@@ -10,6 +10,7 @@ import type { Edge } from 'reactflow';
 import { elkLayoutService } from '@/lib/layout/elk-layout-service';
 import { computeAdaptiveSpacing } from '@/lib/layout/adaptive-spacing';
 import { computeHubCentroidNudges } from '@/lib/layout/hub-centroid-nudge';
+import { shouldWrapLevel } from '@/lib/layout/chain-wrapping';
 import type { StateRegistryEntry } from './state-registry';
 
 /**
@@ -111,6 +112,10 @@ export async function applyDefaultELKLayout(
     aspectRatio: 3,
   };
 
+  // Row-to-row gap for wrapped levels — wide enough for a transition label
+  // chip plus the arrows entering/exiting it on both sides.
+  const WRAPPED_ROW_GAP = 100;
+
   // Step 2: Run ELK per hierarchy level so each compound node is sized by its
   // own visual dimensions, not by the space its children need.
   //
@@ -137,9 +142,21 @@ export async function applyDefaultELKLayout(
     // hub's many neighbors need room to fan their edges and labels apart.
     // Ordinary levels keep ELK's default spacing untouched.
     const levelSpacing = computeAdaptiveSpacing(levelNodes, levelEdges);
+    // A chain long enough to matter gets folded into multiple rows/columns —
+    // ELK's layered algorithm otherwise puts one node per layer and stacks a
+    // long sequence into a single tall column regardless of aspectRatio.
+    const wrapping = shouldWrapLevel(levelNodes.length);
+    // Wrapped rows need extra vertical room: the transition label chip and
+    // its connecting arrows live entirely in the row-to-row gap, which ELK
+    // has no notion of (it doesn't see the app's rendered edge labels).
     const levelOptions = {
       ...ELK_OPTIONS,
-      spacing: { ...ELK_OPTIONS.spacing, nodeNode: levelSpacing },
+      spacing: {
+        ...ELK_OPTIONS.spacing,
+        nodeNode: levelSpacing,
+        ...(wrapping && { nodeNodeBetweenLayers: WRAPPED_ROW_GAP }),
+      },
+      wrapping,
     };
 
     const levelPositions = await elkLayoutService.computeLayout(
