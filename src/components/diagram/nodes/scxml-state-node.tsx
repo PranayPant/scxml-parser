@@ -58,11 +58,6 @@ export interface SCXMLStateNodeData {
   hasChildren?: boolean;
   isCompound?: boolean;
   onNavigateInto?: () => void;
-  // True when this node is being rendered as an inline region of a visible
-  // <parallel> wrapper (see useHierarchyNavigation's pushRegions). Regions
-  // aren't independently connectable from outside — only the wrapper is —
-  // so their handles are suppressed entirely rather than left connectable.
-  isParallelRegion?: boolean;
   // Resize capability
   onResize?: (x: number, y: number, width: number, height: number) => void;
 }
@@ -96,7 +91,6 @@ export const SCXMLStateNode = memo<NodeProps<SCXMLStateNodeData>>(
       isCompound = false,
       onNavigateInto,
       onResize,
-      isParallelRegion = false,
     } = data;
 
     const [editingLabel, setEditingLabel] = React.useState(false);
@@ -452,117 +446,110 @@ export const SCXMLStateNode = memo<NodeProps<SCXMLStateNodeData>>(
             overflow: 'visible',
           }}
         >
-          {/* Connection handles - all 4 sides support both incoming and outgoing.
-              Suppressed entirely for a region inlined inside a parallel wrapper:
-              only the wrapper itself is connectable from outside (see
-              ParallelWrapperNode and isSameParallelSiblingConnection). */}
-          {!isParallelRegion && (
-            <>
-              {/* Top handles */}
-              <Handle
-                type='target'
-                position={Position.Top}
-                id='top'
-                style={{
-                  left: '50%',
-                  top: '0',
-                  transform: 'translate(-50%, -50%)',
-                  zIndex: 10,
-                }}
-                className='!bg-slate-500 !border-white !w-4 !h-4 !border-2 hover:!bg-blue-500 transition-colors'
-              />
-              <Handle
-                type='source'
-                position={Position.Top}
-                id='top'
-                style={{
-                  left: '50%',
-                  top: '0',
-                  transform: 'translate(-50%, -50%)',
-                  zIndex: 10,
-                }}
-                className='!bg-slate-500 !border-white !w-4 !h-4 !border-2 hover:!bg-blue-500 transition-colors'
-              />
+          {/* Connection handles - all 4 sides support both incoming and outgoing */}
+          {/* Top handles */}
+          <Handle
+            type='target'
+            position={Position.Top}
+            id='top'
+            style={{
+              left: '50%',
+              top: '0',
+              transform: 'translate(-50%, -50%)',
+              zIndex: 10,
+            }}
+            className='!bg-slate-500 !border-white !w-4 !h-4 !border-2 hover:!bg-blue-500 transition-colors'
+          />
+          <Handle
+            type='source'
+            position={Position.Top}
+            id='top'
+            style={{
+              left: '50%',
+              top: '0',
+              transform: 'translate(-50%, -50%)',
+              zIndex: 10,
+            }}
+            className='!bg-slate-500 !border-white !w-4 !h-4 !border-2 hover:!bg-blue-500 transition-colors'
+          />
 
-              {/* Bottom handles */}
-              <Handle
-                type='target'
-                position={Position.Bottom}
-                id='bottom'
-                style={{
-                  left: '50%',
-                  bottom: '0',
-                  transform: 'translate(-50%, 50%)',
-                  zIndex: 10,
-                }}
-                className='!bg-slate-500 !border-white !w-4 !h-4 !border-2 hover:!bg-blue-500 transition-colors'
-              />
-              <Handle
-                type='source'
-                position={Position.Bottom}
-                id='bottom'
-                style={{
-                  left: '50%',
-                  bottom: '0',
-                  transform: 'translate(-50%, 50%)',
-                  zIndex: 10,
-                }}
-                className='!bg-slate-500 !border-white !w-4 !h-4 !border-2 hover:!bg-blue-500 transition-colors'
-              />
+          {/* Bottom handles */}
+          <Handle
+            type='target'
+            position={Position.Bottom}
+            id='bottom'
+            style={{
+              left: '50%',
+              bottom: '0',
+              transform: 'translate(-50%, 50%)',
+              zIndex: 10,
+            }}
+            className='!bg-slate-500 !border-white !w-4 !h-4 !border-2 hover:!bg-blue-500 transition-colors'
+          />
+          <Handle
+            type='source'
+            position={Position.Bottom}
+            id='bottom'
+            style={{
+              left: '50%',
+              bottom: '0',
+              transform: 'translate(-50%, 50%)',
+              zIndex: 10,
+            }}
+            className='!bg-slate-500 !border-white !w-4 !h-4 !border-2 hover:!bg-blue-500 transition-colors'
+          />
 
-              {/* Left handles */}
-              <Handle
-                type='target'
-                position={Position.Left}
-                id='left'
-                style={{
-                  left: '0',
-                  top: '50%',
-                  transform: 'translate(-50%, -50%)',
-                  zIndex: 10,
-                }}
-                className='!bg-slate-500 !border-white !w-4 !h-4 !border-2 hover:!bg-blue-500 transition-colors'
-              />
-              <Handle
-                type='source'
-                position={Position.Left}
-                id='left'
-                style={{
-                  left: '0',
-                  top: '50%',
-                  transform: 'translate(-50%, -50%)',
-                  zIndex: 10,
-                }}
-                className='!bg-slate-500 !border-white !w-4 !h-4 !border-2 hover:!bg-blue-500 transition-colors'
-              />
+          {/* Left handles */}
+          <Handle
+            type='target'
+            position={Position.Left}
+            id='left'
+            style={{
+              left: '0',
+              top: '50%',
+              transform: 'translate(-50%, -50%)',
+              zIndex: 10,
+            }}
+            className='!bg-slate-500 !border-white !w-4 !h-4 !border-2 hover:!bg-blue-500 transition-colors'
+          />
+          <Handle
+            type='source'
+            position={Position.Left}
+            id='left'
+            style={{
+              left: '0',
+              top: '50%',
+              transform: 'translate(-50%, -50%)',
+              zIndex: 10,
+            }}
+            className='!bg-slate-500 !border-white !w-4 !h-4 !border-2 hover:!bg-blue-500 transition-colors'
+          />
 
-              {/* Right handles */}
-              <Handle
-                type='target'
-                position={Position.Right}
-                id='right'
-                style={{
-                  right: '0',
-                  top: '50%',
-                  transform: 'translate(50%, -50%)',
-                  zIndex: 10,
-                }}
-                className='!bg-slate-500 !border-white !w-4 !h-4 !border-2 hover:!bg-blue-500 transition-colors'
-              />
-              <Handle
-                type='source'
-                position={Position.Right}
-                id='right'
-                style={{
-                  right: '0',
-                  top: '50%',
-                  transform: 'translate(50%, -50%)',
-                  zIndex: 10,
-                }}
-                className='!bg-slate-500 !border-white !w-4 !h-4 !border-2 hover:!bg-blue-500 transition-colors'
-              />
-            </>
-          )}
+          {/* Right handles */}
+          <Handle
+            type='target'
+            position={Position.Right}
+            id='right'
+            style={{
+              right: '0',
+              top: '50%',
+              transform: 'translate(50%, -50%)',
+              zIndex: 10,
+            }}
+            className='!bg-slate-500 !border-white !w-4 !h-4 !border-2 hover:!bg-blue-500 transition-colors'
+          />
+          <Handle
+            type='source'
+            position={Position.Right}
+            id='right'
+            style={{
+              right: '0',
+              top: '50%',
+              transform: 'translate(50%, -50%)',
+              zIndex: 10,
+            }}
+            className='!bg-slate-500 !border-white !w-4 !h-4 !border-2 hover:!bg-blue-500 transition-colors'
+          />
 
           {/* Delete button - only show if onDelete is provided and not initial state */}
           {onDelete && !isInitial && (

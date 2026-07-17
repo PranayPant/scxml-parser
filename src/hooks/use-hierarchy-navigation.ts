@@ -1,7 +1,6 @@
 import { useMemo, useCallback, useEffect } from 'react';
 import { Node, Edge } from 'reactflow';
 import { useEditorStore } from '@/stores/editor-store';
-import { arrangeRegions, type RegionBox } from '@/lib/layout/arrange-regions';
 
 interface UseHierarchyNavigationProps {
   allNodes: Node[];
@@ -40,157 +39,52 @@ export function useHierarchyNavigation({
     }
   }, [rootNodeIds, hierarchyState.currentPath.length, hierarchyState.currentParentId, allNodes, navigateToRoot]);
 
-  // Filter nodes to only show current hierarchy level. A <parallel> state's
-  // direct regions are always pulled in alongside it (kept parentId, real
-  // ReactFlow parent/child containment) — everything else stays flat, one
-  // level at a time, exactly as before. This does not recurse: a region that
-  // is itself a parallel renders collapsed until the user navigates into it.
+  // Filter nodes to only show current hierarchy level
   const filteredNodes = useMemo(() => {
     if (allNodes.length === 0) return [];
 
     let visibleNodesList: Node[] = [];
 
     if (!hierarchyState.currentParentId) {
+      // At root level - show only nodes without parents
       visibleNodesList = allNodes.filter((node) => !node.parentId);
     } else {
+      // Inside a state - show only its direct children
       visibleNodesList = allNodes.filter(
         (node) => node.parentId === hierarchyState.currentParentId
       );
     }
 
-    const enrich = (node: Node, keepParentId: boolean): Node => {
+    // Update node data to indicate if they have children (compound states)
+    return visibleNodesList.map((node) => {
       const hasChildren = allNodes.some((n) => n.parentId === node.id);
-      const isParallel = node.data.stateType === 'parallel';
 
       return {
         ...node,
-        parentId: keepParentId ? node.parentId : undefined,
-        type: isParallel ? 'scxmlParallel' : node.type,
+        // Remove parentId for hierarchy navigation since parent is not rendered
+        parentId: undefined,
         data: {
           ...node.data,
           hasChildren,
           isCompound: hasChildren,
-          stateType: node.data.stateType || (hasChildren ? 'compound' : 'simple'),
+          stateType:
+            node.data.stateType || (hasChildren ? 'compound' : 'simple'),
+          // Add navigation handler for all states (even empty ones)
           onNavigateInto: () => navigateIntoState(node.id),
         },
+        // Update visual style for compound states
         style: {
           ...node.style,
+          // Use only non-shorthand properties to avoid React warnings
+          // borderStyle: hasChildren ? 'dashed' : 'solid',
+          // borderWidth: hasChildren ? 2 : 1,
+          // borderColor: node.style?.borderColor || '#9ca3af',
+          // Ensure proper sizing for compound state indicators
           minWidth: 160,
           minHeight: 80,
         },
       };
-    };
-
-    const result: Node[] = [];
-
-    // Shared by both pull-in paths below: lay out `regionSources` via
-    // arrangeRegions and push each one, enriched, into `result`.
-    // `anchorId` is the id of the (already-rendered) wrapper node to attach
-    // to via real ReactFlow parent/child containment (parentId + extent:
-    // 'parent') — or `undefined` when there is no rendered wrapper to attach
-    // to, in which case regions are flattened: absolute-positioned using the
-    // same box coordinates, with no parentId/extent. Attaching parentId to a
-    // node that isn't present in the returned array crashes ReactFlow, so
-    // `undefined` must be used whenever the container itself is hidden.
-    const pushRegions = (
-      regionSources: Node[],
-      boxes: RegionBox[],
-      anchorId: string | undefined
-    ) => {
-      for (const regionSource of regionSources) {
-        const box = boxes.find((b) => b.id === regionSource.id)!;
-        const enrichedRegion = enrich(regionSource, anchorId !== undefined);
-        if (anchorId !== undefined) {
-          enrichedRegion.parentId = anchorId;
-          (enrichedRegion as any).extent = 'parent';
-        }
-        // Regions are laid out automatically by arrangeRegions on every
-        // render (per the approved design: auto-layout only, no manual
-        // drag/resize) — allowing a drag would just be silently overwritten
-        // on the next render anyway, and extent:'parent' alone doesn't
-        // reliably keep a dragged node inside the wrapper's visual bounds.
-        enrichedRegion.draggable = false;
-        enrichedRegion.position = { x: box.x, y: box.y };
-        enrichedRegion.data = {
-          ...enrichedRegion.data,
-          width: box.width,
-          height: box.height,
-          // Only the parallel wrapper itself is connectable from outside —
-          // suppresses SCXMLStateNode's handles when this region isn't
-          // itself a nested parallel (ParallelWrapperNode keeps its own
-          // handles regardless, since entering/exiting a nested parallel as
-          // a whole is still legitimate).
-          isParallelRegion: true,
-        };
-        enrichedRegion.style = {
-          ...enrichedRegion.style,
-          width: box.width,
-          height: box.height,
-        };
-        result.push(enrichedRegion);
-      }
-    };
-
-    // If we've navigated INSIDE a <parallel> state, the currently visible
-    // nodes ARE that state's direct regions. The container itself is not
-    // rendered here (same "hidden container" convention as everywhere else
-    // in this hook), so the regions must be flattened — absolute-positioned,
-    // no parentId — rather than attached to a parent that doesn't exist in
-    // the result. Still no recursion: a region here that is itself a
-    // parallel stays collapsed until separately navigated into.
-    const currentParentNode = hierarchyState.currentParentId
-      ? allNodes.find((n) => n.id === hierarchyState.currentParentId)
-      : undefined;
-
-    if (currentParentNode?.data.stateType === 'parallel') {
-      const { regionBoxes } = arrangeRegions(
-        visibleNodesList.map((r) => ({
-          id: r.id,
-          width: (r.data as any).width || 160,
-          height: (r.data as any).height || 80,
-        }))
-      );
-
-      pushRegions(visibleNodesList, regionBoxes, undefined);
-
-      return result;
-    }
-
-    for (const visibleNode of visibleNodesList) {
-      const enrichedNode = enrich(visibleNode, false);
-
-      if (visibleNode.data.stateType !== 'parallel') {
-        result.push(enrichedNode);
-        continue;
-      }
-
-      const regionSources = allNodes.filter(
-        (n) => n.parentId === visibleNode.id
-      );
-      const { regionBoxes, wrapperWidth, wrapperHeight } = arrangeRegions(
-        regionSources.map((r) => ({
-          id: r.id,
-          width: (r.data as any).width || 160,
-          height: (r.data as any).height || 80,
-        }))
-      );
-
-      enrichedNode.data = {
-        ...enrichedNode.data,
-        width: wrapperWidth,
-        height: wrapperHeight,
-      };
-      enrichedNode.style = {
-        ...enrichedNode.style,
-        width: wrapperWidth,
-        height: wrapperHeight,
-      };
-      result.push(enrichedNode);
-
-      pushRegions(regionSources, regionBoxes, visibleNode.id);
-    }
-
-    return result;
+    });
   }, [allNodes, hierarchyState.currentParentId, navigateIntoState]);
 
   // Update visible nodes in store when filtered nodes change

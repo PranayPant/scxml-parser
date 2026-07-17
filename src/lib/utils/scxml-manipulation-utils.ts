@@ -2,18 +2,13 @@
 import type {
   SCXMLDocument,
   StateElement,
-  ParallelElement,
   TransitionElement,
   OnEntryElement,
   OnExitElement,
 } from '@/types/scxml';
 
 /**
- * Find a state (or parallel) element by its ID in the SCXML document.
- * Recurses into <parallel> elements and their own state/parallel children —
- * without this, any id living inside a <parallel> (e.g. a region) is
- * unreachable, and callers relying on this (adding a child state, finding a
- * transition's source/target) silently no-op instead of erroring.
+ * Find a state element by its ID in the SCXML document
  */
 export function findStateById(
   scxmlDoc: SCXMLDocument,
@@ -31,42 +26,16 @@ export function findStateById(
         return state;
       }
 
-      const foundInState = searchInStates(state.state);
-      if (foundInState) return foundInState;
-
-      const foundInParallel = searchInParallels(state.parallel);
-      if (foundInParallel) return foundInParallel;
+      // Search in nested states
+      const found = searchInStates(state.state);
+      if (found) return found;
     }
 
     return null;
   }
 
-  function searchInParallels(
-    parallels: ParallelElement | ParallelElement[] | undefined
-  ): StateElement | null {
-    if (!parallels) return null;
-
-    const parallelArray = Array.isArray(parallels) ? parallels : [parallels];
-
-    for (const parallel of parallelArray) {
-      if (parallel['@_id'] === stateId) {
-        return parallel as unknown as StateElement;
-      }
-
-      const foundInState = searchInStates(parallel.state);
-      if (foundInState) return foundInState;
-
-      const foundInParallel = searchInParallels(parallel.parallel);
-      if (foundInParallel) return foundInParallel;
-    }
-
-    return null;
-  }
-
-  const foundInRoot = searchInStates(scxmlDoc.scxml.state);
-  if (foundInRoot) return foundInRoot;
-
-  return searchInParallels(scxmlDoc.scxml.parallel);
+  // Search in root states
+  return searchInStates(scxmlDoc.scxml.state);
 }
 
 /**

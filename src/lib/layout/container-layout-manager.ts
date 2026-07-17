@@ -330,6 +330,102 @@ export class ContainerLayoutManager {
     return baseHeight + rows * childHeight + 20; // Extra padding
   }
 
+  /**
+   * Arrange a single child in the center
+   */
+  private arrangeSingle(
+    parentBounds: Rectangle,
+    child: HierarchicalNode,
+    options: LayoutOptions
+  ): ChildPosition[] {
+    const { padding } = options;
+    const childWidth = 140;
+    const childHeight = 80;
+
+    return [
+      {
+        id: child.id,
+        x: (parentBounds.width - childWidth) / 2,
+        y: (parentBounds.height - childHeight) / 2,
+        width: childWidth,
+        height: childHeight,
+      },
+    ];
+  }
+
+  /**
+   * Arrange two children side by side
+   */
+  private arrangeTwo(
+    parentBounds: Rectangle,
+    children: HierarchicalNode[],
+    options: LayoutOptions
+  ): ChildPosition[] {
+    const { padding, spacing } = options;
+    const availableWidth = parentBounds.width - padding * 2 - spacing.x;
+    const childWidth = availableWidth / 2;
+    const childHeight = 80;
+
+    return children.map((child, index) => ({
+      id: child.id,
+      x: padding + index * (childWidth + spacing.x),
+      y: (parentBounds.height - childHeight) / 2,
+      width: Math.max(120, childWidth),
+      height: childHeight,
+    }));
+  }
+
+  /**
+   * Arrange 3-4 children in an optimized layout
+   */
+  private arrangeFew(
+    parentBounds: Rectangle,
+    children: HierarchicalNode[],
+    options: LayoutOptions
+  ): ChildPosition[] {
+    const { padding, spacing } = options;
+
+    if (children.length === 3) {
+      // Arrange in a triangle: one at top, two at bottom
+      const childWidth = 120;
+      const childHeight = 60;
+      const topX = (parentBounds.width - childWidth) / 2;
+      const topY = padding;
+      const bottomY = parentBounds.height - childHeight - padding;
+      const bottomSpacing =
+        (parentBounds.width - 2 * childWidth - 2 * padding) / 1;
+
+      return [
+        {
+          id: children[0].id,
+          x: topX,
+          y: topY,
+          width: childWidth,
+          height: childHeight,
+        },
+        {
+          id: children[1].id,
+          x: padding,
+          y: bottomY,
+          width: childWidth,
+          height: childHeight,
+        },
+        {
+          id: children[2].id,
+          x: padding + childWidth + bottomSpacing,
+          y: bottomY,
+          width: childWidth,
+          height: childHeight,
+        },
+      ];
+    } else {
+      // Arrange in 2x2 grid
+      return this.arrangeInGrid(parentBounds, children, {
+        ...options,
+        columns: 2,
+      });
+    }
+  }
 
   /**
    * Arrange using force-directed algorithm (simplified version)
