@@ -943,8 +943,22 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
       if (!parserRef.current || !scxmlContent) return true;
       const parseResult = parserRef.current.parse(scxmlContent);
       if (!parseResult.success || !parseResult.data) return true;
-      return !wouldMergeDistinctGroups(parseResult.data, connection.source, connection.target)
-        .blocked;
+
+      const { blocked, reason } = wouldMergeDistinctGroups(
+        parseResult.data,
+        connection.source,
+        connection.target
+      );
+      if (blocked) {
+        // ReactFlow never calls onConnect for a connection isValidConnection
+        // rejects, so this is the only place a warning can be surfaced —
+        // fires live while dragging (on hover) and again on drop.
+        setInitialGroupConflictMessage(
+          reason || 'Cannot connect states that belong to different Initial State groups.'
+        );
+        return false;
+      }
+      return true;
     },
     [scxmlContent]
   );
