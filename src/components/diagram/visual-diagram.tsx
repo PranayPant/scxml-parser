@@ -52,9 +52,15 @@ import { SCXMLStateNode } from './nodes/scxml-state-node';
 import { StickyNoteNode } from './nodes/sticky-note-node';
 import { StateActionsPanel } from '@/components/ui/state-actions-panel';
 import { TransitionPanel, type TransitionApplyArgs } from './transition-panel';
+import { InitialGroupConflictBanner } from './initial-group-conflict-banner';
 import { useIsDark } from '@/lib/theme/use-is-dark';
 import { usePanelStore } from '@/stores/panel-store';
 import { isTimeEventName, formatAfterSyntax } from '@/lib/utils/time-transition';
+import {
+  wouldMergeDistinctGroups,
+  isMarkedInitial,
+  wouldConflictIfMarkedInitial,
+} from '@/lib/utils/initial-group-utils';
 
 // ==================== TYPES & INTERFACES ====================
 interface VisualDiagramProps {
@@ -196,6 +202,14 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
   } | null>(null);
   const { activePanel, setActivePanel } = usePanelStore();
 
+  const [initialGroupConflictMessage, setInitialGroupConflictMessage] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!initialGroupConflictMessage) return;
+    const timer = setTimeout(() => setInitialGroupConflictMessage(null), 4000);
+    return () => clearTimeout(timer);
+  }, [initialGroupConflictMessage]);
+
   const [selectedEdgeForEdit, setSelectedEdgeForEdit] = React.useState<{
     id: string;
     source: string;
@@ -215,6 +229,9 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
     entryActions: ParsedActionRow[];
     exitActions: ParsedActionRow[];
     internalEventActions: Array<{ event: string; location: string; expr: string; type: 'internal' | 'external' }>;
+    stateType: 'simple' | 'compound' | 'parallel' | 'final';
+    isInitial: boolean;
+    canMarkInitial: boolean;
   } | null>(null);
 
   // Dark mode tracking for canvas theming
@@ -394,6 +411,37 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
         }
       } catch (error) {
         console.error('Failed to update internal event reactions:', error);
+      }
+    },
+    [scxmlContent, onSCXMLChange]
+  );
+
+  const handleToggleInitialState = React.useCallback(
+    (stateId: string) => {
+      if (!onSCXMLChange || !scxmlContent) return;
+      try {
+        const { ToggleInitialStateCommand } = require('@/lib/commands');
+        const command = new ToggleInitialStateCommand(stateId);
+        const result = command.execute(scxmlContent);
+
+        if (result.success) {
+          onSCXMLChange(result.newContent, 'structure');
+          setSelectedStateForActions((prev) => {
+            if (!prev || prev.id !== stateId || !parserRef.current) return prev;
+            const parseResult = parserRef.current.parse(result.newContent);
+            if (!parseResult.success || !parseResult.data) return prev;
+            return {
+              ...prev,
+              isInitial: isMarkedInitial(parseResult.data, stateId),
+              canMarkInitial: !wouldConflictIfMarkedInitial(parseResult.data, stateId).blocked,
+            };
+          });
+        } else {
+          console.error('Failed to toggle initial state:', result.error);
+          setInitialGroupConflictMessage(result.error || 'Failed to toggle Initial State.');
+        }
+      } catch (error) {
+        console.error('Failed to toggle initial state:', error);
       }
     },
     [scxmlContent, onSCXMLChange]
@@ -774,6 +822,23 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
 
   const onConnect = useCallback(
     (params: Connection) => {
+      if (params.source && params.target && parserRef.current && scxmlContent) {
+        const preCheck = parserRef.current.parse(scxmlContent);
+        if (preCheck.success && preCheck.data) {
+          const { blocked, reason } = wouldMergeDistinctGroups(
+            preCheck.data,
+            params.source,
+            params.target
+          );
+          if (blocked) {
+            setInitialGroupConflictMessage(
+              reason || 'Cannot connect states that belong to different Initial State groups.'
+            );
+            return;
+          }
+        }
+      }
+
       // Set intelligent defaults: outgoing from bottom, incoming to top
       const sourceHandle = params.sourceHandle || 'bottom';
       const targetHandle = params.targetHandle || 'top';
@@ -870,6 +935,18 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
       }
     },
     [setEdges, scxmlContent, onSCXMLChange]
+  );
+
+  const isValidConnection = useCallback(
+    (connection: Connection | Edge) => {
+      if (!connection.source || !connection.target) return true;
+      if (!parserRef.current || !scxmlContent) return true;
+      const parseResult = parserRef.current.parse(scxmlContent);
+      if (!parseResult.success || !parseResult.data) return true;
+      return !wouldMergeDistinctGroups(parseResult.data, connection.source, connection.target)
+        .blocked;
+    },
+    [scxmlContent]
   );
 
   const onReconnect = useCallback(
@@ -978,6 +1055,16 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
                     });
                   };
 
+                  let isInitialFlag = false;
+                  let canMarkFlag = true;
+                  if (parserRef.current && scxmlContent) {
+                    const parseResult = parserRef.current.parse(scxmlContent);
+                    if (parseResult.success && parseResult.data) {
+                      isInitialFlag = isMarkedInitial(parseResult.data, stateId);
+                      canMarkFlag = !wouldConflictIfMarkedInitial(parseResult.data, stateId).blocked;
+                    }
+                  }
+
                   setSelectedEdgeForEdit(null);
                   setSelectedTransitions(new Set());
                   setActivePanel('stateActions');
@@ -986,6 +1073,9 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
                     entryActions: parseActions(node.data.entryActions || []),
                     exitActions: parseActions(node.data.exitActions || []),
                     internalEventActions: node.data.internalEventActions || [],
+                    stateType: node.data.stateType,
+                    isInitial: isInitialFlag,
+                    canMarkInitial: canMarkFlag,
                   });
                 }
               }
@@ -999,7 +1089,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
         clickCountRef.current = 0;
       }, 250); // 250ms delay to distinguish single vs double click
     },
-    [nodes]
+    [nodes, scxmlContent]
   );
 
   // ==================== REACTFLOW NODE CHANGE HANDLER ====================
@@ -2397,13 +2487,14 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
           )}
         </div>
 
-        <div className='flex-1'>
+        <div className='flex-1 relative'>
           <ReactFlow
             nodes={nodes}
             edges={displayFilteredEdges}
             onNodesChange={handleNodesChange}
             onEdgesChange={handleEdgesChange}
             onConnect={onConnect}
+            isValidConnection={isValidConnection}
             onReconnect={onReconnect}
             onNodeClick={(event, node) =>
               handleStateClick(node.id, event, node.type)
@@ -2538,6 +2629,10 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
               className='bg-white/90 border border-slate-200 rounded-lg shadow-sm'
             />
           </ReactFlow>
+          <InitialGroupConflictBanner
+            message={initialGroupConflictMessage}
+            onDismiss={() => setInitialGroupConflictMessage(null)}
+          />
         </div>
       </div>
 
@@ -2576,6 +2671,14 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
         exitActions={selectedStateForActions?.exitActions ?? []}
         internalEventActions={selectedStateForActions?.internalEventActions ?? []}
         scxmlContent={scxmlContent}
+        stateType={selectedStateForActions?.stateType ?? 'simple'}
+        isInitial={selectedStateForActions?.isInitial ?? false}
+        canMarkInitial={selectedStateForActions?.canMarkInitial ?? true}
+        onToggleInitial={() => {
+          if (selectedStateForActions) {
+            handleToggleInitialState(selectedStateForActions.id);
+          }
+        }}
         onApply={(entryActions, exitActions) => {
           if (selectedStateForActions) {
             handleNodeActionsChange(

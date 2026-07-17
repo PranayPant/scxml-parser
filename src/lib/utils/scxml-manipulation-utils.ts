@@ -76,10 +76,27 @@ export function updateTransitionTargets(
   updateTransitionsInStates(scxmlDoc.scxml.state);
   updateTransitionsInStates(scxmlDoc.scxml.parallel);
 
-  // Update initial attribute if it references the old state
-  if (scxmlDoc.scxml['@_initial'] === oldStateId) {
-    scxmlDoc.scxml['@_initial'] = newStateId;
+  // Update initial attribute if it references the old state — token-aware,
+  // and checked at every nesting level (root and every compound state), not just root.
+  function updateInitialAttr(container: { '@_initial'?: string }): void {
+    if (!container['@_initial']) return;
+    const tokens = container['@_initial'].split(/\s+/).filter(Boolean);
+    if (tokens.includes(oldStateId)) {
+      container['@_initial'] = tokens.map((t) => (t === oldStateId ? newStateId : t)).join(' ');
+    }
   }
+
+  function updateInitialInStates(states: StateElement | StateElement[] | undefined): void {
+    if (!states) return;
+    const stateArray = Array.isArray(states) ? states : [states];
+    stateArray.forEach((state) => {
+      updateInitialAttr(state);
+      updateInitialInStates(state.state);
+    });
+  }
+
+  updateInitialAttr(scxmlDoc.scxml);
+  updateInitialInStates(scxmlDoc.scxml.state);
 }
 
 /**
@@ -255,18 +272,51 @@ export function removeStateFromDocument(
     }
   }
 
+  // Remove the state's token from whichever parent's initial list contains it,
+  // at any nesting level. Nested compound states must always retain at least
+  // one initial marker if they still have children (validateCompoundStates
+  // requires it); the document root has no such requirement, so it's left
+  // empty ("unassigned") rather than force-picking a replacement.
+  function stripInitialToken(container: { '@_initial'?: string }): void {
+    if (!container['@_initial']) return;
+    const tokens = container['@_initial'].split(/\s+/).filter((t) => t && t !== stateId);
+    if (tokens.length > 0) {
+      container['@_initial'] = tokens.join(' ');
+    } else {
+      delete container['@_initial'];
+    }
+  }
+
+  function stripInitialTokenRecursive(
+    states: StateElement | StateElement[] | undefined
+  ): void {
+    if (!states) return;
+    const stateArray = Array.isArray(states) ? states : [states];
+    stateArray.forEach((state) => {
+      stripInitialToken(state);
+      if (!state['@_initial'] && !state.initial) {
+        const children = Array.isArray(state.state)
+          ? state.state
+          : state.state
+            ? [state.state]
+            : [];
+        if (children.length > 0) {
+          state['@_initial'] = children[0]['@_id'];
+        }
+      }
+      stripInitialTokenRecursive(state.state);
+    });
+  }
+
   // Remove from document
   scxmlDoc.scxml.state = removeFromStates(scxmlDoc.scxml.state) as any;
 
   // Remove transitions that target this state
   removeTransitionsTargeting(scxmlDoc, stateId);
 
-  // Update initial state if it was the removed state
-  if (scxmlDoc.scxml['@_initial'] === stateId) {
-    // Find the first available state as new initial
-    const firstState = findFirstState(scxmlDoc);
-    scxmlDoc.scxml['@_initial'] = firstState?.['@_id'] || '';
-  }
+  // Clean up any initial-attribute references to the removed state
+  stripInitialToken(scxmlDoc.scxml);
+  stripInitialTokenRecursive(scxmlDoc.scxml.state);
 }
 
 /**

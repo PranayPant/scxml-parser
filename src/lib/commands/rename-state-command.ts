@@ -48,10 +48,15 @@ export class RenameStateCommand extends BaseCommand {
       transition.setAttribute('target', this.newId);
     });
 
-    // Update parent's initial attribute if it points to this state
-    const parentsWithInitial = doc.querySelectorAll(`[initial="${this.stateId}"]`);
-    parentsWithInitial.forEach((parent) => {
-      parent.setAttribute('initial', this.newId);
+    // Update parent's initial attribute if it references this state — token-aware
+    // so a multi-value list ("A B") only has the renamed token replaced, not wiped.
+    const elementsWithInitial = doc.querySelectorAll('[initial]');
+    elementsWithInitial.forEach((element) => {
+      const tokens = (element.getAttribute('initial') || '').split(/\s+/).filter(Boolean);
+      if (tokens.includes(this.stateId)) {
+        const updated = tokens.map((t) => (t === this.stateId ? this.newId : t));
+        element.setAttribute('initial', updated.join(' '));
+      }
     });
 
     // Serialize and return

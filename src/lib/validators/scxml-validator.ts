@@ -20,6 +20,7 @@ import {
   validateTransitionSemantics,
   validateCrossHierarchyTransitions,
 } from './transition-validator';
+import { validateInitialStateGroups } from './initial-group-validator';
 import {
   validateW3CCompliance,
   validateRequiredAttributes,
@@ -89,6 +90,9 @@ export class SCXMLValidator {
       this.xmlContent,
       errors
     );
+
+    // Multiple Initial State group validation
+    validateInitialStateGroups(scxml, errors);
 
     return deduplicateErrors(errors);
   }

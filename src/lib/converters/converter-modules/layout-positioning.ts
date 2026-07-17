@@ -11,6 +11,7 @@ import { elkLayoutService } from '@/lib/layout/elk-layout-service';
 import { computeAdaptiveSpacing } from '@/lib/layout/adaptive-spacing';
 import { computeHubCentroidNudges } from '@/lib/layout/hub-centroid-nudge';
 import { shouldWrapLevel } from '@/lib/layout/chain-wrapping';
+import { parseStateIdList } from '@/lib/validators/validator-utils';
 import type { StateRegistryEntry } from './state-registry';
 
 /**
@@ -303,10 +304,14 @@ export function isInitialState(
   getAttribute: (element: any, attrName: string) => string | undefined,
   getElements: (parent: any, elementName: string) => any
 ): boolean {
+  const allIds = new Set(stateRegistry.keys());
+
   if (!parentPath) {
-    // Check if it's the root initial state
+    // Check if it's one of the (possibly multiple) root initial states
     const rootInitial = getAttribute(rootScxml, 'initial');
-    if (stateId === rootInitial) return true;
+    if (rootInitial && parseStateIdList(rootInitial, allIds).includes(stateId)) {
+      return true;
+    }
 
     // Also check for <initial> element at root
     const initialElement = getElements(rootScxml, 'initial');
@@ -321,14 +326,16 @@ export function isInitialState(
     return false;
   }
 
-  // Find parent state and check its initial attribute
+  // Find parent state and check its (possibly multiple) initial ids
   const parentId =
     typeof parentPath === 'string' ? parentPath.split('#').pop() : null;
   if (parentId) {
     const parentInfo = stateRegistry.get(parentId);
     if (parentInfo) {
       const parentInitial = getAttribute(parentInfo.state, 'initial');
-      if (stateId === parentInitial) return true;
+      if (parentInitial && parseStateIdList(parentInitial, allIds).includes(stateId)) {
+        return true;
+      }
 
       // Also check for <initial> element in parent
       const initialElement = getElements(parentInfo.state, 'initial');
