@@ -308,8 +308,18 @@ export function isInitialState(
 
   if (!parentPath) {
     // Check if it's one of the (possibly multiple) root initial states
+    // getAttribute('initial') falls back to the unprefixed 'initial' property
+    // when '@_initial' is absent — but that property is also where the
+    // parsed <initial> CHILD ELEMENT lives (a different, valid SCXML form),
+    // so the typeof guard is required: without it, a state using the
+    // <initial> element form (no attribute) gets that element object here
+    // instead of undefined, and parseStateIdList would throw on it.
     const rootInitial = getAttribute(rootScxml, 'initial');
-    if (rootInitial && parseStateIdList(rootInitial, allIds).includes(stateId)) {
+    if (
+      typeof rootInitial === 'string' &&
+      rootInitial &&
+      parseStateIdList(rootInitial, allIds).includes(stateId)
+    ) {
       return true;
     }
 
@@ -333,7 +343,11 @@ export function isInitialState(
     const parentInfo = stateRegistry.get(parentId);
     if (parentInfo) {
       const parentInitial = getAttribute(parentInfo.state, 'initial');
-      if (parentInitial && parseStateIdList(parentInitial, allIds).includes(stateId)) {
+      if (
+        typeof parentInitial === 'string' &&
+        parentInitial &&
+        parseStateIdList(parentInitial, allIds).includes(stateId)
+      ) {
         return true;
       }
 

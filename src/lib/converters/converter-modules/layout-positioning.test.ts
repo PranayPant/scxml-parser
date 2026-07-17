@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { isInitialState } from './layout-positioning';
+import { getAttribute as realGetAttribute, getElements as realGetElements } from './visual-metadata';
 
 function getAttribute(element: any, attrName: string): string | undefined {
   return element?.[`@_${attrName}`];
@@ -37,5 +38,44 @@ describe('isInitialState', () => {
     expect(
       isInitialState('ChildC', '#Parent', rootScxml, registry as any, getAttribute, getElements)
     ).toBe(false);
+  });
+
+  it('does not throw for a compound state using the <initial> child-element form (no @_initial attribute), using the real getAttribute helper', () => {
+    // Reproduces the reported crash: getAttribute('initial')'s unprefixed
+    // fallback returns the parsed <initial> child-element object (not a
+    // string) when only that form is used, since 'initial' the attribute and
+    // 'initial' the child element share the same unprefixed property key.
+    const parentState = {
+      initial: { transition: { '@_target': 'ChildB' } },
+    };
+    const registry = new Map([['Parent', { state: parentState }]]);
+    const rootScxml = {};
+
+    expect(() =>
+      isInitialState('ChildA', '#Parent', rootScxml, registry as any, realGetAttribute, realGetElements)
+    ).not.toThrow();
+
+    // The <initial> element's own transition target is still recognized.
+    expect(
+      isInitialState('ChildB', '#Parent', rootScxml, registry as any, realGetAttribute, realGetElements)
+    ).toBe(true);
+    expect(
+      isInitialState('ChildA', '#Parent', rootScxml, registry as any, realGetAttribute, realGetElements)
+    ).toBe(false);
+  });
+
+  it('does not throw for a root using the <initial> child-element form (no @_initial attribute), using the real getAttribute helper', () => {
+    const rootScxml = {
+      initial: { transition: { '@_target': 'B' } },
+    };
+    const registry = new Map([['A', { state: {} }], ['B', { state: {} }]]);
+
+    expect(() =>
+      isInitialState('A', '', rootScxml, registry as any, realGetAttribute, realGetElements)
+    ).not.toThrow();
+
+    expect(
+      isInitialState('B', '', rootScxml, registry as any, realGetAttribute, realGetElements)
+    ).toBe(true);
   });
 });
