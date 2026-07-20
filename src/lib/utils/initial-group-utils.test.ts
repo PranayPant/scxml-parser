@@ -67,6 +67,23 @@ describe('getInitialIds', () => {
     const container = { state: [{ '@_id': 'A' }] };
     expect(getInitialIds(container as any)).toEqual(new Set());
   });
+
+  it('recognizes a target named via the older <initial> child-element form', () => {
+    const container = {
+      initial: { transition: { '@_target': 'off' } },
+      state: [{ '@_id': 'off' }, { '@_id': 'test_running' }],
+    };
+    expect(getInitialIds(container as any)).toEqual(new Set(['off']));
+  });
+
+  it('unions the <initial> element target with the initial attribute list', () => {
+    const container = {
+      '@_initial': 'B',
+      initial: { transition: { '@_target': 'A' } },
+      state: [{ '@_id': 'A' }, { '@_id': 'B' }],
+    };
+    expect(getInitialIds(container as any)).toEqual(new Set(['A', 'B']));
+  });
 });
 
 describe('getSiblingEdges', () => {
@@ -193,6 +210,15 @@ describe('isMarkedInitial', () => {
     const scxml = { '@_initial': 'A', state: [{ '@_id': 'A' }, { '@_id': 'B' }] };
     expect(isMarkedInitial(doc(scxml as any), 'B')).toBe(false);
   });
+
+  it('reports a state named via the <initial> element form as marked initial', () => {
+    const scxml = {
+      initial: { transition: { '@_target': 'off' } },
+      state: [{ '@_id': 'off' }, { '@_id': 'on' }],
+    };
+    expect(isMarkedInitial(doc(scxml as any), 'off')).toBe(true);
+    expect(isMarkedInitial(doc(scxml as any), 'on')).toBe(false);
+  });
 });
 
 describe('wouldConflictIfMarkedInitial', () => {
@@ -247,5 +273,25 @@ describe('wouldConflictIfMarkedInitial', () => {
       state: [{ '@_id': 'A', transition: { '@_target': 'B' } }, { '@_id': 'B' }],
     };
     expect(wouldConflictIfMarkedInitial(doc(scxml as any), 'B').blocked).toBe(false);
+  });
+
+  it('blocks marking a sibling Initial when the existing marker uses the <initial> element form (not the attribute)', () => {
+    // Distilled from a real hand-authored document: main_region's Initial is
+    // expressed as <initial><transition target="off"/></initial>, with no
+    // initial attribute at all. off/test_running/Reset_counter/Error_Oven_stop
+    // are all transitively connected, so marking any of the other three must
+    // be blocked as a conflict with 'off'.
+    const scxml = {
+      initial: { transition: { '@_target': 'off' } },
+      state: [
+        { '@_id': 'off', transition: [{ '@_target': 'test_running' }, { '@_target': 'Reset_counter' }] },
+        { '@_id': 'test_running', transition: { '@_target': 'Error_Oven_stop' } },
+        { '@_id': 'Reset_counter', transition: { '@_target': 'off' } },
+        { '@_id': 'Error_Oven_stop', transition: { '@_target': 'off' } },
+      ],
+    };
+    const result = wouldConflictIfMarkedInitial(doc(scxml as any), 'test_running');
+    expect(result.blocked).toBe(true);
+    expect(result.reason).toContain('off');
   });
 });

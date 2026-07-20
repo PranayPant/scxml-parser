@@ -8,7 +8,12 @@
  * evaluated among one parent container's direct children at a time — the
  * document root, or any single compound <state>.
  */
-import type { SCXMLDocument, SCXMLElement, StateElement } from "@/types/scxml";
+import type {
+  SCXMLDocument,
+  SCXMLElement,
+  StateElement,
+  InitialElement,
+} from "@/types/scxml";
 import { parseStateIdList } from "@/lib/validators/validator-utils";
 
 export type ContainerElement = SCXMLElement | StateElement;
@@ -42,14 +47,52 @@ export function findParentContainer(
   return search(scxmlDoc.scxml);
 }
 
-/** Parse a container's `initial` attribute into the set of direct-child ids it lists. */
+/**
+ * Extract the target id(s) of a container's <initial> child element, the
+ * older SCXML form for specifying a default child (equivalent to the
+ * `initial` attribute, just expressed as `<initial><transition target="X"/></initial>`
+ * instead). Returns an empty array if the container has no such element.
+ */
+function getInitialElementTargetIds(
+  container: ContainerElement,
+  childIds: Set<string>,
+): string[] {
+  const raw = (container as any).initial as
+    | InitialElement
+    | InitialElement[]
+    | undefined;
+  if (!raw) return [];
+  const el = Array.isArray(raw) ? raw[0] : raw;
+  if (!el?.transition) return [];
+  const transition = Array.isArray(el.transition)
+    ? el.transition[0]
+    : el.transition;
+  const target = transition?.["@_target"];
+  if (typeof target !== "string" || !target) return [];
+  return parseStateIdList(target, childIds);
+}
+
+/**
+ * Parse the ids a container currently designates as Initial, from either
+ * representation SCXML allows: the `initial` attribute (space-separated
+ * list) and/or the `<initial>` child element (older, single-target form).
+ * Both are unioned since either can independently mark a state Initial.
+ */
 export function getInitialIds(container: ContainerElement): Set<string> {
-  const raw = (container as any)["@_initial"] as string | undefined;
-  if (!raw) return new Set();
   const childIds = new Set(
     getDirectChildStates(container).map((c) => c["@_id"]),
   );
-  return new Set(parseStateIdList(raw, childIds));
+
+  const result = new Set<string>();
+  const raw = (container as any)["@_initial"] as string | undefined;
+  if (raw) {
+    parseStateIdList(raw, childIds).forEach((id) => result.add(id));
+  }
+  getInitialElementTargetIds(container, childIds).forEach((id) =>
+    result.add(id),
+  );
+
+  return result;
 }
 
 /**

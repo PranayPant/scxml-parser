@@ -192,8 +192,15 @@ new panel UI needed.
 
 - `<parallel>`/region semantics — the prior parallel-states feature was reverted; this design
   does not reintroduce it.
-- The `<initial>` child-element form (as opposed to the `initial` attribute) — existing
-  documents using that form are unaffected; the new toggle only reads/writes the attribute
-  form.
+- ~~The `<initial>` child-element form~~ — originally out of scope, but existing hand-authored
+  documents use it, so it's now fully supported: `getInitialIds` (`initial-group-utils.ts`)
+  reads both the `initial` attribute and a container's `<initial>` child element and unions
+  them, so grouping/conflict checks, `isMarkedInitial`, and the persistent validator all see
+  states named either way. `ToggleInitialStateCommand` reads both forms too, and normalizes to
+  the attribute form the first time a container's Initial designation is touched (removing any
+  pre-existing `<initial>` element) — the attribute is the only form that supports more than one
+  Initial id, so once a container has multiple, there's no other consistent representation.
+  Undo restores the original `<initial>` element verbatim (the same DOM node, re-imported) if
+  one existed.
 - Any visual color-coding or grouping indicator beyond the existing "Initial" badge — not
   requested.

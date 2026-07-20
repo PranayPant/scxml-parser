@@ -115,4 +115,58 @@ describe('ToggleInitialStateCommand', () => {
     expect(markResult.success).toBe(true);
     expect(markResult.newContent).toContain('initial="main_region"');
   });
+
+  describe('<initial> child-element form (older SCXML style, no initial attribute)', () => {
+    it('unmarks a state named via the <initial> element, removing the element and leaving no attribute', () => {
+      const xml = `${SCXML_HEADER}><state id="Parent"><initial><transition target="Child"/></initial><state id="Child"/><state id="Other"/></state></scxml>`;
+      const result = new ToggleInitialStateCommand('Child').execute(xml);
+      expect(result.success).toBe(true);
+      expect(result.newContent).not.toContain('<initial>');
+      expect(result.newContent).not.toContain('initial=');
+    });
+
+    it('fails to mark a sibling Initial when the existing marker is expressed via <initial>, leaving the document unchanged', () => {
+      const xml = `${SCXML_HEADER}><state id="Parent"><initial><transition target="off"/></initial><state id="off"><transition event="go" target="test_running"/></state><state id="test_running"/></state></scxml>`;
+      const result = new ToggleInitialStateCommand('test_running').execute(xml);
+      expect(result.success).toBe(false);
+      expect(result.newContent).toBe(xml);
+      expect(result.error).toContain('off');
+    });
+
+    it('migrates to the attribute form when marking a new, unconnected sibling alongside an <initial>-element marker', () => {
+      const xml = `${SCXML_HEADER}><state id="Parent"><initial><transition target="off"/></initial><state id="off"/><state id="island"/></state></scxml>`;
+      const result = new ToggleInitialStateCommand('island').execute(xml);
+      expect(result.success).toBe(true);
+      expect(result.newContent).not.toContain('<initial>');
+      expect(result.newContent).toContain('initial="off island"');
+    });
+
+    it('undo restores the original <initial> element verbatim after an unmark', () => {
+      const xml = `${SCXML_HEADER}><state id="Parent"><initial><transition target="Child"/></initial><state id="Child"/><state id="Other"/></state></scxml>`;
+      const command = new ToggleInitialStateCommand('Child');
+      const result = command.execute(xml);
+      expect(result.success).toBe(true);
+      expect(result.newContent).not.toContain('<initial>');
+
+      const undone = command.undo(result.newContent);
+      expect(undone.success).toBe(true);
+      expect(undone.newContent).toContain('<initial>');
+      expect(undone.newContent).toContain('target="Child"');
+      expect(undone.newContent).not.toContain('initial="Child"');
+    });
+
+    it('undo restores the original <initial> element after a migrating mark, removing the attribute that was added', () => {
+      const xml = `${SCXML_HEADER}><state id="Parent"><initial><transition target="off"/></initial><state id="off"/><state id="island"/></state></scxml>`;
+      const command = new ToggleInitialStateCommand('island');
+      const result = command.execute(xml);
+      expect(result.newContent).toContain('initial="off island"');
+
+      const undone = command.undo(result.newContent);
+      expect(undone.success).toBe(true);
+      expect(undone.newContent).toContain('<initial>');
+      expect(undone.newContent).toContain('target="off"');
+      expect(undone.newContent).not.toContain('initial="off island"');
+      expect(undone.newContent).not.toContain('initial="off"');
+    });
+  });
 });
