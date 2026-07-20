@@ -38,6 +38,7 @@ import {
   useEdgesState,
   useNodesState,
   useReactFlow,
+  useUpdateNodeInternals,
   type Connection,
   type Edge,
   type Node,
@@ -163,7 +164,14 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
 }) => {
   // ==================== STATE MANAGEMENT ====================
   const { fitView, screenToFlowPosition } = useReactFlow();
+  const updateNodeInternals = useUpdateNodeInternals();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  // Set right before setNodes(enhancedNodes) on a full re-parse; consumed by
+  // the effect below once that `nodes` update actually commits. Deliberately
+  // NOT set by ordinary drag/onNodesChange updates, which also change
+  // `nodes` continuously — calling updateNodeInternals on every node on
+  // every drag frame would be wasteful and janky.
+  const pendingNodeInternalsUpdateRef = React.useRef(false);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
   // UI State
@@ -1682,19 +1690,22 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
             const vizWidth = visualMetadata?.layout?.width;
             const vizHeight = visualMetadata?.layout?.height;
 
-            // If this node became initial after it was sized, the stored width may be
-            // too narrow for the "Initial" badge — expand to the minimum required.
-            const effectiveVizWidth =
-              nodeUpdate.data?.isInitial && vizWidth
-                ? Math.max(
-                    vizWidth,
-                    nodeDimensionCalculator.calculateWidth(
-                      node.id,
-                      nodeUpdate.data?.stateType || 'simple',
-                      true
-                    )
+            // The stored width can go stale for reasons other than resizing
+            // (renaming to a longer id, adding the "Initial" badge), leaving
+            // it too narrow for what's now rendered inside — never let it
+            // shrink content below its calculated minimum; only ever widen
+            // up from the stored value, so an intentional manual widening
+            // (NodeResizer) isn't clobbered back down to the minimum.
+            const effectiveVizWidth = vizWidth
+              ? Math.max(
+                  vizWidth,
+                  nodeDimensionCalculator.calculateWidth(
+                    node.id,
+                    nodeUpdate.data?.stateType || 'simple',
+                    Boolean(nodeUpdate.data?.isInitial)
                   )
-                : vizWidth;
+                )
+              : vizWidth;
 
             // Set dimensions at multiple levels for React Flow compatibility
             nodeUpdate.width =
@@ -2350,6 +2361,16 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
           focusable: true,
         }));
         setEdges(selectableEdges);
+
+        // Node dimensions can change as a side effect of a full re-parse
+        // (e.g. the "Initial" badge resizing a node, or a label edit
+        // changing its calculated width) without going through the
+        // interactive NodeResizer drag path — the only case ReactFlow
+        // automatically re-measures handle positions for. Without this,
+        // edges render against stale handle coordinates and visually
+        // disconnect from the node. Flag it for the effect below, which
+        // fires once this nodes update has actually committed and painted.
+        pendingNodeInternalsUpdateRef.current = true;
       }
     }
   }, [
@@ -2360,6 +2381,15 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
     setEdges,
     isUpdatingFromHistory,
   ]);
+
+  // Runs strictly after the `nodes` state update above has committed and
+  // React has painted the new (possibly resized) node — see the flag's
+  // comment at its declaration for why this doesn't run on every drag frame.
+  React.useEffect(() => {
+    if (!pendingNodeInternalsUpdateRef.current) return;
+    pendingNodeInternalsUpdateRef.current = false;
+    nodes.forEach((node) => updateNodeInternals(node.id));
+  }, [nodes, updateNodeInternals]);
 
   // Sync nodes with hierarchy navigation changes
   // This effect preserves node positions during hierarchy navigation,

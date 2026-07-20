@@ -1,6 +1,11 @@
 import { BaseCommand, type CommandResult } from './base-command';
 import { SCXMLParser } from '@/lib/parsers/scxml-parser';
 import { wouldConflictIfMarkedInitial } from '@/lib/utils/initial-group-utils';
+import {
+  clearWaypointsForTouchingTransitions,
+  restoreClearedWaypoints,
+  type ClearedWaypoint,
+} from './waypoint-invalidation';
 
 /**
  * ToggleInitialStateCommand
@@ -27,10 +32,18 @@ import { wouldConflictIfMarkedInitial } from '@/lib/utils/initial-group-utils';
  * since marking that sibling first is refused by the check below). Refuses
  * to mark a state Initial when it's already transitively connected to
  * another Initial-marked sibling, since that would merge two groups.
+ *
+ * Marking/unmarking changes the node's rendered width (to make or reclaim
+ * room for the "Initial" badge — see NodeDimensionCalculator), so any
+ * transition touching this state has its persisted `viz:waypoints` cleared
+ * too — see waypoint-invalidation.ts. This command's undo doesn't re-run
+ * execute() (unlike Rename/UpdateActions/ChangeStateType), so it must
+ * explicitly restore the cleared snapshot.
  */
 export class ToggleInitialStateCommand extends BaseCommand {
   private previousInitialAttr?: string | null;
   private previousInitialElement?: Element | null;
+  private clearedWaypoints: ClearedWaypoint[] = [];
 
   constructor(private stateId: string) {
     super();
@@ -99,6 +112,8 @@ export class ToggleInitialStateCommand extends BaseCommand {
       parent.setAttribute('initial', [...mergedTokens, this.stateId].join(' '));
     }
 
+    this.clearedWaypoints = clearWaypointsForTouchingTransitions(doc, this.stateId);
+
     return this.createSuccessResult(this.serializeXML(doc), [this.stateId]);
   }
 
@@ -136,6 +151,8 @@ export class ToggleInitialStateCommand extends BaseCommand {
       const imported = doc.importNode(this.previousInitialElement, true);
       parent.insertBefore(imported, parent.firstChild);
     }
+
+    restoreClearedWaypoints(doc, this.clearedWaypoints);
 
     return this.createSuccessResult(this.serializeXML(doc), [this.stateId]);
   }

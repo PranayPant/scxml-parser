@@ -1,3 +1,5 @@
+import { measureLabelWidth } from './measure-label-width';
+
 /**
  * NodeDimensionCalculator - Calculates width and height for state nodes
  *
@@ -35,8 +37,11 @@ export class NodeDimensionCalculator {
       ? 200  // Minimum for container states
       : 160; // Minimum for simple/final states
 
-    // Calculate based on label length (8px per character)
-    const calculatedWidth = label.length * 8 + basePadding;
+    // Real measured text width when a layout engine is available; a rough
+    // per-character estimate otherwise (see measureLabelWidth's doc comment
+    // for when/why it returns null — plain-Node tests, jsdom).
+    const textWidth = measureLabelWidth(label) ?? label.length * 8;
+    const calculatedWidth = textWidth + basePadding;
 
     return Math.max(minWidth, calculatedWidth);
   }

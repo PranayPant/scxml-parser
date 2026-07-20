@@ -660,11 +660,17 @@ export class SCXMLToXStateConverter {
       visualMetadata.width !== undefined &&
       visualMetadata.height !== undefined
     ) {
-      // If isInitial was added after the node was sized, the stored width may not
-      // have room for the "Initial" badge — expand it to the minimum required.
-      const effectiveWidth = isInitial
-        ? Math.max(visualMetadata.width, nodeDimensionCalculator.calculateWidth(stateId, stateType, true))
-        : visualMetadata.width;
+      // The stored width is a snapshot from whenever the node was last
+      // sized/moved — it can go stale for reasons other than resizing it
+      // (renaming to a longer id, adding the "Initial" badge), leaving it
+      // too narrow for what's now rendered inside. Never let it shrink
+      // content below its calculated minimum; only ever widen up from the
+      // stored value, so an intentional manual widening (NodeResizer) isn't
+      // clobbered back down to the calculated minimum.
+      const effectiveWidth = Math.max(
+        visualMetadata.width,
+        nodeDimensionCalculator.calculateWidth(stateId, stateType, isInitial)
+      );
 
       // Top-level dimensions (required by NodeResizer)
       (node as any).width = effectiveWidth;

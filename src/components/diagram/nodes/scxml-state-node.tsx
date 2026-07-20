@@ -286,7 +286,7 @@ export const SCXMLStateNode = memo<NodeProps<SCXMLStateNodeData>>(
     // Get additional classes for shadows, transitions, etc.
     const additionalClasses = visualStyles
       ? getAdditionalClasses(visualStyles, isActive, selected)
-      : 'shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-[1.02] hover:z-10 ring-2 ring-opacity-0 hover:ring-opacity-30 ring-blue-400';
+      : 'shadow-lg hover:shadow-xl transition-[box-shadow,transform] duration-200 hover:scale-[1.02] hover:z-10 ring-2 ring-opacity-0 hover:ring-opacity-30 ring-blue-400';
 
     const nodeClasses = `${getBaseClasses()} ${additionalClasses} backdrop-blur-sm border-2`;
 

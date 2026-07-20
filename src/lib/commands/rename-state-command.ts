@@ -1,4 +1,5 @@
 import { BaseCommand, type CommandResult } from './base-command';
+import { clearWaypointsForTouchingTransitions } from './waypoint-invalidation';
 
 /**
  * RenameStateCommand
@@ -7,6 +8,13 @@ import { BaseCommand, type CommandResult } from './base-command';
  * - Updates the state's @id attribute
  * - Updates all transition @target attributes pointing to this state
  * - Updates parent's @initial attribute if it points to this state
+ *
+ * A longer/shorter id also changes the node's rendered width (see
+ * NodeDimensionCalculator, which sizes by label length — the label is the
+ * state id), so stale persisted `viz:waypoints` on transitions touching it
+ * are cleared too (see waypoint-invalidation.ts). Undo re-runs execute()
+ * with the names swapped, which naturally re-clears them as the node
+ * resizes back — no explicit restore needed here.
  */
 export class RenameStateCommand extends BaseCommand {
   private oldId?: string;
@@ -58,6 +66,8 @@ export class RenameStateCommand extends BaseCommand {
         element.setAttribute('initial', updated.join(' '));
       }
     });
+
+    clearWaypointsForTouchingTransitions(doc, this.newId);
 
     // Serialize and return
     const newContent = this.serializeXML(doc);
