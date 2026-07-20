@@ -11,6 +11,7 @@ import {
   addStateToDocument,
   createStateElement,
   findStateById,
+  getNextTransitionEventName,
   removeTransitionByEdgeId,
 } from '@/lib/utils/scxml-manipulation-utils';
 import { computeVisualStyles } from '@/lib/utils/visual-style-utils';
@@ -830,9 +831,11 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
 
   const onConnect = useCallback(
     (params: Connection) => {
+      let preParsedDoc: SCXMLDocument | undefined;
       if (params.source && params.target && parserRef.current && scxmlContent) {
         const preCheck = parserRef.current.parse(scxmlContent);
         if (preCheck.success && preCheck.data) {
+          preParsedDoc = preCheck.data;
           const { blocked, reason } = wouldMergeDistinctGroups(
             preCheck.data,
             params.source,
@@ -850,6 +853,9 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
       // Set intelligent defaults: outgoing from bottom, incoming to top
       const sourceHandle = params.sourceHandle || 'bottom';
       const targetHandle = params.targetHandle || 'top';
+      const nextEventName = preParsedDoc
+        ? getNextTransitionEventName(preParsedDoc)
+        : 'event1';
 
       const newEdge: Edge = {
         id: `${params.source}-${params.target}-${Date.now()}`,
@@ -865,7 +871,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
         //   color: '#6b7280',
         // },
         data: {
-          event: 'event',
+          event: nextEventName,
           condition: undefined,
           actions: [],
           sourceHandle: sourceHandle,
@@ -891,7 +897,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
 
             if (sourceState) {
               const newTransition: TransitionElement = {
-                '@_event': 'event',
+                '@_event': nextEventName,
                 '@_target': params.target!,
               };
 
@@ -915,7 +921,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
               const handleCommand = new UpdateTransitionHandlesCommand(
                 params.source!,
                 params.target!,
-                'event', // The event we just created
+                nextEventName, // The event we just created
                 undefined, // No condition
                 sourceHandle,
                 targetHandle

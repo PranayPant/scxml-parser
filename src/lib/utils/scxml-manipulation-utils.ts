@@ -2,6 +2,7 @@
 import type {
   SCXMLDocument,
   StateElement,
+  ParallelElement,
   TransitionElement,
   OnEntryElement,
   OnExitElement,
@@ -36,6 +37,59 @@ export function findStateById(
 
   // Search in root states
   return searchInStates(scxmlDoc.scxml.state);
+}
+
+/**
+ * Generate the next unused "eventN" name (event1, event2, ...) by scanning
+ * every transition's @_event value in the whole document, so new transitions
+ * never default to a name already in use elsewhere.
+ */
+export function getNextTransitionEventName(scxmlDoc: SCXMLDocument): string {
+  const usedEvents = new Set<string>();
+
+  const collect = (transitions: TransitionElement | TransitionElement[] | undefined) => {
+    if (!transitions) return;
+    const arr = Array.isArray(transitions) ? transitions : [transitions];
+    for (const t of arr) {
+      if (t['@_event']) usedEvents.add(t['@_event']);
+    }
+  };
+
+  const walkStates = (states: StateElement | StateElement[] | undefined) => {
+    if (!states) return;
+    const arr = Array.isArray(states) ? states : [states];
+    for (const state of arr) {
+      collect(state.transition);
+      if (state.initial) collect(state.initial.transition);
+      if (state.history) {
+        const histories = Array.isArray(state.history) ? state.history : [state.history];
+        histories.forEach((h) => collect(h.transition));
+      }
+      walkStates(state.state);
+      walkParallels(state.parallel);
+    }
+  };
+
+  const walkParallels = (parallels: ParallelElement | ParallelElement[] | undefined) => {
+    if (!parallels) return;
+    const arr = Array.isArray(parallels) ? parallels : [parallels];
+    for (const p of arr) {
+      collect(p.transition);
+      walkStates(p.state);
+      walkParallels(p.parallel);
+    }
+  };
+
+  walkStates(scxmlDoc.scxml.state);
+  walkParallels(scxmlDoc.scxml.parallel);
+
+  let counter = 1;
+  let name = `event${counter}`;
+  while (usedEvents.has(name)) {
+    counter++;
+    name = `event${counter}`;
+  }
+  return name;
 }
 
 /**

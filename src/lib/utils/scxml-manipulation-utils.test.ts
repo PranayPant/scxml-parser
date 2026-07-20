@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import type { SCXMLDocument } from '@/types/scxml';
-import { updateTransitionTargets, removeStateFromDocument } from './scxml-manipulation-utils';
+import {
+  updateTransitionTargets,
+  removeStateFromDocument,
+  getNextTransitionEventName,
+} from './scxml-manipulation-utils';
 
 describe('updateTransitionTargets', () => {
   it('updates a single-value root initial (existing behavior)', () => {
@@ -53,5 +57,53 @@ describe('removeStateFromDocument', () => {
     const d: SCXMLDocument = { scxml: { state: [parent] } as any };
     removeStateFromDocument(d, 'ChildA');
     expect((parent as any)['@_initial']).toBe('ChildB');
+  });
+});
+
+describe('getNextTransitionEventName', () => {
+  it('returns event1 for a document with no transitions', () => {
+    const d: SCXMLDocument = { scxml: { state: [{ '@_id': 'A' }] } as any };
+    expect(getNextTransitionEventName(d)).toBe('event1');
+  });
+
+  it('skips numbers already used anywhere in the document', () => {
+    const d: SCXMLDocument = {
+      scxml: {
+        state: [
+          { '@_id': 'A', transition: { '@_event': 'event1', '@_target': 'B' } },
+          { '@_id': 'B', transition: { '@_event': 'event2', '@_target': 'A' } },
+        ],
+      } as any,
+    };
+    expect(getNextTransitionEventName(d)).toBe('event3');
+  });
+
+  it('finds the first free gap rather than always appending', () => {
+    const d: SCXMLDocument = {
+      scxml: {
+        state: [
+          { '@_id': 'A', transition: { '@_event': 'event1', '@_target': 'B' } },
+          { '@_id': 'B', transition: { '@_event': 'event3', '@_target': 'A' } },
+        ],
+      } as any,
+    };
+    expect(getNextTransitionEventName(d)).toBe('event2');
+  });
+
+  it('checks transitions nested inside parallel regions and child states', () => {
+    const d: SCXMLDocument = {
+      scxml: {
+        parallel: [
+          {
+            '@_id': 'P',
+            state: [
+              { '@_id': 'P1', transition: { '@_event': 'event1', '@_target': 'P2' } },
+              { '@_id': 'P2' },
+            ],
+          },
+        ],
+      } as any,
+    };
+    expect(getNextTransitionEventName(d)).toBe('event2');
   });
 });
