@@ -1,191 +1,364 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="Hotvalve_Stress_test">
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="ra_pumps">
 	<datamodel>
-		<data expr="0.0" id="Pressure_in_bar" />
-		<data expr="0.0" id="bellowhotvalves_bar" />
-		<data expr="0.0" id="hotvalves_vacuum_onoff" />
-		<data expr="0.0" id="hotvalves_pressure_onoff" />
-		<data expr="0.0" id="VacuumPump_onoff" />
-		<data expr="0.0" id="Inside_Oven" />
-		<data expr="0.0" id="Cabinet_back" />
-		<data expr="0.0" id="AirFlow_lpm" />
-		<data expr="0.0" id="ovenarea1_target" />
-		<data expr="1.5" id="conf_upperlimit_press" />
-		<data expr="-0.3" id="conf_lowerlimit_press" />
-		<data expr="0.5" id="conf_upperlimit_flow" />
-		<data expr="5" id="conf_lowerlimit_test_flow" />
-		<data expr="10" id="conf_holdtime_press" />
-		<data expr="3" id="conf_holdtime_vac" />
-		<data expr="20" id="conf_holdtime_error" />
-		<data expr="0.0" id="this_known_state" />
-		<data expr="false" id="this_leaking_error" />
-		<data expr="false" id="this_no_argon" />
-		<data expr="0" id="this_counter" />
-		<data expr="false" id="this_status_failed" />
+		<data expr="0.0" id="pump01_targetrpm" />
+		<data expr="0.0" id="pump02_targetrpm" />
+		<data expr="0.0" id="pump03_targetrpm" />
+		<data expr="0.0" id="pump04_targetrpm" />
+		<data expr="0.0" id="pump05_targetrpm" />
+		<data expr="0.0" id="pump06_targetrpm" />
+		<data expr="0.0" id="pump07_targetrpm" />
+		<data expr="0.0" id="pump01ElbowOutside" />
+		<data expr="0.0" id="pump02ElbowOutside" />
+		<data expr="0.0" id="pump03ElbowOutside" />
+		<data expr="0.0" id="pump04ElbowOutside" />
+		<data expr="0.0" id="pump05ElbowOutside" />
+		<data expr="0.0" id="pump06ElbowOutside" />
+		<data expr="0.0" id="pump07ElbowOutside" />
+		<data expr="0.0" id="pump01_OutFrequency_Hz" />
+		<data expr="0.0" id="pump02_OutFrequency_Hz" />
+		<data expr="0.0" id="pump03_OutFrequency_Hz" />
+		<data expr="0.0" id="pump04_OutFrequency_Hz" />
+		<data expr="0.0" id="pump05_OutFrequency_Hz" />
+		<data expr="0.0" id="pump06_OutFrequency_Hz" />
+		<data expr="0.0" id="pump07_OutFrequency_Hz" />
+		<data expr="0" id="conf_disable" />
+		<data expr="2100" id="conf_pump01_targetRPM" />
+		<data expr="2100" id="conf_pump02_targetRPM" />
+		<data expr="2100" id="conf_pump03_targetRPM" />
+		<data expr="1600" id="conf_pump04_targetRPM" />
+		<data expr="1400" id="conf_pump05_targetRPM" />
+		<data expr="1400" id="conf_pump06_targetRPM" />
+		<data expr="2100" id="conf_pump07_targetRPM" />
+		<data expr="5" id="conf_startupTimeout_pump01" />
+		<data expr="5" id="conf_startupTimeout_pump02" />
+		<data expr="5" id="conf_startupTimeout_pump03" />
+		<data expr="5" id="conf_startupTimeout_pump04" />
+		<data expr="5" id="conf_startupTimeout_pump05_06" />
+		<data expr="5" id="conf_startupTimeout_pump07" />
+		<data expr="10.0" id="conf_pump01startup_thresholdFreq" />
+		<data expr="10.0" id="conf_pump02startup_thresholdFreq" />
+		<data expr="10.0" id="conf_pump03startup_thresholdFreq" />
+		<data expr="10.0" id="conf_pump04startup_thresholdFreq" />
+		<data expr="10.0" id="conf_pump05startup_thresholdFreq" />
+		<data expr="10.0" id="conf_pump06startup_thresholdFreq" />
+		<data expr="10.0" id="conf_pump07startup_thresholdFreq" />
+		<data expr="0.1" id="conf_pump01_thresholdLowPressure" />
+		<data expr="0.1" id="conf_pump02_thresholdLowPressure" />
+		<data expr="0.1" id="conf_pump03_thresholdLowPressure" />
+		<data expr="0.1" id="conf_pump04_thresholdLowPressure" />
+		<data expr="0.1" id="conf_pump05_thresholdLowPressure" />
+		<data expr="0.1" id="conf_pump06_thresholdLowPressure" />
+		<data expr="0.1" id="conf_pump07_thresholdLowPressure" />
+		<data expr="1.1" id="conf_pump01_thresholdHighPressure" />
+		<data expr="1.1" id="conf_pump02_thresholdHighPressure" />
+		<data expr="1.1" id="conf_pump03_thresholdHighPressure" />
+		<data expr="1.1" id="conf_pump04_thresholdHighPressure" />
+		<data expr="1.1" id="conf_pump05_thresholdHighPressure" />
+		<data expr="1.1" id="conf_pump06_thresholdHighPressure" />
+		<data expr="1.1" id="conf_pump07_thresholdHighPressure" />
+		<data expr="10" id="conf_startup_TimeBeforeCheckingPressures" />
+		<data expr="0.0" id="ra_pumps_ready" />
+		<data expr="0.0" id="ra_pumps_known_state" />
+		<data expr="0.0" id="ra_pumps_failed_pumpID" />
+		<data expr="0" id="ra_pumps_PumpLowPressure_alert" />
+		<data expr="0" id="ra_pumps_PumpHighPressure_alert" />
 	</datamodel>
 	<state id="main_region">
 		<initial>
-			<transition target="off" type="internal">
+			<transition target="check_config" type="internal">
 			</transition>
 		</initial>
-		<state id="off">
+		<state id="check_config">
 			<onentry>
-				 <assign location="this_known_state" expr="1.0"/>
+				 <assign location="ra_pumps_known_state" expr="1.0"/>
+				 <assign location="ra_pumps_ready" expr="0"/>
 			</onentry>
-			<transition event="BeginTest"  target="test_running">
+			<transition  cond="conf_pump01_targetRPM &lt; 0 || conf_pump01_targetRPM &gt; 2800" target="invalid_config">
 			</transition>
-			<transition event="reset"  target="Reset_counter">
+			<transition  cond="conf_pump02_targetRPM &lt; 0 || conf_pump02_targetRPM &gt; 2800" target="invalid_config">
+			</transition>
+			<transition  cond="conf_pump03_targetRPM &lt; 0 || conf_pump03_targetRPM &gt; 2800" target="invalid_config">
+			</transition>
+			<transition  cond="conf_pump04_targetRPM &lt; 0 || conf_pump04_targetRPM &gt; 2800" target="invalid_config">
+			</transition>
+			<transition event="vector"  target="init">
+			</transition>
+			<transition  cond="conf_pump05_targetRPM &lt; 0 || conf_pump05_targetRPM &gt; 2800" target="invalid_config">
+			</transition>
+			<transition  cond="conf_pump06_targetRPM &lt; 0 || conf_pump06_targetRPM &gt; 2800" target="invalid_config">
+			</transition>
+			<transition  cond="conf_pump07_targetRPM &lt; 0 || conf_pump07_targetRPM &gt; 2800" target="invalid_config">
 			</transition>
 		</state>
-		<state id="test_running">
+		<state id="invalid_config">
+			<onentry>
+				 <assign location="ra_pumps_known_state" expr="-1.0"/>
+				 <assign location="ra_pumps_ready" expr="-1"/>
+			</onentry>
+		</state>
+		<state id="init">
+			<onentry>
+				 <assign location="ra_pumps_known_state" expr="2.0"/>
+			</onentry>
 			<onexit>
-				 <assign location="hotvalves_pressure_onoff" expr="0"/>
-				 <assign location="hotvalves_vacuum_onoff" expr="0"/>
-				 <assign location="VacuumPump_onoff" expr="0"/>
+				 <assign location="ra_pumps_ready" expr="1"/>
 			</onexit>
-			<initial>
-				<transition target="pressure_up" type="internal">
-				</transition>
-			</initial>
-			<state id="pressure_up">
-				<onentry>
-					<send event="pressure_up_t_1_timeEvent_0" delayexpr="conf_holdtime_error * 1000"/>
-				</onentry>
-				<onexit>
-					<cancel sendid="pressure_up_t_1_timeEvent_0" />
-				</onexit>
-				<onentry>
-					 <assign location="this_known_state" expr="2.1"/>
-				</onentry>
-				<transition event ="vector"  type="internal" >
-					 <assign location="hotvalves_pressure_onoff" expr="1.0"/>
-				</transition>
-				<transition  cond="bellowhotvalves_bar &gt;= conf_upperlimit_press" target="Control_pressure">
-				</transition>
-				<transition event="pressure_up_t_1_timeEvent_0"  target="Error_Oven_stop">
-				</transition>
-			</state>
-			<state id="Control_pressure">
-				<onentry>
-					<send event="Control pressure_t_1_timeEvent_0" delayexpr="conf_holdtime_error * 1000"/>
-				</onentry>
-				<onexit>
-					<cancel sendid="Control pressure_t_1_timeEvent_0" />
-				</onexit>
-				<onentry>
-					 <assign location="this_known_state" expr="2.2"/>
-				</onentry>
-				<transition  cond="AirFlow_lpm &lt;= conf_upperlimit_flow" target="Check_flow_lower">
-				</transition>
-				<transition event="Control pressure_t_1_timeEvent_0"  target="Leaking_error">
-				</transition>
-			</state>
-			<state id="pressure_down">
-				<onentry>
-					 <assign location="this_known_state" expr="2.4"/>
-				</onentry>
-				<transition event ="vector"  type="internal" >
-					 <assign location="hotvalves_vacuum_onoff" expr="1.0"/>
-					 <assign location="VacuumPump_onoff" expr="1.0"/>
-				</transition>
-				<transition  cond="bellowhotvalves_bar &lt;= conf_lowerlimit_press" target="Check_flow_upper">
-				</transition>
-			</state>
-			<state id="Check_flow_lower">
-				<onentry>
-					<send event="Check flow lower_t_0_timeEvent_0" delayexpr="conf_holdtime_press * 1000"/>
-				</onentry>
-				<onexit>
-					<cancel sendid="Check flow lower_t_0_timeEvent_0" />
-				</onexit>
-				<onentry>
-					 <assign location="this_known_state" expr="2.3"/>
-				</onentry>
-				<transition event="Check flow lower_t_0_timeEvent_0"  target="pressure_down">
-				</transition>
-			</state>
-			<state id="Check_flow_upper">
-				<onentry>
-					<send event="Check flow upper_t_1_timeEvent_0" delayexpr="conf_holdtime_error * 1000"/>
-				</onentry>
-				<onexit>
-					<cancel sendid="Check flow upper_t_1_timeEvent_0" />
-				</onexit>
-				<onentry>
-					 <assign location="this_known_state" expr="2.5"/>
-				</onentry>
-				<transition  cond="AirFlow_lpm &gt;= conf_lowerlimit_test_flow" target="wait_low">
-				</transition>
-				<transition event="Check flow upper_t_1_timeEvent_0"  target="No_Argon">
-				</transition>
-			</state>
-			<state id="Leaking_error">
-				<onentry>
-					 <assign location="this_leaking_error" expr="true"/>
-				</onentry>
-				<onexit>
-					 <assign location="this_leaking_error" expr="false"/>
-				</onexit>
-				<transition event="vector"  target="Error_Oven_stop">
-				</transition>
-			</state>
-			<state id="Counter">
-				<onentry>
-					<send event="Counter_t_0_timeEvent_0" delay="1s"/>
-				</onentry>
-				<onexit>
-					<cancel sendid="Counter_t_0_timeEvent_0" />
-				</onexit>
-				<onentry>
-					 <assign location="hotvalves_pressure_onoff" expr="0.0"/>
-					 <assign location="hotvalves_vacuum_onoff" expr="0.0"/>
-					 <assign location="VacuumPump_onoff" expr="0.0"/>
-				</onentry>
-				<onexit>
-					 <assign location="this_counter" expr="this_counter + 1"/>
-				</onexit>
-				<transition event="Counter_t_0_timeEvent_0"  target="pressure_up">
-				</transition>
-			</state>
-			<state id="wait_low">
-				<onentry>
-					<send event="wait_low_t_0_timeEvent_0" delayexpr="conf_holdtime_vac * 1000"/>
-				</onentry>
-				<onexit>
-					<cancel sendid="wait_low_t_0_timeEvent_0" />
-				</onexit>
-				<onentry>
-					 <assign location="this_known_state" expr="2.6"/>
-				</onentry>
-				<transition event="wait_low_t_0_timeEvent_0"  target="Counter">
-				</transition>
-			</state>
-			<state id="No_Argon">
-				<onentry>
-					 <assign location="this_no_argon" expr="true"/>
-				</onentry>
-				<onexit>
-					 <assign location="this_no_argon" expr="false"/>
-				</onexit>
-				<transition event="vector"  target="Error_Oven_stop">
-				</transition>
-			</state>
-			<transition event="Stop"  target="Error_Oven_stop">
-			</transition>
-		</state>
-		<state id="Reset_counter">
-			<onentry>
-				 <assign location="this_counter" expr="0"/>
-			</onentry>
 			<transition   target="off">
 			</transition>
 		</state>
-		<state id="Error_Oven_stop">
+		<state id="standby">
 			<onentry>
-				 <assign location="this_status_failed" expr="true"/>
-				 <assign location="ovenarea1_target" expr="0.0"/>
+				 <assign location="ra_pumps_known_state" expr="4.0"/>
+				 <assign location="pump01_targetrpm" expr="0"/>
+				 <assign location="pump02_targetrpm" expr="0"/>
+				 <assign location="pump03_targetrpm" expr="0"/>
+				 <assign location="pump04_targetrpm" expr="0"/>
+				 <assign location="pump05_targetrpm" expr="0"/>
+				 <assign location="pump06_targetrpm" expr="0"/>
+				 <assign location="pump07_targetrpm" expr="0"/>
 			</onentry>
-			<transition event="vector"  target="off">
+			<transition event="Start_Pumps"  target="Startup">
+			</transition>
+		</state>
+		<state id="Startup">
+			<onentry>
+				 <assign location="ra_pumps_known_state" expr="5.0"/>
+			</onentry>
+			<initial>
+				<transition target="startupSeq" type="internal">
+				</transition>
+			</initial>
+			<state id="startupSeq">
+				<onentry>
+					 <assign location="ra_pumps_known_state" expr="5.1"/>
+				</onentry>
+				<initial>
+					<transition target="startup_init" type="internal">
+					</transition>
+				</initial>
+				<state id="start_pump01">
+					<onentry>
+						<send event="start_pump01_t_0_timeEvent_0" delayexpr="conf_startupTimeout_pump01 * 1000"/>
+					</onentry>
+					<onexit>
+						<cancel sendid="start_pump01_t_0_timeEvent_0" />
+					</onexit>
+					<onentry>
+						 <assign location="pump01_targetrpm" expr="conf_pump01_targetRPM"/>
+					</onentry>
+					<transition event="start_pump01_t_0_timeEvent_0"  target="pump01_startTimeout">
+					</transition>
+					<transition  cond="pump01_OutFrequency_Hz &gt;= conf_pump01startup_thresholdFreq" target="start_pump02">
+					</transition>
+				</state>
+				<state id="pump01_startTimeout">
+					<onentry>
+						 <assign location="ra_pumps_failed_pumpID" expr="1.0"/>
+					</onentry>
+					<transition   target="standby">
+					</transition>
+				</state>
+				<state id="start_pump02">
+					<onentry>
+						<send event="start_pump02_t_0_timeEvent_0" delayexpr="conf_startupTimeout_pump02 * 1000"/>
+					</onentry>
+					<onexit>
+						<cancel sendid="start_pump02_t_0_timeEvent_0" />
+					</onexit>
+					<onentry>
+						 <assign location="pump02_targetrpm" expr="conf_pump02_targetRPM"/>
+					</onentry>
+					<transition event="start_pump02_t_0_timeEvent_0"  target="pump02_startTimeout">
+					</transition>
+					<transition  cond="pump02_OutFrequency_Hz &gt;= conf_pump02startup_thresholdFreq" target="start_pump03">
+					</transition>
+				</state>
+				<state id="pump02_startTimeout">
+					<onentry>
+						 <assign location="ra_pumps_failed_pumpID" expr="2.0"/>
+					</onentry>
+					<transition   target="standby">
+					</transition>
+				</state>
+				<state id="start_pump03">
+					<onentry>
+						<send event="start_pump03_t_0_timeEvent_0" delayexpr="conf_startupTimeout_pump03 * 1000"/>
+					</onentry>
+					<onexit>
+						<cancel sendid="start_pump03_t_0_timeEvent_0" />
+					</onexit>
+					<onentry>
+						 <assign location="pump03_targetrpm" expr="conf_pump03_targetRPM"/>
+					</onentry>
+					<transition event="start_pump03_t_0_timeEvent_0"  target="pump03_startTimeout">
+					</transition>
+					<transition  cond="pump03_OutFrequency_Hz &gt;= conf_pump03startup_thresholdFreq" target="start_pump04">
+					</transition>
+				</state>
+				<state id="pump03_startTimeout">
+					<onentry>
+						 <assign location="ra_pumps_failed_pumpID" expr="3.0"/>
+					</onentry>
+					<transition   target="standby">
+					</transition>
+				</state>
+				<state id="start_pump04">
+					<onentry>
+						<send event="start_pump04_t_0_timeEvent_0" delayexpr="conf_startupTimeout_pump04 * 1000"/>
+					</onentry>
+					<onexit>
+						<cancel sendid="start_pump04_t_0_timeEvent_0" />
+					</onexit>
+					<onentry>
+						 <assign location="pump04_targetrpm" expr="conf_pump04_targetRPM"/>
+					</onentry>
+					<transition event="start_pump04_t_0_timeEvent_0"  target="pump04_startTimeout">
+					</transition>
+					<transition  cond="pump04_OutFrequency_Hz &gt;= conf_pump04startup_thresholdFreq" target="start_pump05_06">
+					</transition>
+				</state>
+				<state id="pump04_startTimeout">
+					<onentry>
+						 <assign location="ra_pumps_failed_pumpID" expr="4.0"/>
+					</onentry>
+					<transition   target="standby">
+					</transition>
+				</state>
+				<state id="start_pump05_06">
+					<onentry>
+						<send event="start_pump05_06_t_0_timeEvent_0" delayexpr="conf_startupTimeout_pump05_06 * 1000"/>
+					</onentry>
+					<onexit>
+						<cancel sendid="start_pump05_06_t_0_timeEvent_0" />
+					</onexit>
+					<onentry>
+						 <assign location="pump05_targetrpm" expr="conf_pump05_targetRPM"/>
+						 <assign location="pump06_targetrpm" expr="conf_pump06_targetRPM"/>
+					</onentry>
+					<transition event="start_pump05_06_t_0_timeEvent_0"  target="pump05_06_startTimeout">
+					</transition>
+					<transition  cond="pump05_OutFrequency_Hz &gt;= conf_pump05startup_thresholdFreq &amp;&amp; pump06_OutFrequency_Hz &gt;= conf_pump06startup_thresholdFreq" target="start_pump07">
+					</transition>
+				</state>
+				<state id="pump05_06_startTimeout">
+					<onentry>
+						 <assign location="ra_pumps_failed_pumpID" expr="5.6"/>
+					</onentry>
+					<transition   target="standby">
+					</transition>
+				</state>
+				<state id="start_pump07">
+					<onentry>
+						<send event="start_pump07_t_0_timeEvent_0" delayexpr="conf_startupTimeout_pump07 * 1000"/>
+					</onentry>
+					<onexit>
+						<cancel sendid="start_pump07_t_0_timeEvent_0" />
+					</onexit>
+					<onentry>
+						 <assign location="pump07_targetrpm" expr="conf_pump07_targetRPM"/>
+					</onentry>
+					<transition event="start_pump07_t_0_timeEvent_0"  target="pump07_startTimeout">
+					</transition>
+					<transition  cond="pump07_OutFrequency_Hz &gt;= conf_pump07startup_thresholdFreq" target="running">
+					</transition>
+				</state>
+				<state id="pump07_startTimeout">
+					<onentry>
+						 <assign location="ra_pumps_failed_pumpID" expr="7.0"/>
+					</onentry>
+					<transition   target="standby">
+					</transition>
+				</state>
+				<state id="startup_init">
+					<onentry>
+						 <assign location="ra_pumps_failed_pumpID" expr="0.0"/>
+					</onentry>
+					<transition   target="start_pump01">
+					</transition>
+				</state>
+			</state>
+			<state id="running">
+				<onentry>
+					<send event="running_t_0_timeEvent_0" delayexpr="conf_startup_TimeBeforeCheckingPressures * 1000"/>
+				</onentry>
+				<onexit>
+					<cancel sendid="running_t_0_timeEvent_0" />
+				</onexit>
+				<onentry>
+					 <assign location="ra_pumps_known_state" expr="5.2"/>
+				</onentry>
+				<transition event="running_t_0_timeEvent_0"  target="Pumping">
+				</transition>
+			</state>
+			<transition event="emergencyshutdown"  target="standby">
+			</transition>
+			<transition event="Stop_Pumps"  target="standby">
+			</transition>
+		</state>
+		<state id="off">
+			<onentry>
+				 <assign location="ra_pumps_known_state" expr="3.0"/>
+			</onentry>
+			<transition  cond="conf_disable == 0" target="standby">
+			</transition>
+		</state>
+		<state id="Pump_Low_Pressure_Alert">
+			<onentry>
+				 <assign location="ra_pumps_PumpLowPressure_alert" expr="1"/>
+				 <assign location="ra_pumps_known_state" expr="-1.1"/>
+			</onentry>
+			<transition event ="vector"  type="internal" >
+				 <assign location="pump01_targetrpm" expr="0"/>
+				 <assign location="pump02_targetrpm" expr="0"/>
+				 <assign location="pump03_targetrpm" expr="0"/>
+				 <assign location="pump04_targetrpm" expr="0"/>
+				 <assign location="pump05_targetrpm" expr="0"/>
+				 <assign location="pump06_targetrpm" expr="0"/>
+				 <assign location="pump07_targetrpm" expr="0"/>
+			</transition>
+			<transition  cond="pump01_OutFrequency_Hz &lt;= conf_pump01startup_thresholdFreq &amp;&amp; pump02_OutFrequency_Hz &lt;= conf_pump02startup_thresholdFreq &amp;&amp; pump03_OutFrequency_Hz &lt;= conf_pump03startup_thresholdFreq &amp;&amp; pump04_OutFrequency_Hz &lt;= conf_pump04startup_thresholdFreq &amp;&amp; pump05_OutFrequency_Hz &lt;= conf_pump05startup_thresholdFreq &amp;&amp; pump06_OutFrequency_Hz &lt;= conf_pump06startup_thresholdFreq &amp;&amp; pump07_OutFrequency_Hz &lt;= conf_pump07startup_thresholdFreq" target="alert_ack">
+			</transition>
+		</state>
+		<state id="alert_ack">
+			<onentry>
+				 <assign location="ra_pumps_known_state" expr="-1.0"/>
+			</onentry>
+			<onexit>
+				 <assign location="ra_pumps_PumpLowPressure_alert" expr="0"/>
+				 <assign location="ra_pumps_PumpHighPressure_alert" expr="0"/>
+			</onexit>
+			<transition event="ack"  target="standby">
+			</transition>
+		</state>
+		<state id="Pump_High_Pressure_Alert">
+			<onentry>
+				 <assign location="ra_pumps_PumpHighPressure_alert" expr="1"/>
+				 <assign location="ra_pumps_known_state" expr="-1.2"/>
+			</onentry>
+			<transition event ="vector"  type="internal" >
+				 <assign location="pump01_targetrpm" expr="0"/>
+				 <assign location="pump02_targetrpm" expr="0"/>
+				 <assign location="pump03_targetrpm" expr="0"/>
+				 <assign location="pump04_targetrpm" expr="0"/>
+				 <assign location="pump05_targetrpm" expr="0"/>
+				 <assign location="pump06_targetrpm" expr="0"/>
+				 <assign location="pump07_targetrpm" expr="0"/>
+			</transition>
+			<transition  cond="pump01_OutFrequency_Hz &lt;= conf_pump01startup_thresholdFreq &amp;&amp; pump02_OutFrequency_Hz &lt;= conf_pump02startup_thresholdFreq &amp;&amp; pump03_OutFrequency_Hz &lt;= conf_pump03startup_thresholdFreq &amp;&amp; pump04_OutFrequency_Hz &lt;= conf_pump04startup_thresholdFreq &amp;&amp; pump05_OutFrequency_Hz &lt;= conf_pump05startup_thresholdFreq &amp;&amp; pump06_OutFrequency_Hz &lt;= conf_pump06startup_thresholdFreq &amp;&amp; pump07_OutFrequency_Hz &lt;= conf_pump07startup_thresholdFreq" target="alert_ack">
+			</transition>
+		</state>
+		<state id="Pumping">
+			<onentry>
+				 <assign location="ra_pumps_known_state" expr="6.0"/>
+			</onentry>
+			<transition event="emergencyshutdown"  target="standby">
+			</transition>
+			<transition event="Stop_Pumps"  target="standby">
+			</transition>
+			<transition  cond="pump01ElbowOutside &lt;= conf_pump01_thresholdLowPressure || pump02ElbowOutside &lt;= conf_pump02_thresholdLowPressure || pump03ElbowOutside &lt;= conf_pump03_thresholdLowPressure || pump04ElbowOutside &lt;= conf_pump04_thresholdLowPressure || pump05ElbowOutside &lt;= conf_pump05_thresholdLowPressure || pump06ElbowOutside &lt;= conf_pump06_thresholdLowPressure || pump07ElbowOutside &lt;= conf_pump07_thresholdLowPressure" target="Pump_Low_Pressure_Alert">
+			</transition>
+			<transition  cond="pump01ElbowOutside &gt;= conf_pump01_thresholdHighPressure || pump02ElbowOutside &gt;= conf_pump02_thresholdHighPressure || pump03ElbowOutside &gt;= conf_pump03_thresholdHighPressure || pump04ElbowOutside &gt;= conf_pump04_thresholdHighPressure || pump05ElbowOutside &gt;= conf_pump05_thresholdHighPressure || pump06ElbowOutside &gt;= conf_pump06_thresholdHighPressure || pump07ElbowOutside &gt;= conf_pump07_thresholdHighPressure" target="Pump_High_Pressure_Alert">
 			</transition>
 		</state>
 	</state>

@@ -1,29 +1,30 @@
 //visual-diagram.tsx
-'use client';
+"use client";
 
 // ==================== IMPORTS ====================
-import { useHierarchyNavigation } from '@/hooks/use-hierarchy-navigation';
-import { SCXMLToXStateConverter } from '@/lib/converters/scxml-to-xstate';
-import { nodeDimensionCalculator } from '@/lib/layout/node-dimension-calculator';
-import { VisualMetadataManager } from '@/lib/metadata';
-import { SCXMLParser } from '@/lib/parsers/scxml-parser';
+import { useHierarchyNavigation } from "@/hooks/use-hierarchy-navigation";
+import { SCXMLToXStateConverter } from "@/lib/converters/scxml-to-xstate";
+import { nodeDimensionCalculator } from "@/lib/layout/node-dimension-calculator";
+import { computeEdgeBundles } from "@/lib/layout/edge-bundling";
+import { VisualMetadataManager } from "@/lib/metadata";
+import { SCXMLParser } from "@/lib/parsers/scxml-parser";
 import {
   addStateToDocument,
   createStateElement,
   findStateById,
   getNextTransitionEventName,
   removeTransitionByEdgeId,
-} from '@/lib/utils/scxml-manipulation-utils';
-import { computeVisualStyles } from '@/lib/utils/visual-style-utils';
-import { ActionType } from '@/types/history';
-import type { SCXMLDocument, TransitionElement } from '@/types/scxml';
+} from "@/lib/utils/scxml-manipulation-utils";
+import { computeVisualStyles } from "@/lib/utils/visual-style-utils";
+import { ActionType } from "@/types/history";
+import type { SCXMLDocument, TransitionElement } from "@/types/scxml";
 import {
   SmartBezierEdge,
   SmartStepEdge,
   SmartStraightEdge,
-} from '@tisoap/react-flow-smart-edge';
-import { ChevronRight } from 'lucide-react';
-import React, { useCallback } from 'react';
+} from "@tisoap/react-flow-smart-edge";
+import { ChevronRight } from "lucide-react";
+import React, { useCallback } from "react";
 import {
   Background,
   BackgroundVariant,
@@ -44,25 +45,29 @@ import {
   type Edge,
   type Node,
   type NodeTypes,
-} from 'reactflow';
-import 'reactflow/dist/style.css';
-import { v4 as uuidv4 } from 'uuid';
-import { isNoteId, VISUAL_METADATA_CONSTANTS } from '@/types/visual-metadata';
-import { SCXMLTransitionEdge } from './edges/scxml-transition-edge';
-import { HistoryWrapperNode } from './nodes/history-wrapper-node';
-import { SCXMLStateNode } from './nodes/scxml-state-node';
-import { StickyNoteNode } from './nodes/sticky-note-node';
-import { StateActionsPanel } from '@/components/ui/state-actions-panel';
-import { TransitionPanel, type TransitionApplyArgs } from './transition-panel';
-import { InitialGroupConflictBanner } from './initial-group-conflict-banner';
-import { useIsDark } from '@/lib/theme/use-is-dark';
-import { usePanelStore } from '@/stores/panel-store';
-import { isTimeEventName, formatAfterSyntax } from '@/lib/utils/time-transition';
+} from "reactflow";
+// @ts-ignore: CSS module declaration is not available for reactflow styles
+import "reactflow/dist/style.css";
+import { v4 as uuidv4 } from "uuid";
+import { isNoteId, VISUAL_METADATA_CONSTANTS } from "@/types/visual-metadata";
+import { SCXMLTransitionEdge } from "./edges/scxml-transition-edge";
+import { HistoryWrapperNode } from "./nodes/history-wrapper-node";
+import { SCXMLStateNode } from "./nodes/scxml-state-node";
+import { StickyNoteNode } from "./nodes/sticky-note-node";
+import { StateActionsPanel } from "@/components/ui/state-actions-panel";
+import { TransitionPanel, type TransitionApplyArgs } from "./transition-panel";
+import { InitialGroupConflictBanner } from "./initial-group-conflict-banner";
+import { useIsDark } from "@/lib/theme/use-is-dark";
+import { usePanelStore } from "@/stores/panel-store";
+import {
+  isTimeEventName,
+  formatAfterSyntax,
+} from "@/lib/utils/time-transition";
 import {
   wouldMergeDistinctGroups,
   isMarkedInitial,
   wouldConflictIfMarkedInitial,
-} from '@/lib/utils/initial-group-utils';
+} from "@/lib/utils/initial-group-utils";
 
 // ==================== TYPES & INTERFACES ====================
 interface VisualDiagramProps {
@@ -71,7 +76,7 @@ interface VisualDiagramProps {
   onEdgeChange?: (edges: Edge[]) => void;
   onSCXMLChange?: (
     scxmlContent: string,
-    changeType?: 'position' | 'structure' | 'property' | 'resize'
+    changeType?: "position" | "structure" | "property" | "resize",
   ) => void;
   isUpdatingFromHistory?: boolean;
   historyActionType?: ActionType;
@@ -96,24 +101,24 @@ const edgeTypes = {
 // Default demo data
 const initialNodes: Node[] = [
   {
-    id: 'idle',
-    type: 'scxmlState',
+    id: "idle",
+    type: "scxmlState",
     position: { x: 100, y: 100 },
     data: {
-      label: 'idle',
-      stateType: 'simple',
+      label: "idle",
+      stateType: "simple",
       isInitial: true,
       entryActions: [],
       exitActions: [],
     },
   },
   {
-    id: 'active',
-    type: 'scxmlState',
+    id: "active",
+    type: "scxmlState",
     position: { x: 300, y: 100 },
     data: {
-      label: 'active',
-      stateType: 'simple',
+      label: "active",
+      stateType: "simple",
       isInitial: false,
       entryActions: ['log("Entering active state")'],
       exitActions: ['log("Exiting active state")'],
@@ -123,31 +128,31 @@ const initialNodes: Node[] = [
 
 const initialEdges: Edge[] = [
   {
-    id: 'idle-to-active',
-    type: 'aligned',
-    source: 'idle',
-    target: 'active',
+    id: "idle-to-active",
+    type: "aligned",
+    source: "idle",
+    target: "active",
     markerEnd: {
       type: MarkerType.ArrowClosed,
-      color: '#6b7280',
+      color: "#6b7280",
     },
     data: {
-      event: 'start',
+      event: "start",
       condition: null,
       actions: [],
     },
   },
   {
-    id: 'active-to-idle',
-    type: 'aligned',
-    source: 'active',
-    target: 'idle',
+    id: "active-to-idle",
+    type: "aligned",
+    source: "active",
+    target: "idle",
     markerEnd: {
       type: MarkerType.ArrowClosed,
-      color: '#6b7280',
+      color: "#6b7280",
     },
     data: {
-      event: 'stop',
+      event: "stop",
       condition: null,
       actions: [],
     },
@@ -177,7 +182,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
 
   // UI State
   const [activeStates, setActiveStates] = React.useState<Set<string>>(
-    new Set()
+    new Set(),
   );
   const [selectedTransitions, setSelectedTransitions] = React.useState<
     Set<string>
@@ -209,9 +214,13 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
     x: number;
     y: number;
   } | null>(null);
+  const [hoveredBundleKey, setHoveredBundleKey] = React.useState<string | null>(
+    null,
+  );
   const { activePanel, setActivePanel } = usePanelStore();
 
-  const [initialGroupConflictMessage, setInitialGroupConflictMessage] = React.useState<string | null>(null);
+  const [initialGroupConflictMessage, setInitialGroupConflictMessage] =
+    React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (!initialGroupConflictMessage) return;
@@ -228,17 +237,27 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
   } | null>(null);
 
   // State for editing onentry/onexit actions
-  type ParsedAssignRow = { type: 'assign'; location: string; expr: string };
-  type ParsedSendRow   = { type: 'send'; event: string; delayType: 'delay' | 'delayexpr'; delayValue: string };
-  type ParsedCancelRow = { type: 'cancel'; sendid: string };
+  type ParsedAssignRow = { type: "assign"; location: string; expr: string };
+  type ParsedSendRow = {
+    type: "send";
+    event: string;
+    delayType: "delay" | "delayexpr";
+    delayValue: string;
+  };
+  type ParsedCancelRow = { type: "cancel"; sendid: string };
   type ParsedActionRow = ParsedAssignRow | ParsedSendRow | ParsedCancelRow;
 
   const [selectedStateForActions, setSelectedStateForActions] = React.useState<{
     id: string;
     entryActions: ParsedActionRow[];
     exitActions: ParsedActionRow[];
-    internalEventActions: Array<{ event: string; location: string; expr: string; type: 'internal' | 'external' }>;
-    stateType: 'simple' | 'compound' | 'parallel' | 'final';
+    internalEventActions: Array<{
+      event: string;
+      location: string;
+      expr: string;
+      type: "internal" | "external";
+    }>;
+    stateType: "simple" | "compound" | "parallel" | "final";
     isInitial: boolean;
     canMarkInitial: boolean;
   } | null>(null);
@@ -249,7 +268,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
   // ==================== REFS ====================
   // Position update management
   const isUpdatingPositionRef = React.useRef(false);
-  const previousScxmlRef = React.useRef<string>('');
+  const previousScxmlRef = React.useRef<string>("");
   const positionUpdateTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const lastPositionUpdateRef = React.useRef<
     Map<string, { x: number; y: number }>
@@ -258,7 +277,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
 
   // Handler refs for callbacks
   const handleNodeDeleteRef = React.useRef<((nodeId: string) => void) | null>(
-    null
+    null,
   );
 
   // Hover delay ref
@@ -268,7 +287,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
   const parserRef = React.useRef<SCXMLParser | null>(null);
   const metadataManagerRef = React.useRef<VisualMetadataManager | null>(null);
   const scxmlDocRef = React.useRef<SCXMLDocument | null>(null);
-  const scxmlContentRef = React.useRef<string>('');
+  const scxmlContentRef = React.useRef<string>("");
 
   // Keep scxmlContent ref up to date
   React.useEffect(() => {
@@ -292,21 +311,21 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
 
       try {
         // Use command pattern for unified SCXML updates
-        const { RenameStateCommand } = require('@/lib/commands');
+        const { RenameStateCommand } = require("@/lib/commands");
         const command = new RenameStateCommand(nodeId, newLabel);
 
         const result = command.execute(scxmlContent);
 
         if (result.success) {
-          onSCXMLChange(result.newContent, 'property');
+          onSCXMLChange(result.newContent, "property");
         } else {
-          console.error('Failed to rename state:', result.error);
+          console.error("Failed to rename state:", result.error);
         }
       } catch (error) {
-        console.error('Failed to sync label change:', error);
+        console.error("Failed to sync label change:", error);
       }
     },
-    [scxmlContent, onSCXMLChange]
+    [scxmlContent, onSCXMLChange],
   );
 
   const handleNodeActionsChange = React.useCallback(
@@ -315,37 +334,48 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
 
       try {
         // Use command pattern for unified SCXML updates
-        const { UpdateActionsCommand } = require('@/lib/commands');
+        const { UpdateActionsCommand } = require("@/lib/commands");
         const command = new UpdateActionsCommand(
           nodeId,
           entryActions,
-          exitActions
+          exitActions,
         );
 
         const result = command.execute(scxmlContent);
 
         if (result.success) {
-          onSCXMLChange(result.newContent, 'property');
+          onSCXMLChange(result.newContent, "property");
         } else {
-          console.error('Failed to update actions:', result.error);
+          console.error("Failed to update actions:", result.error);
         }
       } catch (error) {
-        console.error('Failed to sync actions change:', error);
+        console.error("Failed to sync actions change:", error);
       }
     },
-    [scxmlContent, onSCXMLChange]
+    [scxmlContent, onSCXMLChange],
   );
 
   const handleTransitionApply = React.useCallback(
-    ({ newValue, editingField, delay, cancelSendId, originalEventName, originalCancelSendId }: TransitionApplyArgs) => {
+    ({
+      newValue,
+      editingField,
+      delay,
+      cancelSendId,
+      originalEventName,
+      originalCancelSendId,
+    }: TransitionApplyArgs) => {
       if (!onSCXMLChange || !scxmlContent || !selectedEdgeForEdit) return;
       try {
         let content = scxmlContent;
 
         // Step 1: apply transition event/cond update
-        const { UpdateTransitionCommand } = require('@/lib/commands');
-        const { parseTransitionIndexFromEdgeId } = require('@/lib/converters/converter-modules');
-        const transitionIndex = parseTransitionIndexFromEdgeId(selectedEdgeForEdit.id);
+        const { UpdateTransitionCommand } = require("@/lib/commands");
+        const {
+          parseTransitionIndexFromEdgeId,
+        } = require("@/lib/converters/converter-modules");
+        const transitionIndex = parseTransitionIndexFromEdgeId(
+          selectedEdgeForEdit.id,
+        );
         const transResult = new UpdateTransitionCommand(
           selectedEdgeForEdit.source,
           selectedEdgeForEdit.target,
@@ -353,14 +383,17 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
           selectedEdgeForEdit.cond,
           newValue,
           editingField,
-          transitionIndex
+          transitionIndex,
         ).execute(content);
         if (transResult.success) content = transResult.newContent;
-        else console.error('Failed to update transition:', transResult.error);
+        else console.error("Failed to update transition:", transResult.error);
 
         // Step 2: apply delay/cancel actions on the already-updated content
         // Runs in event mode (add/remove) and when switching to cond (cleanup old send/cancel)
-        if (editingField === 'event' || (editingField === 'cond' && originalEventName)) {
+        if (
+          editingField === "event" ||
+          (editingField === "cond" && originalEventName)
+        ) {
           const sourceNodeId = selectedEdgeForEdit.source;
           const sourceNode = nodes.find((n) => n.id === sourceNodeId);
           if (sourceNode) {
@@ -371,70 +404,98 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
             const newEntry = [
               ...existingEntry.filter((a) => {
                 if (newValue && a.startsWith(`send|${newValue}|`)) return false;
-                if (originalEventName && a.startsWith(`send|${originalEventName}|`)) return false;
+                if (
+                  originalEventName &&
+                  a.startsWith(`send|${originalEventName}|`)
+                )
+                  return false;
                 return true;
               }),
-              ...(delay ? [`send|${newValue}|${delay.type}|${delay.value}`] : []),
+              ...(delay
+                ? [`send|${newValue}|${delay.type}|${delay.value}`]
+                : []),
             ];
 
             // Remove old cancel by original sendId and by new sendId, then add back if set
             const newExit = [
               ...existingExit.filter((a) => {
-                if (originalCancelSendId && a === `cancel|${originalCancelSendId}`) return false;
-                if (cancelSendId && a === `cancel|${cancelSendId}`) return false;
+                if (
+                  originalCancelSendId &&
+                  a === `cancel|${originalCancelSendId}`
+                )
+                  return false;
+                if (cancelSendId && a === `cancel|${cancelSendId}`)
+                  return false;
                 return true;
               }),
               ...(cancelSendId ? [`cancel|${cancelSendId}`] : []),
             ];
 
-            const entryChanged = JSON.stringify(newEntry) !== JSON.stringify(existingEntry);
-            const exitChanged = JSON.stringify(newExit) !== JSON.stringify(existingExit);
+            const entryChanged =
+              JSON.stringify(newEntry) !== JSON.stringify(existingEntry);
+            const exitChanged =
+              JSON.stringify(newExit) !== JSON.stringify(existingExit);
             if (entryChanged || exitChanged) {
-              const { UpdateActionsCommand } = require('@/lib/commands');
-              const actResult = new UpdateActionsCommand(sourceNodeId, newEntry, newExit).execute(content);
+              const { UpdateActionsCommand } = require("@/lib/commands");
+              const actResult = new UpdateActionsCommand(
+                sourceNodeId,
+                newEntry,
+                newExit,
+              ).execute(content);
               if (actResult.success) content = actResult.newContent;
-              else console.error('Failed to update actions:', actResult.error);
+              else console.error("Failed to update actions:", actResult.error);
             }
           }
         }
 
-        onSCXMLChange(content, 'property');
+        onSCXMLChange(content, "property");
       } catch (error) {
-        console.error('Failed to apply transition:', error);
+        console.error("Failed to apply transition:", error);
       }
     },
-    [scxmlContent, onSCXMLChange, selectedEdgeForEdit, nodes]
+    [scxmlContent, onSCXMLChange, selectedEdgeForEdit, nodes],
   );
 
   const handleNodeInternalEventsChange = React.useCallback(
-    (nodeId: string, actions: Array<{ event: string; location: string; expr: string; type: 'internal' | 'external' }>) => {
+    (
+      nodeId: string,
+      actions: Array<{
+        event: string;
+        location: string;
+        expr: string;
+        type: "internal" | "external";
+      }>,
+    ) => {
       if (!onSCXMLChange || !scxmlContent) return;
       try {
-        const { UpdateInternalEventsCommand } = require('@/lib/commands');
+        const { UpdateInternalEventsCommand } = require("@/lib/commands");
         const command = new UpdateInternalEventsCommand(nodeId, actions);
         const result = command.execute(scxmlContent);
         if (result.success) {
-          onSCXMLChange(result.newContent, 'property');
+          onSCXMLChange(result.newContent, "property");
         } else {
-          console.error('Failed to update internal event reactions:', result.error);
+          console.error(
+            "Failed to update internal event reactions:",
+            result.error,
+          );
         }
       } catch (error) {
-        console.error('Failed to update internal event reactions:', error);
+        console.error("Failed to update internal event reactions:", error);
       }
     },
-    [scxmlContent, onSCXMLChange]
+    [scxmlContent, onSCXMLChange],
   );
 
   const handleToggleInitialState = React.useCallback(
     (stateId: string) => {
       if (!onSCXMLChange || !scxmlContent) return;
       try {
-        const { ToggleInitialStateCommand } = require('@/lib/commands');
+        const { ToggleInitialStateCommand } = require("@/lib/commands");
         const command = new ToggleInitialStateCommand(stateId);
         const result = command.execute(scxmlContent);
 
         if (result.success) {
-          onSCXMLChange(result.newContent, 'structure');
+          onSCXMLChange(result.newContent, "structure");
           setSelectedStateForActions((prev) => {
             if (!prev || prev.id !== stateId || !parserRef.current) return prev;
             const parseResult = parserRef.current.parse(result.newContent);
@@ -442,18 +503,23 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
             return {
               ...prev,
               isInitial: isMarkedInitial(parseResult.data, stateId),
-              canMarkInitial: !wouldConflictIfMarkedInitial(parseResult.data, stateId).blocked,
+              canMarkInitial: !wouldConflictIfMarkedInitial(
+                parseResult.data,
+                stateId,
+              ).blocked,
             };
           });
         } else {
-          console.error('Failed to toggle initial state:', result.error);
-          setInitialGroupConflictMessage(result.error || 'Failed to toggle Initial State.');
+          console.error("Failed to toggle initial state:", result.error);
+          setInitialGroupConflictMessage(
+            result.error || "Failed to toggle Initial State.",
+          );
         }
       } catch (error) {
-        console.error('Failed to toggle initial state:', error);
+        console.error("Failed to toggle initial state:", error);
       }
     },
-    [scxmlContent, onSCXMLChange]
+    [scxmlContent, onSCXMLChange],
   );
 
   const handleNodeStateTypeChange = React.useCallback(
@@ -462,21 +528,21 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
 
       try {
         // Use command pattern for unified SCXML updates
-        const { ChangeStateTypeCommand } = require('@/lib/commands');
+        const { ChangeStateTypeCommand } = require("@/lib/commands");
         const command = new ChangeStateTypeCommand(nodeId, newStateType);
 
         const result = command.execute(scxmlContent);
 
         if (result.success) {
-          onSCXMLChange(result.newContent, 'property');
+          onSCXMLChange(result.newContent, "property");
         } else {
-          console.error('Failed to change state type:', result.error);
+          console.error("Failed to change state type:", result.error);
         }
       } catch (error) {
-        console.error('Failed to sync state type change:', error);
+        console.error("Failed to sync state type change:", error);
       }
     },
-    [scxmlContent, onSCXMLChange]
+    [scxmlContent, onSCXMLChange],
   );
 
   // ==================== NODE DELETION HANDLERS ====================
@@ -486,7 +552,10 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
 
       try {
         // Use command pattern for unified SCXML updates
-        const { DeleteNodeCommand, DeleteNoteCommand } = require('@/lib/commands');
+        const {
+          DeleteNodeCommand,
+          DeleteNoteCommand,
+        } = require("@/lib/commands");
 
         // Notes and states live in different elements; route each to its command
         const allIds = Array.isArray(nodeIds) ? nodeIds : [nodeIds];
@@ -498,7 +567,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
         if (stateIds.length > 0) {
           const result = new DeleteNodeCommand(stateIds).execute(content);
           if (!result.success) {
-            console.error('Failed to delete node:', result.error);
+            console.error("Failed to delete node:", result.error);
             return;
           }
           content = result.newContent;
@@ -507,21 +576,21 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
         if (noteIds.length > 0) {
           const result = new DeleteNoteCommand(noteIds).execute(content);
           if (!result.success) {
-            console.error('Failed to delete note:', result.error);
+            console.error("Failed to delete note:", result.error);
             return;
           }
           content = result.newContent;
         }
 
         if (content !== scxmlContent) {
-          onSCXMLChange(content, 'structure');
+          onSCXMLChange(content, "structure");
           setActiveStates(new Set());
         }
       } catch (error) {
-        console.error('Failed to delete node:', error);
+        console.error("Failed to delete node:", error);
       }
     },
-    [scxmlContent, onSCXMLChange]
+    [scxmlContent, onSCXMLChange],
   );
 
   // ==================== NOTE HANDLERS ====================
@@ -530,21 +599,21 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
       if (!onSCXMLChange || !scxmlContent) return;
 
       try {
-        const { UpdateNoteTextCommand } = require('@/lib/commands');
+        const { UpdateNoteTextCommand } = require("@/lib/commands");
         const command = new UpdateNoteTextCommand(noteId, newText);
 
         const result = command.execute(scxmlContent);
 
         if (result.success) {
-          onSCXMLChange(result.newContent, 'property');
+          onSCXMLChange(result.newContent, "property");
         } else {
-          console.error('Failed to update note text:', result.error);
+          console.error("Failed to update note text:", result.error);
         }
       } catch (error) {
-        console.error('Failed to update note text:', error);
+        console.error("Failed to update note text:", error);
       }
     },
-    [scxmlContent, onSCXMLChange]
+    [scxmlContent, onSCXMLChange],
   );
 
   // ==================== POSITION UPDATE HANDLERS ====================
@@ -552,7 +621,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
     (nodeId: string, x: number, y: number) => {
       const currentScxmlContent = scxmlContentRef.current;
       if (!onSCXMLChange || !currentScxmlContent) {
-        console.warn('Cannot update position: SCXML content not available');
+        console.warn("Cannot update position: SCXML content not available");
         return;
       }
 
@@ -560,24 +629,24 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
         // Use command pattern for unified SCXML updates
         const {
           UpdatePositionCommand,
-        } = require('@/lib/commands/update-position-command');
+        } = require("@/lib/commands/update-position-command");
         const command = new UpdatePositionCommand(nodeId, x, y);
 
         const result = command.execute(currentScxmlContent);
 
         if (result.success) {
           previousScxmlRef.current = result.newContent;
-          onSCXMLChange(result.newContent, 'position');
+          onSCXMLChange(result.newContent, "position");
         } else {
-          console.error('Failed to update position:', result.error);
+          console.error("Failed to update position:", result.error);
           isUpdatingPositionRef.current = false;
         }
       } catch (error) {
         isUpdatingPositionRef.current = false;
-        console.error('Failed to sync position change:', error);
+        console.error("Failed to sync position change:", error);
       }
     },
-    [onSCXMLChange, setEdges]
+    [onSCXMLChange, setEdges],
   );
 
   handleNodePositionChangeRef.current = handleNodePositionChange;
@@ -587,7 +656,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
     (nodeId: string, x: number, y: number, width: number, height: number) => {
       const currentScxmlContent = scxmlContentRef.current;
       if (!onSCXMLChange || !currentScxmlContent) {
-        console.warn('Cannot update dimensions: SCXML content not available');
+        console.warn("Cannot update dimensions: SCXML content not available");
         return;
       }
       isUpdatingPositionRef.current = true;
@@ -597,20 +666,20 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
       // Use command pattern for unified SCXML updates
       const {
         UpdatePositionAndDimensionsCommand,
-      } = require('@/lib/commands/update-position-and-dimensions-command');
+      } = require("@/lib/commands/update-position-and-dimensions-command");
       const command = new UpdatePositionAndDimensionsCommand(
         nodeId,
         x,
         y,
         width,
-        height
+        height,
       );
 
       const result = command.execute(currentScxmlContent);
 
       if (result.success) {
         previousScxmlRef.current = result.newContent;
-        onSCXMLChange(result.newContent, 'resize');
+        onSCXMLChange(result.newContent, "resize");
 
         // Ensure final edge recalculation after resize completes
         // setTimeout(() => {
@@ -627,11 +696,11 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
           isUpdatingPositionRef.current = false;
         });
       } else {
-        console.error('Failed to resize node:', result.error);
+        console.error("Failed to resize node:", result.error);
         isUpdatingPositionRef.current = false;
       }
     },
-    [onSCXMLChange, setNodes, setEdges]
+    [onSCXMLChange, setNodes, setEdges],
   );
 
   // ==================== EDGE HANDLERS ====================
@@ -642,8 +711,8 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
       originalEvent: string | undefined,
       originalCond: string | undefined,
       newLabel: string,
-      editingField: 'event' | 'cond' = 'event',
-      edgeId?: string
+      editingField: "event" | "cond" = "event",
+      edgeId?: string,
     ) => {
       if (!onSCXMLChange || !scxmlContent) {
         return;
@@ -655,12 +724,12 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
         if (edgeId) {
           const {
             parseTransitionIndexFromEdgeId,
-          } = require('@/lib/converters/converter-modules');
+          } = require("@/lib/converters/converter-modules");
           transitionIndex = parseTransitionIndexFromEdgeId(edgeId);
         }
 
         // Use command pattern for unified SCXML updates
-        const { UpdateTransitionCommand } = require('@/lib/commands');
+        const { UpdateTransitionCommand } = require("@/lib/commands");
         const command = new UpdateTransitionCommand(
           source,
           target,
@@ -668,21 +737,21 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
           originalCond,
           newLabel,
           editingField,
-          transitionIndex
+          transitionIndex,
         );
 
         const result = command.execute(scxmlContent);
 
         if (result.success) {
-          onSCXMLChange(result.newContent, 'property');
+          onSCXMLChange(result.newContent, "property");
         } else {
-          console.error('Failed to update transition:', result.error);
+          console.error("Failed to update transition:", result.error);
         }
       } catch (error) {
-        console.error('Failed to update transition label:', error);
+        console.error("Failed to update transition label:", error);
       }
     },
-    [scxmlContent, onSCXMLChange]
+    [scxmlContent, onSCXMLChange],
   );
 
   const handleNewChannel = React.useCallback(
@@ -692,13 +761,18 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
       target: string,
       originalEvent: string | undefined,
       originalCond: string | undefined,
-      editingField: 'event' | 'cond',
-      edgeId: string
+      editingField: "event" | "cond",
+      edgeId: string,
     ) => {
       if (!onSCXMLChange || !scxmlContent) return;
       try {
-        const { AddDataCommand, UpdateTransitionCommand } = require('@/lib/commands');
-        const { parseTransitionIndexFromEdgeId } = require('@/lib/converters/converter-modules');
+        const {
+          AddDataCommand,
+          UpdateTransitionCommand,
+        } = require("@/lib/commands");
+        const {
+          parseTransitionIndexFromEdgeId,
+        } = require("@/lib/converters/converter-modules");
 
         // Step 1: insert <data> element
         const addResult = new AddDataCommand(channelName).execute(scxmlContent);
@@ -707,24 +781,36 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
         // Step 2: update the transition cond/event on the already-modified content
         const transitionIndex = parseTransitionIndexFromEdgeId(edgeId);
         const updateResult = new UpdateTransitionCommand(
-          source, target, originalEvent, originalCond,
-          channelName, editingField, transitionIndex
+          source,
+          target,
+          originalEvent,
+          originalCond,
+          channelName,
+          editingField,
+          transitionIndex,
         ).execute(base);
 
         if (updateResult.success) {
-          onSCXMLChange(updateResult.newContent, 'structure');
+          onSCXMLChange(updateResult.newContent, "structure");
         } else {
-          console.error('Failed to update transition after adding channel:', updateResult.error);
+          console.error(
+            "Failed to update transition after adding channel:",
+            updateResult.error,
+          );
         }
       } catch (error) {
-        console.error('Failed to add channel:', error);
+        console.error("Failed to add channel:", error);
       }
     },
-    [scxmlContent, onSCXMLChange]
+    [scxmlContent, onSCXMLChange],
   );
 
   const handleEdgeMouseEnter = useCallback(
     (event: React.MouseEvent, edge: Edge) => {
+      if (edge.data?.bundleGroupKey) {
+        setHoveredBundleKey(edge.data.bundleGroupKey);
+      }
+
       if (edge.data?.fullLabel) {
         // Clear any existing timeout
         if (hoverTimeoutRef.current) {
@@ -742,7 +828,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
         }, 500);
       }
     },
-    []
+    [],
   );
 
   const handleEdgeMouseLeave = useCallback(() => {
@@ -752,13 +838,14 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
       hoverTimeoutRef.current = null;
     }
     setHoveredEdge(null);
+    setHoveredBundleKey(null);
   }, []);
 
   const handleEdgesChange = useCallback(
     (changes: any[]) => {
       // Filter out selection changes - they don't affect SCXML structure
       const structuralChanges = changes.filter(
-        (change) => change.type !== 'select'
+        (change) => change.type !== "select",
       );
 
       // Only pass structural changes to ReactFlow
@@ -767,7 +854,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
       }
 
       const deleteChanges = structuralChanges.filter(
-        (change) => change.type === 'remove'
+        (change) => change.type === "remove",
       );
 
       if (deleteChanges.length > 0 && parserRef.current && onSCXMLChange) {
@@ -794,31 +881,49 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
               // Clean up send/cancel actions on the source state for deleted _t_ time-transition edges
               for (const change of deleteChanges) {
                 const deletedEdge = edges.find((e) => e.id === change.id);
-                if (!deletedEdge?.data?.event || !isTimeEventName(deletedEdge.data.event)) continue;
+                if (
+                  !deletedEdge?.data?.event ||
+                  !isTimeEventName(deletedEdge.data.event)
+                )
+                  continue;
 
                 const eventName = deletedEdge.data.event as string;
-                const sourceNode = nodes.find((n) => n.id === deletedEdge.source);
+                const sourceNode = nodes.find(
+                  (n) => n.id === deletedEdge.source,
+                );
                 if (!sourceNode) continue;
 
-                const entryActions: string[] = sourceNode.data.entryActions ?? [];
+                const entryActions: string[] =
+                  sourceNode.data.entryActions ?? [];
                 const exitActions: string[] = sourceNode.data.exitActions ?? [];
-                const newEntry = entryActions.filter((a) => !a.startsWith(`send|${eventName}|`));
-                const newExit = exitActions.filter((a) => a !== `cancel|${eventName}`);
+                const newEntry = entryActions.filter(
+                  (a) => !a.startsWith(`send|${eventName}|`),
+                );
+                const newExit = exitActions.filter(
+                  (a) => a !== `cancel|${eventName}`,
+                );
 
-                if (newEntry.length !== entryActions.length || newExit.length !== exitActions.length) {
-                  const { UpdateActionsCommand } = require('@/lib/commands');
-                  const result = new UpdateActionsCommand(deletedEdge.source, newEntry, newExit).execute(updatedSCXML);
+                if (
+                  newEntry.length !== entryActions.length ||
+                  newExit.length !== exitActions.length
+                ) {
+                  const { UpdateActionsCommand } = require("@/lib/commands");
+                  const result = new UpdateActionsCommand(
+                    deletedEdge.source,
+                    newEntry,
+                    newExit,
+                  ).execute(updatedSCXML);
                   if (result.success) updatedSCXML = result.newContent;
                 }
               }
 
-              onSCXMLChange(updatedSCXML, 'structure');
+              onSCXMLChange(updatedSCXML, "structure");
               setSelectedTransitions(new Set());
               setSelectedEdgeForEdit(null);
             }
           }
         } catch (error) {
-          console.error('Failed to sync edge deletion to SCXML:', error);
+          console.error("Failed to sync edge deletion to SCXML:", error);
         }
       }
 
@@ -826,7 +931,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
         onEdgeChange(edges);
       }
     },
-    [onEdgesChange, onEdgeChange, edges, scxmlContent, onSCXMLChange]
+    [onEdgesChange, onEdgeChange, edges, scxmlContent, onSCXMLChange],
   );
 
   const onConnect = useCallback(
@@ -839,11 +944,12 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
           const { blocked, reason } = wouldMergeDistinctGroups(
             preCheck.data,
             params.source,
-            params.target
+            params.target,
           );
           if (blocked) {
             setInitialGroupConflictMessage(
-              reason || 'Cannot connect states that belong to different Initial State groups.'
+              reason ||
+                "Cannot connect states that belong to different Initial State groups.",
             );
             return;
           }
@@ -851,15 +957,15 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
       }
 
       // Set intelligent defaults: outgoing from bottom, incoming to top
-      const sourceHandle = params.sourceHandle || 'bottom';
-      const targetHandle = params.targetHandle || 'top';
+      const sourceHandle = params.sourceHandle || "bottom";
+      const targetHandle = params.targetHandle || "top";
       const nextEventName = preParsedDoc
         ? getNextTransitionEventName(preParsedDoc)
-        : 'event1';
+        : "event1";
 
       const newEdge: Edge = {
         id: `${params.source}-${params.target}-${Date.now()}`,
-        type: 'smoothstep',
+        type: "smoothstep",
         source: params.source!,
         target: params.target!,
         sourceHandle: sourceHandle,
@@ -880,7 +986,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
         style: {
           strokeWidth: 2,
           zIndex: 1,
-          stroke: '#3b82f6',
+          stroke: "#3b82f6",
         },
         zIndex: 1,
         animated: true,
@@ -897,8 +1003,8 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
 
             if (sourceState) {
               const newTransition: TransitionElement = {
-                '@_event': nextEventName,
-                '@_target': params.target!,
+                "@_event": nextEventName,
+                "@_target": params.target!,
               };
 
               if (!sourceState.transition) {
@@ -917,14 +1023,14 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
               // Persist handle information (with intelligent defaults)
               const {
                 UpdateTransitionHandlesCommand,
-              } = require('@/lib/commands');
+              } = require("@/lib/commands");
               const handleCommand = new UpdateTransitionHandlesCommand(
                 params.source!,
                 params.target!,
                 nextEventName, // The event we just created
                 undefined, // No condition
                 sourceHandle,
-                targetHandle
+                targetHandle,
               );
 
               const handleResult = handleCommand.execute(finalSCXML);
@@ -936,7 +1042,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
 
               if (onSCXMLChange) {
                 isUpdatingPositionRef.current = true;
-                onSCXMLChange(finalSCXML, 'structure');
+                onSCXMLChange(finalSCXML, "structure");
                 setTimeout(() => {
                   isUpdatingPositionRef.current = false;
                 }, 100);
@@ -944,11 +1050,11 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
             }
           }
         } catch (error) {
-          console.error('Failed to update SCXML in background:', error);
+          console.error("Failed to update SCXML in background:", error);
         }
       }
     },
-    [setEdges, scxmlContent, onSCXMLChange]
+    [setEdges, scxmlContent, onSCXMLChange],
   );
 
   const isValidConnection = useCallback(
@@ -961,32 +1067,33 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
       const { blocked, reason } = wouldMergeDistinctGroups(
         parseResult.data,
         connection.source,
-        connection.target
+        connection.target,
       );
       if (blocked) {
         // ReactFlow never calls onConnect for a connection isValidConnection
         // rejects, so this is the only place a warning can be surfaced —
         // fires live while dragging (on hover) and again on drop.
         setInitialGroupConflictMessage(
-          reason || 'Cannot connect states that belong to different Initial State groups.'
+          reason ||
+            "Cannot connect states that belong to different Initial State groups.",
         );
         return false;
       }
       return true;
     },
-    [scxmlContent]
+    [scxmlContent],
   );
 
   const onReconnect = useCallback(
     (oldEdge: Edge, newConnection: Connection) => {
       if (!onSCXMLChange || !scxmlContent) {
-        console.warn('Cannot reconnect edge: SCXML content not available');
+        console.warn("Cannot reconnect edge: SCXML content not available");
         return;
       }
 
       try {
         // Use command pattern for unified SCXML updates
-        const { ReconnectTransitionCommand } = require('@/lib/commands');
+        const { ReconnectTransitionCommand } = require("@/lib/commands");
         const command = new ReconnectTransitionCommand(
           oldEdge.source,
           oldEdge.target,
@@ -997,21 +1104,82 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
           oldEdge.sourceHandle || undefined,
           oldEdge.targetHandle || undefined,
           newConnection.sourceHandle || undefined,
-          newConnection.targetHandle || undefined
+          newConnection.targetHandle || undefined,
         );
 
         const result = command.execute(scxmlContent);
 
-        if (result.success) {
-          onSCXMLChange(result.newContent, 'structure');
-        } else {
-          console.error('Failed to reconnect transition:', result.error);
+        if (!result.success) {
+          console.error("Failed to reconnect transition:", result.error);
+          return;
         }
+
+        let content = result.newContent;
+
+        // Bundled edges (3+ parallel transitions between the same node
+        // pair) all render on one forced shared handle pair, so
+        // reconnecting just this one edge would otherwise get silently
+        // overridden back to the group's existing handle on the next
+        // render. If only the handle changed (same source/target nodes),
+        // propagate the new handle to every sibling in the group too, so
+        // the whole shared trunk actually moves. Plain 2-edge pairs never
+        // get bundleGroupKey set (see visual-diagram bundleDataFields), so
+        // this is a no-op for them — each keeps its own independent handle.
+        const isHandleOnlyChange =
+          newConnection.source === oldEdge.source &&
+          newConnection.target === oldEdge.target;
+        const bundleGroupKey = oldEdge.data?.bundleGroupKey;
+        const siblingEdges =
+          isHandleOnlyChange && bundleGroupKey
+            ? edges.filter(
+                (e) =>
+                  e.id !== oldEdge.id &&
+                  e.data?.bundleGroupKey === bundleGroupKey,
+              )
+            : [];
+
+        for (const sibling of siblingEdges) {
+          // newConnection's handles are relative to (newConnection.source,
+          // newConnection.target) — a sibling running the opposite
+          // direction (B->A alongside this edge's A->B) needs its own
+          // source/target handles swapped accordingly.
+          const siblingIsMirrored = sibling.source === oldEdge.target;
+          const siblingNewSourceHandle = siblingIsMirrored
+            ? newConnection.targetHandle
+            : newConnection.sourceHandle;
+          const siblingNewTargetHandle = siblingIsMirrored
+            ? newConnection.sourceHandle
+            : newConnection.targetHandle;
+
+          const siblingCommand = new ReconnectTransitionCommand(
+            sibling.source,
+            sibling.target,
+            sibling.source,
+            sibling.target,
+            sibling.data?.event,
+            sibling.data?.condition,
+            sibling.sourceHandle || undefined,
+            sibling.targetHandle || undefined,
+            siblingNewSourceHandle || undefined,
+            siblingNewTargetHandle || undefined,
+          );
+          const siblingResult = siblingCommand.execute(content);
+          if (siblingResult.success) {
+            content = siblingResult.newContent;
+          } else {
+            console.error(
+              "Failed to update bundle sibling handle:",
+              siblingResult.error,
+            );
+          }
+        }
+
+        onSCXMLChange(content, "structure");
       } catch (error) {
-        console.error('Failed to reconnect edge:', error);
+        console.error("Failed to reconnect edge:", error);
       }
     },
-    [scxmlContent, onSCXMLChange]
+    [scxmlContent, onSCXMLChange, edges],
   );
 
   // ==================== STATE CLICK HANDLERS ====================
@@ -1061,23 +1229,33 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
                 // Show actions editor for single selected state
                 // (notes are annotations - they select but have no actions panel)
                 const node = nodes.find((n) => n.id === stateId);
-                if (node && node.data && nodeType !== 'scxmlNote') {
-                  const parseActions = (actions: string[]): ParsedActionRow[] => {
+                if (node && node.data && nodeType !== "scxmlNote") {
+                  const parseActions = (
+                    actions: string[],
+                  ): ParsedActionRow[] => {
                     return actions.flatMap((a): ParsedActionRow[] => {
-                      if (a.startsWith('assign|')) {
-                        const parts = a.split('|');
-                        return [{ type: 'assign', location: parts[1] || '', expr: parts[2] || '' }];
+                      if (a.startsWith("assign|")) {
+                        const parts = a.split("|");
+                        return [
+                          {
+                            type: "assign",
+                            location: parts[1] || "",
+                            expr: parts[2] || "",
+                          },
+                        ];
                       }
-                      if (a.startsWith('send|')) {
-                        const parts = a.split('|');
-                        const event = parts[1] || '';
-                        const delayType = (parts[2] === 'delayexpr' ? 'delayexpr' : 'delay') as 'delay' | 'delayexpr';
-                        const delayValue = parts.slice(3).join('|');
-                        return [{ type: 'send', event, delayType, delayValue }];
+                      if (a.startsWith("send|")) {
+                        const parts = a.split("|");
+                        const event = parts[1] || "";
+                        const delayType = (
+                          parts[2] === "delayexpr" ? "delayexpr" : "delay"
+                        ) as "delay" | "delayexpr";
+                        const delayValue = parts.slice(3).join("|");
+                        return [{ type: "send", event, delayType, delayValue }];
                       }
-                      if (a.startsWith('cancel|')) {
-                        const parts = a.split('|');
-                        return [{ type: 'cancel', sendid: parts[1] || '' }];
+                      if (a.startsWith("cancel|")) {
+                        const parts = a.split("|");
+                        return [{ type: "cancel", sendid: parts[1] || "" }];
                       }
                       return [];
                     });
@@ -1088,14 +1266,20 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
                   if (parserRef.current && scxmlContent) {
                     const parseResult = parserRef.current.parse(scxmlContent);
                     if (parseResult.success && parseResult.data) {
-                      isInitialFlag = isMarkedInitial(parseResult.data, stateId);
-                      canMarkFlag = !wouldConflictIfMarkedInitial(parseResult.data, stateId).blocked;
+                      isInitialFlag = isMarkedInitial(
+                        parseResult.data,
+                        stateId,
+                      );
+                      canMarkFlag = !wouldConflictIfMarkedInitial(
+                        parseResult.data,
+                        stateId,
+                      ).blocked;
                     }
                   }
 
                   setSelectedEdgeForEdit(null);
                   setSelectedTransitions(new Set());
-                  setActivePanel('stateActions');
+                  setActivePanel("stateActions");
                   setSelectedStateForActions({
                     id: stateId,
                     entryActions: parseActions(node.data.entryActions || []),
@@ -1117,7 +1301,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
         clickCountRef.current = 0;
       }, 250); // 250ms delay to distinguish single vs double click
     },
-    [nodes, scxmlContent]
+    [nodes, scxmlContent],
   );
 
   // ==================== REACTFLOW NODE CHANGE HANDLER ====================
@@ -1125,11 +1309,11 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
     (changes: any[]) => {
       // Filter out selection changes - they don't affect SCXML structure
       const structuralChanges = changes.filter(
-        (change) => change.type !== 'select'
+        (change) => change.type !== "select",
       );
 
       const removeChanges = structuralChanges.filter(
-        (change) => change.type === 'remove'
+        (change) => change.type === "remove",
       );
 
       if (removeChanges.length > 0) {
@@ -1138,7 +1322,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
         handleNodeDelete(nodeIdsToDelete);
 
         const nonRemoveChanges = structuralChanges.filter(
-          (change) => change.type !== 'remove'
+          (change) => change.type !== "remove",
         );
         if (nonRemoveChanges.length > 0) {
           onNodesChangeRef.current(nonRemoveChanges);
@@ -1148,7 +1332,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
 
       // Track dragging state across change events
       structuralChanges.forEach((change) => {
-        if (change.type === 'position') {
+        if (change.type === "position") {
           if (change.dragging === true) {
             // User is actively dragging this node
             isDraggingRef.current.add(change.id);
@@ -1161,7 +1345,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
 
       // Check for position changes where dragging ended
       const dragEndChanges = structuralChanges.filter(
-        (change) => change.type === 'position' && change.dragging === false
+        (change) => change.type === "position" && change.dragging === false,
       );
 
       if (dragEndChanges.length === 0) {
@@ -1170,7 +1354,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
 
       // Only process nodes that were actually dragged
       const positionChanges = dragEndChanges.filter((change) =>
-        isDraggingRef.current.has(change.id)
+        isDraggingRef.current.has(change.id),
       );
 
       if (positionChanges.length === 0) {
@@ -1204,9 +1388,9 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
           const currentNodes = [...nodesRef.current];
 
           structuralChanges.forEach((change) => {
-            if (change.type === 'position' && change.position) {
+            if (change.type === "position" && change.position) {
               const nodeIndex = currentNodes.findIndex(
-                (n) => n.id === change.id
+                (n) => n.id === change.id,
               );
               if (nodeIndex >= 0) {
                 currentNodes[nodeIndex] = {
@@ -1272,7 +1456,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
             const currentScxmlContent = scxmlContentRef.current;
             if (!onSCXMLChange || !currentScxmlContent) {
               console.warn(
-                'Cannot update positions: SCXML content not available'
+                "Cannot update positions: SCXML content not available",
               );
               return;
             }
@@ -1280,21 +1464,21 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
             try {
               const {
                 BatchUpdatePositionCommand,
-              } = require('@/lib/commands/batch-update-position-command');
+              } = require("@/lib/commands/batch-update-position-command");
               const command = new BatchUpdatePositionCommand(batchUpdates);
 
               const result = command.execute(currentScxmlContent);
 
               if (result.success) {
                 previousScxmlRef.current = result.newContent;
-                onSCXMLChange(result.newContent, 'position');
+                onSCXMLChange(result.newContent, "position");
               } else {
-                console.error('Failed to update positions:', result.error);
+                console.error("Failed to update positions:", result.error);
                 isUpdatingPositionRef.current = false;
               }
             } catch (error) {
               isUpdatingPositionRef.current = false;
-              console.error('Failed to sync position changes:', error);
+              console.error("Failed to sync position changes:", error);
             }
           }
         } finally {
@@ -1304,7 +1488,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
         }
       }, 150);
     },
-    [nodes, handleNodeDelete]
+    [nodes, handleNodeDelete],
   );
 
   // ==================== SCXML PARSING ====================
@@ -1354,7 +1538,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
         };
       });
     },
-    []
+    [],
   );
 
   const handleWaypointDragEnd = React.useCallback(
@@ -1375,27 +1559,27 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
         };
 
         // Use command pattern for unified SCXML updates
-        const { UpdateWaypointsCommand } = require('@/lib/commands');
+        const { UpdateWaypointsCommand } = require("@/lib/commands");
         const command = new UpdateWaypointsCommand(
           edge.source,
           edge.target,
           edge.data?.event,
           edge.data?.condition,
-          edge.data.waypoints
+          edge.data.waypoints,
         );
 
         const result = command.execute(scxmlContent);
 
         if (result.success) {
-          onSCXMLChange(result.newContent, 'position');
+          onSCXMLChange(result.newContent, "position");
         } else {
-          console.error('Failed to update waypoints:', result.error);
+          console.error("Failed to update waypoints:", result.error);
         }
       } catch (error) {
-        console.error('Failed to update waypoint:', error);
+        console.error("Failed to update waypoint:", error);
       }
     },
-    [scxmlContent, onSCXMLChange]
+    [scxmlContent, onSCXMLChange],
   );
 
   const handleWaypointAdd = React.useCallback(
@@ -1420,27 +1604,27 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
         waypoints.splice(insertIndex, 0, { x, y });
 
         // Use command pattern for unified SCXML updates
-        const { UpdateWaypointsCommand } = require('@/lib/commands');
+        const { UpdateWaypointsCommand } = require("@/lib/commands");
         const command = new UpdateWaypointsCommand(
           edge.source,
           edge.target,
           edge.data?.event,
           edge.data?.condition,
-          waypoints
+          waypoints,
         );
 
         const result = command.execute(scxmlContent);
 
         if (result.success) {
-          onSCXMLChange(result.newContent, 'position');
+          onSCXMLChange(result.newContent, "position");
         } else {
-          console.error('Failed to add waypoint:', result.error);
+          console.error("Failed to add waypoint:", result.error);
         }
       } catch (error) {
-        console.error('Failed to add waypoint:', error);
+        console.error("Failed to add waypoint:", error);
       }
     },
-    [scxmlContent, onSCXMLChange]
+    [scxmlContent, onSCXMLChange],
   );
 
   const handleWaypointDelete = React.useCallback(
@@ -1462,7 +1646,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
 
         // Remove waypoint from array
         const newWaypoints = edge.data.waypoints.filter(
-          (_: any, i: number) => i !== index
+          (_: any, i: number) => i !== index,
         );
 
         // Update parsedData edges to ensure visual updates
@@ -1485,27 +1669,27 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
         });
 
         // Use command pattern for unified SCXML updates
-        const { UpdateWaypointsCommand } = require('@/lib/commands');
+        const { UpdateWaypointsCommand } = require("@/lib/commands");
         const command = new UpdateWaypointsCommand(
           edge.source,
           edge.target,
           edge.data?.event,
           edge.data?.condition,
-          newWaypoints
+          newWaypoints,
         );
 
         const result = command.execute(scxmlContent);
 
         if (result.success) {
-          onSCXMLChange(result.newContent, 'position');
+          onSCXMLChange(result.newContent, "position");
         } else {
-          console.error('Failed to delete waypoint:', result.error);
+          console.error("Failed to delete waypoint:", result.error);
         }
       } catch (error) {
-        console.error('Failed to delete waypoint:', error);
+        console.error("Failed to delete waypoint:", error);
       }
     },
-    [scxmlContent, onSCXMLChange]
+    [scxmlContent, onSCXMLChange],
   );
 
   // Re-select edge after reparse if edge identity is tracked
@@ -1519,7 +1703,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
           e.source === identity.source &&
           e.target === identity.target &&
           e.data?.event === identity.event &&
-          e.data?.condition === identity.condition
+          e.data?.condition === identity.condition,
       );
 
       if (matchingEdge) {
@@ -1528,6 +1712,28 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
       }
     }
   }, [parsedData.edges]);
+
+  // Bundled edges (3+ parallel transitions between the same node pair) all
+  // share identical path geometry (no offset), so ReactFlow's normal
+  // click-to-edge hit testing is ambiguous on the shared trunk — every
+  // member's invisible interaction path occupies the same pixels, and only
+  // the topmost one in paint order can win. Chips in the expanded list are
+  // positioned in disjoint screen space, so give them their own explicit,
+  // unambiguous "select this transition" handler instead of relying on
+  // ReactFlow's onEdgeClick resolution.
+  const selectTransitionForEdit = useCallback((edge: Edge) => {
+    setActiveStates(new Set());
+    setSelectedStateForActions(null);
+    setSelectedTransitions(new Set([edge.id]));
+    setActivePanel("transition");
+    setSelectedEdgeForEdit({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      event: edge.data?.event,
+      cond: edge.data?.condition,
+    });
+  }, []);
 
   const handleEdgeClick = useCallback(
     (event: React.MouseEvent, edge: Edge) => {
@@ -1584,7 +1790,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
           const closestX = p1.x + t * dx;
           const closestY = p1.y + t * dy;
           const distance = Math.sqrt(
-            (flowPosition.x - closestX) ** 2 + (flowPosition.y - closestY) ** 2
+            (flowPosition.x - closestX) ** 2 + (flowPosition.y - closestY) ** 2,
           );
 
           if (distance < minDistance) {
@@ -1596,7 +1802,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
           edge.id,
           flowPosition.x,
           flowPosition.y,
-          closestSegmentIndex
+          closestSegmentIndex,
         );
         return;
       }
@@ -1612,7 +1818,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
           newTransitions.add(edge.id);
           setSelectedStateForActions(null);
           setActiveStates(new Set());
-          setActivePanel('transition');
+          setActivePanel("transition");
           setSelectedEdgeForEdit({
             id: edge.id,
             source: edge.source,
@@ -1624,7 +1830,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
         return newTransitions;
       });
     },
-    [selectedTransitions, screenToFlowPosition, nodes, handleWaypointAdd]
+    [selectedTransitions, screenToFlowPosition, nodes, handleWaypointAdd],
   );
 
   // Parse SCXML and convert to ReactFlow format (async due to ELK layout)
@@ -1662,14 +1868,14 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
 
           // If SCXML was initialized (viz:xywh added), update with history
           if (initializedSCXML && onSCXMLChange) {
-            onSCXMLChange(initializedSCXML, 'position');
+            onSCXMLChange(initializedSCXML, "position");
           }
 
           const enhancedNodes = nodes.map((node) => {
             // Notes keep the converter's position and fixed size; they only
             // need delete and text-edit callbacks (no visual styles, resize
             // or label wiring)
-            if (node.type === 'scxmlNote') {
+            if (node.type === "scxmlNote") {
               return {
                 ...node,
                 data: {
@@ -1707,9 +1913,9 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
                   vizWidth,
                   nodeDimensionCalculator.calculateWidth(
                     node.id,
-                    nodeUpdate.data?.stateType || 'simple',
-                    Boolean(nodeUpdate.data?.isInitial)
-                  )
+                    nodeUpdate.data?.stateType || "simple",
+                    Boolean(nodeUpdate.data?.isInitial),
+                  ),
                 )
               : vizWidth;
 
@@ -1726,7 +1932,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
             };
 
             if (
-              nodeUpdate.type === 'scxmlHistory' &&
+              nodeUpdate.type === "scxmlHistory" &&
               node.data?.isHistoryWrapper
             ) {
               const calculatedWidth =
@@ -1745,7 +1951,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
 
             const visualStyles = computeVisualStyles(
               visualMetadata,
-              node.data?.stateType || 'simple'
+              node.data?.stateType || "simple",
             );
 
             nodeUpdate.data = {
@@ -1753,22 +1959,23 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
               visualStyles,
               // Priority: viz:xywh dimensions > existing node.style dimensions
               width:
-                nodeUpdate.type === 'scxmlHistory' &&
+                nodeUpdate.type === "scxmlHistory" &&
                 node.data?.isHistoryWrapper
                   ? nodeUpdate.style?.width || (node.data as any).width
-                  : effectiveVizWidth ?? nodeUpdate.style?.width,
+                  : (effectiveVizWidth ?? nodeUpdate.style?.width),
               height:
-                nodeUpdate.type === 'scxmlHistory' &&
+                nodeUpdate.type === "scxmlHistory" &&
                 node.data?.isHistoryWrapper
                   ? nodeUpdate.style?.height || (node.data as any).height
-                  : visualMetadata?.layout?.height ?? nodeUpdate.style?.height,
+                  : (visualMetadata?.layout?.height ??
+                    nodeUpdate.style?.height),
               onLabelChange: (newLabel: string) =>
                 handleNodeLabelChange(node.id, newLabel),
               onStateTypeChange: (newStateType: string) =>
                 handleNodeStateTypeChange(node.id, newStateType),
               onActionsChange: (
                 entryActions: string[],
-                exitActions: string[]
+                exitActions: string[],
               ) => handleNodeActionsChange(node.id, entryActions, exitActions),
               onDelete: () => handleNodeDelete(node.id),
               onResize: (x: number, y: number, width: number, height: number) =>
@@ -1778,66 +1985,103 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
             return nodeUpdate;
           });
 
-          // Group by the physical pair of connection points (node+handle), not by
-          // direction, so the curvature/offset fan-out below applies whenever two edges
-          // share the same two anchor points — including an A→B / B→A pair that landed
-          // on the same mirrored handle slot — not just literal duplicate (source,
-          // target, sourceHandle, targetHandle) tuples. Edges distributed onto genuinely
-          // different sides during handle assignment won't share a key and are left alone.
-          const edgeSlotKey = (edge: Edge) =>
-            [`${edge.source}:${edge.sourceHandle}`, `${edge.target}:${edge.targetHandle}`]
-              .sort()
-              .join('|');
-
-          const edgeGroups = new Map<string, any[]>();
-          edges.forEach((edge) => {
-            const key = edgeSlotKey(edge);
-            if (!edgeGroups.has(key)) {
-              edgeGroups.set(key, []);
-            }
-            edgeGroups.get(key)!.push(edge);
-          });
-
+          // Grouping/threshold decisions live in edge-bundling.ts (unit
+          // tested) — groups of 1 render plain, groups of 2 keep the legacy
+          // symmetric offset fan-out, groups of 3+ are "bundled": no offset
+          // (they fall through to the same smartPath/smoothstep routing as
+          // an ordinary single edge and overlap into one visual trunk),
+          // with the badge/chip-list overlay handled in SCXMLTransitionEdge.
+          // NOTE: this whole block runs inside an effect keyed on
+          // scxmlContent (+ node handlers) — it does NOT re-run when the
+          // user hovers or selects an edge. So only structural, content-
+          // derived bundle fields are set here; the moment-to-moment
+          // bundleActive/bundleHasSelection (driven by hover/selection) are
+          // applied reactively in displayFilteredEdges below instead.
+          const bundleAssignments = computeEdgeBundles(
+            edges.map((e) => ({
+              id: e.id,
+              source: e.source,
+              sourceHandle: e.sourceHandle,
+              target: e.target,
+              targetHandle: e.targetHandle,
+              // A user-reconnected edge (dragged endpoint) should pull the
+              // whole shared trunk to follow it, not be silently overridden
+              // back to whichever member happened to be first in array order.
+              hasExplicitHandles: Boolean(
+                e.data?.hasExplicitSourceHandle ||
+                e.data?.hasExplicitTargetHandle,
+              ),
+            })),
+          );
 
           const edgesWithMarkers = edges.map((edge) => {
             const edgeMetadata = metadataManager.getVisualMetadata(edge.id);
-            const edgeKey = edgeSlotKey(edge);
-            const parallelEdges = edgeGroups.get(edgeKey) || [];
-            const edgeIndex = parallelEdges.findIndex((e) => e.id === edge.id);
-            const hasParallelEdges = parallelEdges.length > 1;
+            // Self-loops are excluded from computeEdgeBundles entirely (they
+            // render via a dedicated fixed shape), so fall back to an
+            // isolated, unbundled assignment for them.
+            const assignment = bundleAssignments.get(edge.id) ?? {
+              bundleGroupKey: "",
+              bundleIndex: 0,
+              bundleSize: 1,
+              isBundled: false,
+              canonicalSourceHandle: undefined,
+              canonicalTargetHandle: undefined,
+            };
+            const {
+              bundleGroupKey,
+              bundleIndex,
+              bundleSize,
+              isBundled,
+              canonicalSourceHandle,
+              canonicalTargetHandle,
+            } = assignment;
             const hasWaypoints =
               edge.data?.waypoints && edge.data.waypoints.length > 0;
 
-            const edgeType = 'scxmlTransition';
+            const edgeType = "scxmlTransition";
+
+            // Force every member of an ACTUAL bundle (3+, isBundled) onto the
+            // same handle pair so they resolve to identical anchor points and
+            // overlap into one shared trunk. A plain 2-edge pair — including
+            // a bidirectional A<->B pair the upstream handle-assignment pass
+            // deliberately routed onto *different* sides to keep them from
+            // overlapping — must keep each edge's own independent handles;
+            // forcing them together here would undo that anti-overlap choice.
+            const handleOverrides: Record<string, unknown> = isBundled
+              ? {
+                  sourceHandle: canonicalSourceHandle ?? edge.sourceHandle,
+                  targetHandle: canonicalTargetHandle ?? edge.targetHandle,
+                }
+              : {};
 
             let pathOptions: any = {};
-            if (hasParallelEdges) {
+            // bundleGroupKey/Index/Size are only meaningful for actual
+            // bundles — onReconnect uses bundleGroupKey to find this edge's
+            // siblings and propagate a handle change to all of them, which
+            // should likewise only happen for real bundles, not plain pairs.
+            let bundleDataFields: Record<string, unknown> = isBundled
+              ? { bundleGroupKey, bundleIndex, bundleSize, isBundled }
+              : {};
+            if (isBundled) {
+              // no offset — handled by the smartPath/smoothstep fallback.
+            } else if (bundleSize === 2) {
               // Apply symmetrical offset for parallel edges
               // For 2 edges: first curves down (-offset), second curves up (+offset)
-              // For 3+ edges: distribute symmetrically around center
-              let offset: number;
-
-              if (parallelEdges.length === 2) {
-                // Simple case: one up, one down with same magnitude
-                offset = edgeIndex === 0 ? -50 : 50;
-              } else {
-                // For 3+ edges: center the distribution
-                offset = (edgeIndex - (parallelEdges.length - 1) / 2) * 60;
-              }
+              const offset = bundleIndex === 0 ? -50 : 50;
 
               // The path bows perpendicular to its connection axis, so the label needs
               // to separate along that same perpendicular axis: a vertical connection
               // (top/bottom handles) bows left/right, so the label must offset in X;
               // a horizontal connection (left/right handles) bows up/down, so it must
               // offset in Y.
-              const labelSpread = (edgeIndex - (parallelEdges.length - 1) / 2) * 25;
+              const labelSpread = (bundleIndex - (bundleSize - 1) / 2) * 25;
               const isVerticalConnection =
-                edge.sourceHandle === 'top' || edge.sourceHandle === 'bottom';
+                edge.sourceHandle === "top" || edge.sourceHandle === "bottom";
 
               pathOptions = {
                 offset,
-                borderRadius: 20 + edgeIndex * 10,
-                curvature: 0.25 + edgeIndex * 0.1,
+                borderRadius: 20 + bundleIndex * 10,
+                curvature: 0.25 + bundleIndex * 0.1,
                 labelOffsetX: isVerticalConnection ? labelSpread : 0,
                 labelOffsetY: isVerticalConnection ? 0 : labelSpread,
               };
@@ -1847,15 +2091,17 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
             // from the source node's send action so the label shows "after 2s" not the raw event name
             const edgeEventName = edge.data?.event;
             const displayEvent = (() => {
-              if (!edgeEventName || !isTimeEventName(edgeEventName)) return undefined;
+              if (!edgeEventName || !isTimeEventName(edgeEventName))
+                return undefined;
               const sourceNode = nodes.find((n) => n.id === edge.source);
-              const sendAction = (sourceNode?.data.entryActions ?? []).find((a: string) =>
-                a.startsWith(`send|${edgeEventName}|`)
+              const sendAction = (sourceNode?.data.entryActions ?? []).find(
+                (a: string) => a.startsWith(`send|${edgeEventName}|`),
               );
               if (!sendAction) return undefined;
-              const parts = sendAction.split('|');
-              const dt = (parts[2] as 'delay' | 'delayexpr' | undefined) ?? 'delay';
-              const dv = parts.slice(3).join('|');
+              const parts = sendAction.split("|");
+              const dt =
+                (parts[2] as "delay" | "delayexpr" | undefined) ?? "delay";
+              const dv = parts.slice(3).join("|");
               return formatAfterSyntax(dt, dv);
             })();
 
@@ -1863,18 +2109,20 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
               displayEvent ?? edge.data?.event,
               edge.data?.condition,
               edge.data?.actions?.length > 0
-                ? `/ ${edge.data.actions.length} action${edge.data.actions.length > 1 ? 's' : ''}`
+                ? `/ ${edge.data.actions.length} action${edge.data.actions.length > 1 ? "s" : ""}`
                 : null,
             ]
               .filter(Boolean)
-              .join(' ');
+              .join(" ");
 
             const edgeUpdate: any = {
               ...edge,
+              ...handleOverrides,
               type: edgeType,
               label: undefined,
               data: {
                 ...edge.data,
+                ...bundleDataFields,
                 fullLabel,
                 displayEvent,
                 offset: pathOptions.offset,
@@ -1918,13 +2166,13 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
                 // Waypoints always use scxmlTransition edge type for interactive handles
                 if (edgeMetadata.diagram.curveType && !hasWaypoints) {
                   const curveTypeMap: Record<string, string> = {
-                    smooth: 'smart',
-                    step: 'smartStep',
-                    straight: 'smartStraight',
-                    bezier: 'smart',
+                    smooth: "smart",
+                    step: "smartStep",
+                    straight: "smartStraight",
+                    bezier: "smart",
                   };
                   edgeUpdate.type =
-                    curveTypeMap[edgeMetadata.diagram.curveType] || 'smart';
+                    curveTypeMap[edgeMetadata.diagram.curveType] || "smart";
                 }
 
                 if (
@@ -1936,7 +2184,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
                     waypoints: edgeMetadata.diagram.waypoints,
                   };
                   // Ensure edge type is scxmlTransition when waypoints are added from metadata
-                  edgeUpdate.type = 'scxmlTransition';
+                  edgeUpdate.type = "scxmlTransition";
                 }
               }
             }
@@ -1953,7 +2201,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
             });
           }
         } else {
-          console.warn('SCXML parsing failed:', parseResult.errors);
+          console.warn("SCXML parsing failed:", parseResult.errors);
           if (isMounted) {
             setParsedData({
               nodes: initialNodes,
@@ -1964,7 +2212,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
           }
         }
       } catch (error) {
-        console.error('Error parsing SCXML for visual diagram:', error);
+        console.error("Error parsing SCXML for visual diagram:", error);
         if (isMounted) {
           setParsedData({
             nodes: initialNodes,
@@ -2025,40 +2273,40 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
         });
       }, 50);
     },
-    [fitView]
+    [fitView],
   );
 
   const navigateUp = useCallback(
     () => navigateWithFitView(originalNavigateUp),
-    [navigateWithFitView, originalNavigateUp]
+    [navigateWithFitView, originalNavigateUp],
   );
 
   const navigateToRoot = useCallback(
     () => navigateWithFitView(originalNavigateToRoot),
-    [navigateWithFitView, originalNavigateToRoot]
+    [navigateWithFitView, originalNavigateToRoot],
   );
 
   const navigateIntoState = useCallback(
     (stateId: string) =>
       navigateWithFitView(() => originalNavigateIntoState(stateId)),
-    [navigateWithFitView, originalNavigateIntoState]
+    [navigateWithFitView, originalNavigateIntoState],
   );
 
   const navigateToBreadcrumb = useCallback(
     (index: number) =>
       navigateWithFitView(() => originalNavigateToBreadcrumb(index)),
-    [navigateWithFitView, originalNavigateToBreadcrumb]
+    [navigateWithFitView, originalNavigateToBreadcrumb],
   );
 
   // ==================== ADD ROOT STATE HANDLER ====================
   const handleAddRootState = React.useCallback(() => {
     if (!onSCXMLChange || !scxmlContent) {
-      console.error('Cannot add state: SCXML not available');
+      console.error("Cannot add state: SCXML not available");
       return;
     }
 
     try {
-      let newStateId = 'state_1';
+      let newStateId = "state_1";
       let counter = 1;
       const existingIds = new Set(parsedData.nodes.map((n) => n.id));
       while (existingIds.has(newStateId)) {
@@ -2097,7 +2345,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
             for (let row = 0; row < 10 && !found; row++) {
               for (let col = 0; col < cols && !found; col++) {
                 const occupied = existingPositions.some(
-                  (p) => p.col === col && p.row === row
+                  (p) => p.col === col && p.row === row,
                 );
                 if (!occupied) {
                   x = 50 + col * colWidth;
@@ -2131,29 +2379,28 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
         // This accounts for the "Initial" tag width when isInitial is true
         const dimensions = nodeDimensionCalculator.calculateDimensions(
           newStateId,
-          'simple',
+          "simple",
           0,
           0,
-          isInitial
+          isInitial,
         );
 
         const newState = createStateElement(newStateId);
-        (newState as any)[
-          '@_viz:xywh'
-        ] = `${x},${y},${dimensions.width},${dimensions.height}`;
+        (newState as any)["@_viz:xywh"] =
+          `${x},${y},${dimensions.width},${dimensions.height}`;
 
         // Set the state as initial if it's the first child
         if (isInitial && parentId) {
           const parentState = findStateById(scxmlDoc, parentId);
           if (parentState) {
-            parentState['@_initial'] = newStateId;
+            parentState["@_initial"] = newStateId;
           }
         }
 
         addStateToDocument(scxmlDoc, newState, parentId);
 
         const updatedSCXML = parserRef.current!.serialize(scxmlDoc, true);
-        onSCXMLChange(updatedSCXML, 'structure');
+        onSCXMLChange(updatedSCXML, "structure");
 
         setTimeout(() => {
           fitView({
@@ -2166,7 +2413,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
         }, 200);
       }
     } catch (error) {
-      console.error('Failed to add new state:', error);
+      console.error("Failed to add new state:", error);
     }
   }, [
     scxmlContent,
@@ -2179,7 +2426,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
 
   const handleAddNote = React.useCallback(() => {
     if (!onSCXMLChange || !scxmlContent) {
-      console.error('Cannot add note: SCXML not available');
+      console.error("Cannot add note: SCXML not available");
       return;
     }
 
@@ -2193,25 +2440,25 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
       let y = 100;
       if (nodes.length > 0) {
         const maxX = Math.max(
-          ...nodes.map((n) => n.position.x + (n.width || 160))
+          ...nodes.map((n) => n.position.x + (n.width || 160)),
         );
         x = maxX + 100;
       }
 
-      const { AddNoteCommand } = require('@/lib/commands');
+      const { AddNoteCommand } = require("@/lib/commands");
       // currentParentId is set when the user has drilled into a state; the
       // note is stored as a child of that state so it only appears there.
       const command = new AddNoteCommand(
         noteId,
         x,
         y,
-        '',
-        currentParentId || undefined
+        "",
+        currentParentId || undefined,
       );
       const result = command.execute(scxmlContent);
 
       if (result.success) {
-        onSCXMLChange(result.newContent, 'structure');
+        onSCXMLChange(result.newContent, "structure");
 
         setTimeout(() => {
           fitView({
@@ -2223,10 +2470,10 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
           });
         }, 200);
       } else {
-        console.error('Failed to add note:', result.error);
+        console.error("Failed to add note:", result.error);
       }
     } catch (error) {
-      console.error('Failed to add note:', error);
+      console.error("Failed to add note:", error);
     }
   }, [scxmlContent, onSCXMLChange, nodes, fitView, currentParentId]);
 
@@ -2237,13 +2484,13 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
     filteredNodes.forEach((node) => {
       const isActive = activeStates.has(node.id);
       const visualMetadata = metadataManagerRef.current?.getVisualMetadata(
-        node.id
+        node.id,
       );
       const updatedVisualStyles = computeVisualStyles(
         visualMetadata,
-        node.data?.stateType || 'simple',
+        node.data?.stateType || "simple",
         isActive,
-        false
+        false,
       );
 
       enhancements.set(node.id, {
@@ -2285,16 +2532,41 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
 
   // ==================== EDGE FILTERING ====================
   const displayFilteredEdges = React.useMemo(() => {
+    // Bundle hover/selection activation must be computed here (not in the
+    // scxmlContent-keyed parsing effect) since it needs to react to
+    // hoveredBundleKey/selectedEdgeForEdit changing on every render.
+    const selectedBundleGroupKey = selectedEdgeForEdit
+      ? (hierarchyFilteredEdges.find((e) => e.id === selectedEdgeForEdit.id)
+          ?.data?.bundleGroupKey ?? null)
+      : null;
+
+    const applyBundleActivation = (edge: Edge): Edge => {
+      const bundleGroupKey = edge.data?.bundleGroupKey;
+      if (!bundleGroupKey) return edge;
+      const bundleActive =
+        hoveredBundleKey === bundleGroupKey ||
+        selectedBundleGroupKey === bundleGroupKey;
+      return {
+        ...edge,
+        data: {
+          ...edge.data,
+          bundleActive,
+          bundleHasSelection: selectedBundleGroupKey === bundleGroupKey,
+          onBundleChipClick: () => selectTransitionForEdit(edge),
+        },
+      };
+    };
+
     const applySelectionStyles = (edge: Edge) => {
       const isSelected = selectedTransitions.has(edge.id);
       if (isSelected) {
         const existingMarker = (edge.markerEnd as any) || {
           type: MarkerType.ArrowClosed,
-          color: '#6b7280',
+          color: "#6b7280",
         };
 
         // Determine selection color based on edge type
-        const selectionColor = edge.data?.condition ? '#ef4444' : '#3b82f6';
+        const selectionColor = edge.data?.condition ? "#ef4444" : "#3b82f6";
         return {
           ...edge,
           selected: true, // CRITICAL: This prop enables waypoint handles to show
@@ -2302,7 +2574,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
             ...edge.style,
             stroke: selectionColor,
             strokeWidth: 3,
-            filter: 'drop-shadow(0 0 3px rgba(0, 0, 0, 0.3))',
+            filter: "drop-shadow(0 0 3px rgba(0, 0, 0, 0.3))",
           },
           animated: false,
           // markerEnd: {
@@ -2324,9 +2596,16 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
     };
 
     return hierarchyFilteredEdges
-      .filter((edge) => true)
+      .map((edge) => applyBundleActivation(edge))
       .map((edge) => applySelectionStyles(edge));
-  }, [hierarchyFilteredEdges, activeStates, selectedTransitions]);
+  }, [
+    hierarchyFilteredEdges,
+    activeStates,
+    selectedTransitions,
+    hoveredBundleKey,
+    selectedEdgeForEdit,
+    selectTransitionForEdit,
+  ]);
 
   // ==================== EFFECTS ====================
   // Set node delete handler ref
@@ -2355,7 +2634,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
       (isUpdatingFromHistory || !isUpdatingPositionRef.current) &&
       enhancedNodes.length > 0
     ) {
-      if (historyActionType === 'node-resize') {
+      if (historyActionType === "node-resize") {
         setNodes([]);
         setEdges([]);
       } else {
@@ -2413,7 +2692,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
       }
 
       const currentPositions = new Map(
-        currentNodes.map((node) => [node.id, node.position])
+        currentNodes.map((node) => [node.id, node.position]),
       );
 
       return enhancedNodes.map((node) => {
@@ -2458,20 +2737,24 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
   // Handle keyboard events for edge deletion
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Delete' && !activePanel && selectedTransitions.size > 0) {
+      if (
+        event.key === "Delete" &&
+        !activePanel &&
+        selectedTransitions.size > 0
+      ) {
         event.preventDefault();
         const edgeId = Array.from(selectedTransitions)[0];
-        handleEdgesChange([{ id: edgeId, type: 'remove' }]);
+        handleEdgesChange([{ id: edgeId, type: "remove" }]);
       }
-      if (event.key === 'Delete' && activeStates.size > 0) {
+      if (event.key === "Delete" && activeStates.size > 0) {
         event.preventDefault();
         const stateId = Array.from(activeStates);
-        handleNodesChange(stateId.map((id) => ({ id, type: 'remove' })));
+        handleNodesChange(stateId.map((id) => ({ id, type: "remove" })));
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selectedTransitions, handleEdgesChange, activeStates, handleNodesChange]);
 
   // Cleanup timeout on unmount
@@ -2517,8 +2800,8 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
                   onClick={() => navigateToBreadcrumb(index)}
                   className={`px-2 py-1 text-sm hover:bg-muted rounded transition-colors ${
                     index === breadcrumbPath.length - 1
-                      ? 'font-semibold text-default'
-                      : 'text-muted hover:text-default'
+                      ? "font-semibold text-default"
+                      : "text-muted hover:text-default"
                   }`}
                 >
                   {path}
@@ -2554,7 +2837,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
               const nodeElement = nodes.find((n) => n.id === node.id);
               if (
                 nodeElement?.data?.onLabelChange ||
-                nodeElement?.type === 'scxmlNote'
+                nodeElement?.type === "scxmlNote"
               ) {
                 setNodes((nds) =>
                   nds.map((n) => {
@@ -2568,7 +2851,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
                       };
                     }
                     return n;
-                  })
+                  }),
                 );
               }
             }}
@@ -2599,7 +2882,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
             nodesDraggable={true}
             nodesConnectable={true}
             elementsSelectable={true}
-            deleteKeyCode={['Delete']}
+            deleteKeyCode={["Delete"]}
             connectionLineType={ConnectionLineType.SmoothStep}
             connectionMode={ConnectionMode.Loose}
             connectionRadius={2}
@@ -2615,7 +2898,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
             zoomOnDoubleClick={false}
           >
             {/* Global SVG definitions for arrows */}
-            <svg style={{ position: 'absolute', width: 0, height: 0 }}>
+            <svg style={{ position: "absolute", width: 0, height: 0 }}>
               <defs>
                 <marker
                   id='arrow-marker'
@@ -2642,7 +2925,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
               </defs>
             </svg>
             <Background
-              color={canvasDark ? '#3f3f46' : '#cbd5e1'}
+              color={canvasDark ? "#3f3f46" : "#cbd5e1"}
               gap={20}
               size={1}
               variant={BackgroundVariant.Dots}
@@ -2687,7 +2970,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
       </div>
 
       {/* Transition panel */}
-      {selectedEdgeForEdit && activePanel === 'transition' && (
+      {selectedEdgeForEdit && activePanel === "transition" && (
         <TransitionPanel
           key={selectedEdgeForEdit.id}
           edgeId={selectedEdgeForEdit.id}
@@ -2696,8 +2979,14 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
           event={selectedEdgeForEdit.event}
           cond={selectedEdgeForEdit.cond}
           scxmlContent={scxmlContent}
-          entryActions={nodes.find((n) => n.id === selectedEdgeForEdit.source)?.data.entryActions ?? []}
-          exitActions={nodes.find((n) => n.id === selectedEdgeForEdit.source)?.data.exitActions ?? []}
+          entryActions={
+            nodes.find((n) => n.id === selectedEdgeForEdit.source)?.data
+              .entryActions ?? []
+          }
+          exitActions={
+            nodes.find((n) => n.id === selectedEdgeForEdit.source)?.data
+              .exitActions ?? []
+          }
           onApply={handleTransitionApply}
           onNewChannel={handleNewChannel}
           onClose={() => {
@@ -2710,18 +2999,22 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
 
       {/* State Actions side panel */}
       <StateActionsPanel
-        isVisible={selectedStateForActions !== null && activePanel === 'stateActions'}
+        isVisible={
+          selectedStateForActions !== null && activePanel === "stateActions"
+        }
         onClose={() => {
           setSelectedStateForActions(null);
           setActiveStates(new Set());
           setActivePanel(null);
         }}
-        stateId={selectedStateForActions?.id ?? ''}
+        stateId={selectedStateForActions?.id ?? ""}
         entryActions={selectedStateForActions?.entryActions ?? []}
         exitActions={selectedStateForActions?.exitActions ?? []}
-        internalEventActions={selectedStateForActions?.internalEventActions ?? []}
+        internalEventActions={
+          selectedStateForActions?.internalEventActions ?? []
+        }
         scxmlContent={scxmlContent}
-        stateType={selectedStateForActions?.stateType ?? 'simple'}
+        stateType={selectedStateForActions?.stateType ?? "simple"}
         isInitial={selectedStateForActions?.isInitial ?? false}
         canMarkInitial={selectedStateForActions?.canMarkInitial ?? true}
         onToggleInitial={() => {
