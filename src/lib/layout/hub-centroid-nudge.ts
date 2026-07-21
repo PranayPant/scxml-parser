@@ -29,6 +29,13 @@ export interface HubCentroidNudgeOptions {
   minDegree?: number;
   /** A node's degree must be at least this many times the group's average degree. */
   outlierMultiplier?: number;
+  /**
+   * Minimum horizontal gap to keep between a nudged hub and any other node
+   * sharing its row — matches the row's own node-node spacing so a nudged
+   * hub doesn't end up sitting flush against a neighbor with no room for
+   * edges/labels between them.
+   */
+  minGap?: number;
 }
 
 /**
@@ -39,16 +46,17 @@ export interface HubCentroidNudgeOptions {
 export function computeHubCentroidNudges(
   nodes: HubNudgeNode[],
   edges: HubNudgeEdge[],
-  options: HubCentroidNudgeOptions = {}
+  options: HubCentroidNudgeOptions = {},
 ): Map<string, { x: number; y: number }> {
-  const { minDegree = 3, outlierMultiplier = 2 } = options;
+  debugger;
+  const { minDegree = 3, outlierMultiplier = 2, minGap = 40 } = options;
 
   const result = new Map<string, { x: number; y: number }>();
   if (nodes.length === 0) return result;
 
   const nodeMap = new Map(nodes.map((n) => [n.id, n]));
   const neighbors = new Map<string, Set<string>>(
-    nodes.map((n) => [n.id, new Set<string>()])
+    nodes.map((n) => [n.id, new Set<string>()]),
   );
 
   for (const edge of edges) {
@@ -73,9 +81,56 @@ export function computeHubCentroidNudges(
       centerSum += neighbor.x + neighbor.width / 2;
     }
     const centroidX = centerSum / neighborIds.size;
+    const idealX = centroidX - node.width / 2;
 
-    result.set(node.id, { x: centroidX - node.width / 2, y: node.y });
+    // The ideal centroid x can coincide with (or overlap) some other node
+    // already sitting in that spot — the average says nothing about who
+    // else occupies that stretch of the row. Only nodes whose y-range
+    // actually overlaps this hub's row can collide with it horizontally.
+    const rowObstacles = nodes.filter(
+      (other) =>
+        other.id !== node.id &&
+        other.y < node.y + node.height &&
+        other.y + other.height > node.y,
+    );
+    const finalX = resolveHorizontalOverlap(
+      idealX,
+      node.width,
+      rowObstacles,
+      minGap,
+    );
+
+    result.set(node.id, { x: finalX, y: node.y });
   }
 
   return result;
+}
+
+/**
+ * Nudges a candidate x at least minGap clear of any row obstacle it would
+ * otherwise crowd, moving to whichever side of the collider is closer to
+ * the ideal x. Bounded to one pass per obstacle, so it always terminates.
+ */
+function resolveHorizontalOverlap(
+  idealX: number,
+  width: number,
+  obstacles: HubNudgeNode[],
+  minGap: number,
+): number {
+  debugger;
+  let x = idealX;
+  for (let i = 0; i < obstacles.length; i++) {
+    const collider = obstacles.find(
+      (o) => x < o.x + o.width + minGap && x + width + minGap > o.x,
+    );
+    if (!collider) break;
+
+    const leftOf = collider.x - width - minGap;
+    const rightOf = collider.x + collider.width + minGap;
+    x =
+      Math.abs(leftOf - idealX) <= Math.abs(rightOf - idealX)
+        ? leftOf
+        : rightOf;
+  }
+  return x;
 }

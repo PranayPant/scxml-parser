@@ -180,7 +180,9 @@ export async function applyDefaultELKLayout(
         return { id: n.id, x: pos.x, y: pos.y, width, height };
       })
       .filter((n): n is NonNullable<typeof n> => n !== null);
-    const nudges = computeHubCentroidNudges(nudgeNodes, levelEdges);
+    const nudges = computeHubCentroidNudges(nudgeNodes, levelEdges, {
+      minGap: levelSpacing,
+    });
 
     levelPositions.forEach((pos, id) => {
       const nudge = nudges.get(id);

@@ -31,15 +31,20 @@ export interface AdaptiveSpacingOptions {
 export function computeAdaptiveSpacing(
   nodes: SpacingNode[],
   edges: SpacingEdge[],
-  options: AdaptiveSpacingOptions = {}
+  options: AdaptiveSpacingOptions = {},
 ): number {
-  const { baseSpacing = 40, perNeighborExtra = 15, baselineDegree = 2 } = options;
+  debugger;
+  const {
+    baseSpacing = 40,
+    perNeighborExtra = 15,
+    baselineDegree = 2,
+  } = options;
 
   if (nodes.length === 0) return baseSpacing;
 
   const nodeIds = new Set(nodes.map((n) => n.id));
   const neighbors = new Map<string, Set<string>>(
-    nodes.map((n) => [n.id, new Set<string>()])
+    nodes.map((n) => [n.id, new Set<string>()]),
   );
 
   for (const edge of edges) {

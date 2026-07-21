@@ -161,4 +161,57 @@ test('custom minDegree/outlierMultiplier options are respected', () => {
   assert.equal(nudges.size, 0);
 });
 
+test('nudge keeps at least the default gap from another node sitting at the ideal centroid spot', () => {
+  // Same hub/spokes as the first test (ideal centroid x = 450), but there is
+  // also an unrelated OBSTACLE node already sitting exactly where that
+  // centroid would land, sharing HUB's row (y=700). The nudge must not
+  // relocate HUB flush against it — it should stop minGap short of the
+  // nearest clear edge instead, even though that means landing further from
+  // the true centroid.
+  const nodes = [
+    { id: 'A', x: 0, y: 500, width: 100, height: 50 },
+    { id: 'B', x: 300, y: 500, width: 100, height: 50 },
+    { id: 'C', x: 600, y: 500, width: 100, height: 50 },
+    { id: 'D', x: 900, y: 500, width: 100, height: 50 },
+    { id: 'HUB', x: 1200, y: 700, width: 100, height: 50 },
+    { id: 'OBSTACLE', x: 430, y: 700, width: 100, height: 50 },
+  ];
+  const edges = [
+    { source: 'HUB', target: 'A' },
+    { source: 'HUB', target: 'B' },
+    { source: 'HUB', target: 'C' },
+    { source: 'HUB', target: 'D' },
+  ];
+  const nudges = computeHubCentroidNudges(nodes, edges);
+
+  const hubNudge = nudges.get('HUB')!;
+  assert.ok(hubNudge, 'HUB should still be nudged');
+  // rightOf = 530 + 40 = 570 is closer to the ideal 450 than leftOf = 290
+  assert.deepEqual(hubNudge, { x: 570, y: 700 });
+
+  const gap = hubNudge.x - (430 + 100);
+  assert.ok(gap >= 40, `expected at least a 40px gap, got ${gap}`);
+});
+
+test('a custom minGap widens the clearance kept from a row obstacle', () => {
+  const nodes = [
+    { id: 'A', x: 0, y: 500, width: 100, height: 50 },
+    { id: 'B', x: 300, y: 500, width: 100, height: 50 },
+    { id: 'C', x: 600, y: 500, width: 100, height: 50 },
+    { id: 'D', x: 900, y: 500, width: 100, height: 50 },
+    { id: 'HUB', x: 1200, y: 700, width: 100, height: 50 },
+    { id: 'OBSTACLE', x: 430, y: 700, width: 100, height: 50 },
+  ];
+  const edges = [
+    { source: 'HUB', target: 'A' },
+    { source: 'HUB', target: 'B' },
+    { source: 'HUB', target: 'C' },
+    { source: 'HUB', target: 'D' },
+  ];
+  const nudges = computeHubCentroidNudges(nodes, edges, { minGap: 100 });
+
+  const hubNudge = nudges.get('HUB')!;
+  assert.deepEqual(hubNudge, { x: 630, y: 700 });
+});
+
 console.log(`\n${passed} tests passed`);
