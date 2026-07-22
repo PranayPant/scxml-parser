@@ -6,7 +6,7 @@
  * multiple rows/columns instead — but for short chains it's unnecessary, so
  * only enable it once a level's node count passes this threshold.
  */
-export const DEFAULT_WRAP_THRESHOLD = 8;
+export const DEFAULT_WRAP_THRESHOLD = 4;
 
 export function shouldWrapLevel(
   nodeCount: number,
