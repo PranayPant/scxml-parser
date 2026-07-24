@@ -14,6 +14,7 @@ import {
   getNextTransitionEventName,
   removeTransitionByEdgeId,
 } from '@/lib/utils/scxml-manipulation-utils';
+import { mergeDuplicateTransitionsInDocument } from '@/lib/utils/transition-merge-utils';
 import { computeVisualStyles } from '@/lib/utils/visual-style-utils';
 import { ActionType } from '@/types/history';
 import type { SCXMLDocument, TransitionElement } from '@/types/scxml';
@@ -396,6 +397,12 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
               else console.error('Failed to update actions:', actResult.error);
             }
           }
+        }
+
+        // If this edit's new condition now makes this transition a duplicate of another
+        // transition to the same target (same actions), fold them into one OR'd transition.
+        if (editingField === 'cond') {
+          content = mergeDuplicateTransitionsInDocument(content);
         }
 
         onSCXMLChange(content, 'property');
