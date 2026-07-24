@@ -45,16 +45,6 @@ export interface SCXMLTransitionEdgeData {
   displayEvent?: string; // "after 2s" / "after 714ms" / "after (expr) s" for _t_ time-transition edges
   waypoints?: Waypoint[]; // Waypoint control points for edge routing
 
-  // Bundling fields (set by visual-diagram.tsx via computeEdgeBundles) —
-  // present only when this edge shares its connection points with others.
-  bundleGroupKey?: string;
-  bundleIndex?: number;
-  bundleSize?: number;
-  isBundled?: boolean; // bundleSize >= BUNDLE_THRESHOLD (3)
-  bundleActive?: boolean; // group is hovered, or one of its members is selected
-  bundleHasSelection?: boolean; // one specific member of the group is selected
-  onBundleChipClick?: () => void; // selects this specific edge for editing
-
   // Handlers for waypoint editing
   onWaypointDrag?: (
     edgeId: string,
@@ -214,78 +204,6 @@ const WaypointHandle: React.FC<{
   );
 };
 
-/**
- * Renders one label chip (colored rounded box with the transition's
- * event/condition/action summary) centered horizontally at (x, y).
- * Shared between the normal single-label case and the bundled chip-list case.
- */
-function renderLabelChip(
-  content: string,
-  isCondition: boolean,
-  x: number,
-  y: number,
-  width: number,
-  onClick?: () => void
-) {
-  return (
-    <foreignObject
-      width={width}
-      height={26}
-      x={x - width / 2}
-      y={y - 13}
-      style={{
-        overflow: 'hidden',
-        zIndex: 10000,
-        pointerEvents: 'none',
-      }}
-    >
-      <div
-        style={{
-          width: '100%',
-          height: '100%',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          pointerEvents: 'none',
-        }}
-      >
-        <div
-          className='px-2 py-1 rounded text-xs font-semibold'
-          onClick={
-            onClick
-              ? (e) => {
-                  e.stopPropagation();
-                  onClick();
-                }
-              : undefined
-          }
-          style={{
-            fontSize: '10px',
-            lineHeight: '1.2',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            width: 'fit-content',
-            maxWidth: '100%',
-            zIndex: 10000,
-            backgroundColor: isCondition ? '#ef4444' : '#3b82f6',
-            color: '#fff',
-            opacity: 0.95,
-            cursor: 'pointer',
-            pointerEvents: 'auto',
-            userSelect: 'none',
-            WebkitUserSelect: 'none',
-            MozUserSelect: 'none',
-            msUserSelect: 'none',
-          }}
-        >
-          {content}
-        </div>
-      </div>
-    </foreignObject>
-  );
-}
-
 export const SCXMLTransitionEdge: React.FC<
   EdgeProps<SCXMLTransitionEdgeData>
 > = ({
@@ -313,12 +231,6 @@ export const SCXMLTransitionEdge: React.FC<
   const labelOffsetY = data?.labelOffsetY || 0;
   const displayEvent = data?.displayEvent;
   const waypoints = data?.waypoints || [];
-  const isBundled = data?.isBundled ?? false;
-  const bundleActive = data?.bundleActive ?? false;
-  const bundleHasSelection = data?.bundleHasSelection ?? false;
-  const bundleIndex = data?.bundleIndex ?? 0;
-  const bundleSize = data?.bundleSize ?? 1;
-  const onBundleChipClick = data?.onBundleChipClick;
   const onWaypointDrag = data?.onWaypointDrag;
   const onWaypointDragEnd = data?.onWaypointDragEnd;
   const onWaypointDelete = data?.onWaypointDelete;
@@ -479,8 +391,6 @@ export const SCXMLTransitionEdge: React.FC<
 
   const strokeWidth = selected ? 3 : actions.length > 0 ? 2.5 : 2;
   const edgeColor = getEdgeColor();
-  const isDimmedSibling =
-    isBundled && bundleActive && bundleHasSelection && !selected;
 
   // Create label content — use displayEvent (e.g. "after 2s") for _t_ time-transition edges
   const getLabelContent = () => {
@@ -543,8 +453,7 @@ export const SCXMLTransitionEdge: React.FC<
         style={{
           ...style,
           stroke: edgeColor,
-          strokeWidth: isDimmedSibling ? 1.5 : strokeWidth,
-          strokeOpacity: isDimmedSibling ? 0.35 : 1,
+          strokeWidth: strokeWidth,
           strokeDasharray: getStrokeStyle() === 'dashed' ? '8,4' : 'none',
         }}
       />
@@ -569,62 +478,55 @@ export const SCXMLTransitionEdge: React.FC<
       )}
 
       {/* Render label - allow pointer events to pass through to waypoints */}
-      {labelContent && !isBundled && (
+      {labelContent && (
         <g style={{ pointerEvents: 'none', zIndex: 10000 }}>
-          {renderLabelChip(
-            labelContent,
-            Boolean(condition),
-            labelX + labelOffset.x + labelOffsetX,
-            labelY + labelOffset.y + labelOffsetY,
-            maxLabelWidth
-          )}
-        </g>
-      )}
-
-      {/* Bundled group, idle (not hovered/selected): one shared count badge,
-          drawn only by the first member so it isn't repeated N times. */}
-      {isBundled && !bundleActive && bundleIndex === 0 && (
-        <g style={{ pointerEvents: 'none', zIndex: 10000 }}>
-          <circle
-            cx={labelX}
-            cy={labelY}
-            r={9}
-            fill='#64748b'
-            stroke='#fff'
-            strokeWidth={1.5}
-          />
-          <text
-            x={labelX}
-            y={labelY}
-            textAnchor='middle'
-            dominantBaseline='central'
-            fontSize={10}
-            fontWeight={700}
-            fill='#fff'
-            style={{ pointerEvents: 'none', userSelect: 'none' }}
+          <foreignObject
+            width={maxLabelWidth}
+            height={26}
+            x={labelX - maxLabelWidth / 2 + labelOffset.x + labelOffsetX}
+            y={labelY - 13 + labelOffset.y + labelOffsetY}
+            style={{
+              overflow: 'hidden',
+              zIndex: 10000,
+              pointerEvents: 'none',
+            }}
           >
-            {bundleSize}
-          </text>
-        </g>
-      )}
-
-      {/* Bundled group, active (hovered or one member selected): every
-          member draws its own chip, stacked vertically beside the shared
-          trunk. All members in the group share identical path geometry
-          (no offset), so ReactFlow's normal click-to-edge hit testing on
-          the trunk itself is ambiguous — the chip instead calls
-          onBundleChipClick directly, explicitly selecting this exact edge
-          rather than relying on click-position-based edge resolution. */}
-      {isBundled && bundleActive && labelContent && (
-        <g style={{ pointerEvents: 'none', zIndex: 10000 }}>
-          {renderLabelChip(
-            labelContent,
-            Boolean(condition),
-            labelX + 20 + maxLabelWidth / 2,
-            labelY + bundleIndex * 22,
-            maxLabelWidth,
-            onBundleChipClick
-          )}
+            <div
+              style={{
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                pointerEvents: 'none',
+              }}
+            >
+              <div
+                className='px-2 py-1 rounded text-xs font-semibold'
+                style={{
+                  fontSize: '10px',
+                  lineHeight: '1.2',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  width: 'fit-content',
+                  maxWidth: '100%',
+                  zIndex: 10000,
+                backgroundColor: condition ? '#ef4444' : '#3b82f6', // Red for conditional, blue for non-conditional
+                  color: '#fff',
+                  opacity: 0.95,
+                  cursor: 'pointer',
+                pointerEvents: 'auto', // Re-enable pointer events only on the label itself
+                userSelect: 'none', // Prevent text selection
+                WebkitUserSelect: 'none', // Safari/Chrome
+                MozUserSelect: 'none', // Firefox
+                msUserSelect: 'none', // IE/Edge
+                }}
+              >
+                {labelContent}
+              </div>
+            </div>
+          </foreignObject>
         </g>
       )}
     </>
