@@ -15,9 +15,9 @@ import {
   removeTransitionByEdgeId,
 } from '@/lib/utils/scxml-manipulation-utils';
 import {
-  mergeDuplicateTransitionsInDocument,
-  mergeDuplicateTransitionsByEventInDocument,
-} from '@/lib/utils/transition-merge-utils';
+  checkNewConnectionSlotConflict,
+  checkTransitionEditSlotConflict,
+} from '@/lib/utils/transition-slot-rules';
 import { computeVisualStyles } from '@/lib/utils/visual-style-utils';
 import { ActionType } from '@/types/history';
 import type { SCXMLDocument, TransitionElement } from '@/types/scxml';
@@ -57,7 +57,7 @@ import { HistoryWrapperNode } from './nodes/history-wrapper-node';
 import { SCXMLStateNode } from './nodes/scxml-state-node';
 import { StickyNoteNode } from './nodes/sticky-note-node';
 import { StateActionsPanel } from '@/components/ui/state-actions-panel';
-import { TransitionPanel, type TransitionApplyArgs } from './transition-panel';
+import { TransitionPanel, type TransitionApplyArgs, type TransitionApplyResult } from './transition-panel';
 import { InitialGroupConflictBanner } from './initial-group-conflict-banner';
 import { useIsDark } from '@/lib/theme/use-is-dark';
 import { usePanelStore } from '@/stores/panel-store';
@@ -215,13 +215,13 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
   } | null>(null);
   const { activePanel, setActivePanel } = usePanelStore();
 
-  const [initialGroupConflictMessage, setInitialGroupConflictMessage] = React.useState<string | null>(null);
+  const [connectionBlockedMessage, setConnectionBlockedMessage] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    if (!initialGroupConflictMessage) return;
-    const timer = setTimeout(() => setInitialGroupConflictMessage(null), 4000);
+    if (!connectionBlockedMessage) return;
+    const timer = setTimeout(() => setConnectionBlockedMessage(null), 4000);
     return () => clearTimeout(timer);
-  }, [initialGroupConflictMessage]);
+  }, [connectionBlockedMessage]);
 
   const [selectedEdgeForEdit, setSelectedEdgeForEdit] = React.useState<{
     id: string;
@@ -341,9 +341,33 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
   );
 
   const handleTransitionApply = React.useCallback(
-    ({ newValue, editingField, delay, cancelSendId, originalEventName, originalCancelSendId }: TransitionApplyArgs) => {
+    ({ newValue, editingField, delay, cancelSendId, originalEventName, originalCancelSendId }: TransitionApplyArgs): TransitionApplyResult => {
       if (!onSCXMLChange || !scxmlContent || !selectedEdgeForEdit) return;
       try {
+        // Pre-check: block if this edit would create a duplicate slot or an invalid
+        // event+cond-both transition, instead of applying it. UpdateTransitionCommand
+        // always clears the field NOT being edited, so the candidate is unambiguous.
+        if (parserRef.current) {
+          const preCheck = parserRef.current.parse(scxmlContent);
+          if (preCheck.success && preCheck.data) {
+            const { parseTransitionIndexFromEdgeId } = require('@/lib/converters/converter-modules');
+            const transitionIndex = parseTransitionIndexFromEdgeId(selectedEdgeForEdit.id);
+            const candidate: TransitionElement =
+              editingField === 'cond'
+                ? { '@_cond': newValue, '@_target': selectedEdgeForEdit.target }
+                : { '@_event': newValue, '@_target': selectedEdgeForEdit.target };
+            const slotCheck = checkTransitionEditSlotConflict(
+              preCheck.data,
+              selectedEdgeForEdit.source,
+              transitionIndex,
+              candidate
+            );
+            if (slotCheck.blocked) {
+              return { blocked: true, reason: slotCheck.reason };
+            }
+          }
+        }
+
         let content = scxmlContent;
 
         // Step 1: apply transition event/cond update
@@ -402,18 +426,6 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
           }
         }
 
-        // If this edit's new condition now makes this transition a duplicate of another
-        // transition to the same target (same actions), fold them into one OR'd transition.
-        if (editingField === 'cond') {
-          content = mergeDuplicateTransitionsInDocument(content);
-        }
-        // If this edit's new event now makes this transition a duplicate of another
-        // transition to the same target/cond (same actions), fold them into one
-        // transition with a comma-combined event list.
-        if (editingField === 'event') {
-          content = mergeDuplicateTransitionsByEventInDocument(content);
-        }
-
         onSCXMLChange(content, 'property');
       } catch (error) {
         console.error('Failed to apply transition:', error);
@@ -463,7 +475,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
           });
         } else {
           console.error('Failed to toggle initial state:', result.error);
-          setInitialGroupConflictMessage(result.error || 'Failed to toggle Initial State.');
+          setConnectionBlockedMessage(result.error || 'Failed to toggle Initial State.');
         }
       } catch (error) {
         console.error('Failed to toggle initial state:', error);
@@ -858,9 +870,15 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
             params.target
           );
           if (blocked) {
-            setInitialGroupConflictMessage(
+            setConnectionBlockedMessage(
               reason || 'Cannot connect states that belong to different Initial State groups.'
             );
+            return;
+          }
+
+          const slotCheck = checkNewConnectionSlotConflict(preCheck.data, params.source, params.target);
+          if (slotCheck.blocked) {
+            setConnectionBlockedMessage(slotCheck.reason || 'Cannot add this transition.');
             return;
           }
         }
@@ -983,9 +1001,15 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
         // ReactFlow never calls onConnect for a connection isValidConnection
         // rejects, so this is the only place a warning can be surfaced —
         // fires live while dragging (on hover) and again on drop.
-        setInitialGroupConflictMessage(
+        setConnectionBlockedMessage(
           reason || 'Cannot connect states that belong to different Initial State groups.'
         );
+        return false;
+      }
+
+      const slotCheck = checkNewConnectionSlotConflict(parseResult.data, connection.source, connection.target);
+      if (slotCheck.blocked) {
+        setConnectionBlockedMessage(slotCheck.reason || 'Cannot add this transition.');
         return false;
       }
       return true;
@@ -2696,8 +2720,8 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
             />
           </ReactFlow>
           <InitialGroupConflictBanner
-            message={initialGroupConflictMessage}
-            onDismiss={() => setInitialGroupConflictMessage(null)}
+            message={connectionBlockedMessage}
+            onDismiss={() => setConnectionBlockedMessage(null)}
           />
         </div>
       </div>

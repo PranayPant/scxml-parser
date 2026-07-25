@@ -27,6 +27,8 @@ export interface TransitionApplyArgs {
   originalCancelSendId: string | undefined;
 }
 
+export type TransitionApplyResult = { blocked: boolean; reason?: string } | void;
+
 interface TransitionPanelProps {
   edgeId: string;
   source: string;
@@ -36,7 +38,7 @@ interface TransitionPanelProps {
   scxmlContent: string;
   entryActions?: string[];
   exitActions?: string[];
-  onApply: (args: TransitionApplyArgs) => void;
+  onApply: (args: TransitionApplyArgs) => TransitionApplyResult;
   onNewChannel?: (
     channelName: string,
     source: string,
@@ -85,6 +87,7 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
   })();
 
   const [selectionMode, setSelectionMode] = React.useState<'undecided' | 'event' | 'cond'>(initSelectionMode);
+  const [applyError, setApplyError] = React.useState<string | null>(null);
   const [rawValue, setRawValue] = React.useState(initRawValue);
   const [activeIndex, setActiveIndex] = React.useState(-1);
   const [isOpen, setIsOpen] = React.useState(false);
@@ -207,7 +210,7 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
         ?? appliedTimeEventRef.current;
       const eventName = existingName ?? generateTimeEventName(source, scxmlContent);
       appliedTimeEventRef.current = eventName;
-      onApply({
+      const timeResult = onApply({
         newValue: eventName,
         editingField: 'event',
         delay: timeParsed,
@@ -215,6 +218,7 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
         originalEventName: event,
         originalCancelSendId: initCancelId || undefined,
       });
+      setApplyError(timeResult && timeResult.blocked ? timeResult.reason ?? 'This change is not allowed.' : null);
       return;
     }
 
@@ -229,7 +233,7 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
       return;
     }
 
-    onApply({
+    const result = onApply({
       newValue: trimmed,
       editingField: resolvedField,
       delay: null,
@@ -237,6 +241,7 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
       originalEventName: event,
       originalCancelSendId: initCancelId || undefined,
     });
+    setApplyError(result && result.blocked ? result.reason ?? 'This change is not allowed.' : null);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -339,6 +344,7 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
               if (v === '') setSelectionMode('undecided');
               setIsOpen(true);
               setActiveIndex(-1);
+              setApplyError(null);
             }}
             onFocus={() => setIsOpen(true)}
             onBlur={() => { blurTimerRef.current = setTimeout(() => setIsOpen(false), 100); }}
@@ -367,6 +373,9 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
             </div>
           )}
         </div>
+        {applyError && (
+          <p className='mt-1.5 text-xs text-error'>{applyError}</p>
+        )}
       </div>
 
     </Panel>

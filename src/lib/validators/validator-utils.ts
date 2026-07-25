@@ -270,7 +270,8 @@ export function findTransitionPosition(
   targetStateId: string,
   xmlContent: string | undefined,
   event?: string,
-  cond?: string
+  cond?: string,
+  excludeLines?: Set<number>
 ): { line: number; column: number } | undefined {
   if (!xmlContent) return undefined;
 
@@ -280,6 +281,8 @@ export function findTransitionPosition(
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
     const line = lines[lineIndex];
     const lineNumber = lineIndex + 1;
+
+    if (excludeLines?.has(lineNumber)) continue;
 
     // Look for transition tags
     if (line.includes('<transition')) {
