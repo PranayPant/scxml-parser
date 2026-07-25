@@ -168,7 +168,7 @@ export function validateTransitionSemantics(
 
         // Validate event names (basic check for valid event syntax)
         if (transition['@_event']) {
-          const events = transition['@_event'].split(/\s+/);
+          const events = transition['@_event'].split(/[\s,]+/).map((e) => e.trim()).filter(Boolean);
           events.forEach((event: string) => {
             if (
               event !== '*' &&

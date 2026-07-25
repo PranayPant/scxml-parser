@@ -106,4 +106,16 @@ describe('getNextTransitionEventName', () => {
     };
     expect(getNextTransitionEventName(d)).toBe('event2');
   });
+
+  it('treats every token inside a comma-separated @_event list as used', () => {
+    const d: SCXMLDocument = {
+      scxml: {
+        state: [
+          { '@_id': 'A', transition: { '@_event': 'event1, event2', '@_target': 'B' } },
+          { '@_id': 'B' },
+        ],
+      } as any,
+    };
+    expect(getNextTransitionEventName(d)).toBe('event3');
+  });
 });

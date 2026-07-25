@@ -124,7 +124,12 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
     if (rawValue.trimStart().startsWith('after')) return [];
 
     if (selectionMode === 'event') {
-      const prefix = rawValue.toLowerCase();
+      // Merged transitions carry a comma-separated event list; only match/suggest against
+      // the last (currently-being-typed) segment, not the whole field.
+      const endsWithSeparator = /,\s*$/.test(rawValue);
+      const segments = rawValue.split(',');
+      const lastSegment = endsWithSeparator ? '' : (segments[segments.length - 1] ?? '').trim();
+      const prefix = lastSegment.toLowerCase();
       return eventNames
         .filter((n) => n.toLowerCase().includes(prefix))
         .map((n) => ({ label: n, kind: 'event' as const }));
@@ -161,12 +166,25 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
     return tokens.join(' ');
   };
 
+  // Merged transitions carry a comma-separated event list. Appends a new event after a
+  // trailing comma, or replaces the segment currently being typed — never the whole field.
+  const buildEventValue = (label: string) => {
+    const endsWithSeparator = /,\s*$/.test(rawValue);
+    const parts = rawValue.split(',').map((p) => p.trim()).filter((p) => p !== '');
+    if (endsWithSeparator) return [...parts, label].join(', ');
+    if (parts.length === 0) return label;
+    parts[parts.length - 1] = label;
+    return parts.join(', ');
+  };
+
   const acceptSuggestion = (s: Suggestion) => {
     if (selectionMode === 'undecided') {
       setSelectionMode(s.kind === 'event' ? 'event' : 'cond');
       setRawValue(s.label);
     } else if (selectionMode === 'cond') {
       setRawValue(buildCondValue(s.label));
+    } else if (selectionMode === 'event') {
+      setRawValue(buildEventValue(s.label));
     } else {
       setRawValue(s.label);
     }
@@ -290,7 +308,9 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
           <input
             type='text'
             value={activeIndex >= 0 && suggestions[activeIndex]
-              ? editingField === 'cond' ? buildCondValue(suggestions[activeIndex].label) : suggestions[activeIndex].label
+              ? editingField === 'cond' ? buildCondValue(suggestions[activeIndex].label)
+                : editingField === 'event' ? buildEventValue(suggestions[activeIndex].label)
+                : suggestions[activeIndex].label
               : rawValue}
             onChange={(e) => {
               const v = e.target.value;

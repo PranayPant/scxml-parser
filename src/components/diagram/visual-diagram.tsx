@@ -14,7 +14,10 @@ import {
   getNextTransitionEventName,
   removeTransitionByEdgeId,
 } from '@/lib/utils/scxml-manipulation-utils';
-import { mergeDuplicateTransitionsInDocument } from '@/lib/utils/transition-merge-utils';
+import {
+  mergeDuplicateTransitionsInDocument,
+  mergeDuplicateTransitionsByEventInDocument,
+} from '@/lib/utils/transition-merge-utils';
 import { computeVisualStyles } from '@/lib/utils/visual-style-utils';
 import { ActionType } from '@/types/history';
 import type { SCXMLDocument, TransitionElement } from '@/types/scxml';
@@ -403,6 +406,12 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
         // transition to the same target (same actions), fold them into one OR'd transition.
         if (editingField === 'cond') {
           content = mergeDuplicateTransitionsInDocument(content);
+        }
+        // If this edit's new event now makes this transition a duplicate of another
+        // transition to the same target/cond (same actions), fold them into one
+        // transition with a comma-combined event list.
+        if (editingField === 'event') {
+          content = mergeDuplicateTransitionsByEventInDocument(content);
         }
 
         onSCXMLChange(content, 'property');

@@ -51,7 +51,11 @@ export function getNextTransitionEventName(scxmlDoc: SCXMLDocument): string {
     if (!transitions) return;
     const arr = Array.isArray(transitions) ? transitions : [transitions];
     for (const t of arr) {
-      if (t['@_event']) usedEvents.add(t['@_event']);
+      if (t['@_event']) {
+        for (const token of t['@_event'].split(/[,\s]+/)) {
+          if (token) usedEvents.add(token);
+        }
+      }
     }
   };
 
