@@ -76,7 +76,12 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
       channelSet.has(item) ? 'channel' : eventSet.has(item) ? 'event' : 'variable';
 
     if (selectionMode === 'event') {
-      const prefix = rawValue.toLowerCase();
+      // Merged transitions carry a comma-separated event list; only match/suggest against
+      // the last (currently-being-typed) segment, not the whole field.
+      const endsWithSeparator = /,\s*$/.test(rawValue);
+      const segments = rawValue.split(',');
+      const lastSegment = endsWithSeparator ? '' : (segments[segments.length - 1] ?? '').trim();
+      const prefix = lastSegment.toLowerCase();
       return eventNames
         .filter(name => name.toLowerCase().includes(prefix))
         .map(name => ({ label: name, kind: 'event' as const }));
@@ -133,12 +138,25 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
     return tokens.join(' ');
   };
 
+  // Merged transitions carry a comma-separated event list. Appends a new event after a
+  // trailing comma, or replaces the segment currently being typed — never the whole field.
+  const buildEventValue = (label: string): string => {
+    const endsWithSeparator = /,\s*$/.test(rawValue);
+    const parts = rawValue.split(',').map((p) => p.trim()).filter((p) => p !== '');
+    if (endsWithSeparator) return [...parts, label].join(', ');
+    if (parts.length === 0) return label;
+    parts[parts.length - 1] = label;
+    return parts.join(', ');
+  };
+
   const acceptSuggestion = (suggestion: Suggestion) => {
     if (selectionMode === 'undecided') {
       setSelectionMode(suggestion.kind === 'event' ? 'event' : 'cond');
       setRawValue(suggestion.label);
     } else if (selectionMode === 'cond') {
       setRawValue(buildCondValue(suggestion.label));
+    } else if (selectionMode === 'event') {
+      setRawValue(buildEventValue(suggestion.label));
     } else {
       setRawValue(suggestion.label);
     }
@@ -213,7 +231,9 @@ export const TransitionEditBar: React.FC<TransitionEditBarProps> = ({
             activeIndex >= 0 && suggestions[activeIndex]
               ? editingField === "cond"
                 ? buildCondValue(suggestions[activeIndex].label)
-                : suggestions[activeIndex].label
+                : editingField === "event"
+                  ? buildEventValue(suggestions[activeIndex].label)
+                  : suggestions[activeIndex].label
               : rawValue
           }
           onChange={(e) => {

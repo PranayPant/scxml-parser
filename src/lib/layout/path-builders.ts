@@ -83,6 +83,138 @@ export function buildPolylinePath(
 }
 
 /**
+ * Build a smoothstep-style SVG path (axis-aligned segments with rounded
+ * corners) from an A* grid route. Matches the look of ReactFlow's
+ * getSmoothStepPath so obstacle-avoiding edges render consistently with the
+ * plain ones.
+ *
+ * Grid points are snapped to the pathfinding grid, so the hops between the
+ * real source/target and the grid can be slightly diagonal — elbows are
+ * inserted there to keep every segment orthogonal.
+ */
+export function buildRoundedOrthogonalPath(
+  source: Point,
+  target: Point,
+  gridPath: number[][],
+  borderRadius = 8
+): string {
+  const raw: Point[] = [
+    source,
+    ...gridPath.map(([x, y]) => ({ x, y })),
+    target,
+  ];
+
+  // Insert elbows for diagonal hops, choosing the elbow whose second leg
+  // lines up with the neighboring segment so it merges away below.
+  const ortho: Point[] = [raw[0]];
+  for (let i = 1; i < raw.length; i++) {
+    const prev = ortho[ortho.length - 1];
+    const curr = raw[i];
+    if (prev.x === curr.x && prev.y === curr.y) continue; // duplicate
+    if (prev.x !== curr.x && prev.y !== curr.y) {
+      const next = raw[i + 1];
+      const before = ortho[ortho.length - 2];
+      let elbow: Point;
+      if (next && next.y === curr.y) {
+        elbow = { x: prev.x, y: curr.y };
+      } else if (next && next.x === curr.x) {
+        elbow = { x: curr.x, y: prev.y };
+      } else if (before && before.y === prev.y) {
+        elbow = { x: curr.x, y: prev.y };
+      } else {
+        elbow = { x: prev.x, y: curr.y };
+      }
+      ortho.push(elbow);
+    }
+    ortho.push(curr);
+  }
+
+  // Drop collinear middle points so each remaining point is a real corner
+  const pts: Point[] = [];
+  ortho.forEach((p, i) => {
+    if (i === 0 || i === ortho.length - 1) {
+      pts.push(p);
+      return;
+    }
+    const a = ortho[i - 1];
+    const b = ortho[i + 1];
+    const collinear =
+      (a.x === p.x && p.x === b.x) || (a.y === p.y && p.y === b.y);
+    if (!collinear) pts.push(p);
+  });
+
+  if (pts.length < 2) return `M ${source.x},${source.y}`;
+
+  // Step `dist` from an axis-aligned corner toward a neighbor point
+  const stepToward = (from: Point, to: Point, dist: number): Point => ({
+    x: from.x + Math.sign(to.x - from.x) * dist,
+    y: from.y + Math.sign(to.y - from.y) * dist,
+  });
+
+  let d = `M ${pts[0].x},${pts[0].y}`;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const lenIn = Math.abs(p1.x - p0.x) + Math.abs(p1.y - p0.y);
+    const lenOut = Math.abs(p2.x - p1.x) + Math.abs(p2.y - p1.y);
+    // Half-leg clamp so adjacent corners on a short segment can't overlap
+    const r = Math.min(borderRadius, lenIn / 2, lenOut / 2);
+    const inPt = stepToward(p1, p0, r);
+    const outPt = stepToward(p1, p2, r);
+    d += ` L ${inPt.x},${inPt.y} Q ${p1.x},${p1.y} ${outPt.x},${outPt.y}`;
+  }
+  const last = pts[pts.length - 1];
+  d += ` L ${last.x},${last.y}`;
+  return d;
+}
+
+/**
+ * Build a self-loop path for a transition whose source and target are the
+ * same node. The default bottom/top handles are vertically aligned through
+ * the node's own body — a plain smoothstep path between them cuts straight
+ * through the box. This instead routes a small rectangular loop out past the
+ * node's right edge, so the loop is always drawn outside the node bounds.
+ */
+export function buildSelfLoopPath(
+  sourceX: number,
+  sourceY: number,
+  targetX: number,
+  targetY: number,
+  nodeX: number,
+  nodeY: number,
+  nodeWidth: number,
+  nodeHeight: number,
+  bulge = 40,
+  borderRadius = 8
+): [string, number, number] {
+  const stub = Math.max(8, Math.min(20, Math.abs(sourceY - targetY) / 4));
+  const outX = nodeX + nodeWidth + bulge;
+
+  const p1: Point = { x: sourceX, y: sourceY + stub };
+  const p2: Point = { x: outX, y: sourceY + stub };
+  const p3: Point = { x: outX, y: targetY - stub };
+  const p4: Point = { x: targetX, y: targetY - stub };
+
+  const path = buildRoundedOrthogonalPath(
+    { x: sourceX, y: sourceY },
+    { x: targetX, y: targetY },
+    [
+      [p1.x, p1.y],
+      [p2.x, p2.y],
+      [p3.x, p3.y],
+      [p4.x, p4.y],
+    ],
+    borderRadius
+  );
+
+  const labelX = outX;
+  const labelY = (p2.y + p3.y) / 2;
+
+  return [path, labelX, labelY];
+}
+
+/**
  * Build smooth Bezier curve through waypoints
  * Uses Catmull-Rom spline for smooth interpolation
  */

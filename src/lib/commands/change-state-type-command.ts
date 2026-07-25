@@ -1,10 +1,18 @@
 import { BaseCommand, type CommandResult } from './base-command';
+import { clearWaypointsForTouchingTransitions } from './waypoint-invalidation';
 
 /**
  * ChangeStateTypeCommand
  *
  * Changes the type of a state (simple, compound, parallel, final)
  * Handles cleanup operations like removing transitions and substates for final states
+ *
+ * State type also changes the node's rendered width/height (see
+ * NodeDimensionCalculator, which sizes compound/parallel states larger than
+ * simple/final ones), so stale persisted `viz:waypoints` on transitions
+ * touching it are cleared too (see waypoint-invalidation.ts). Undo re-runs
+ * execute() with the old type, which naturally re-clears them as the node
+ * resizes back — no explicit restore needed here.
  */
 export class ChangeStateTypeCommand extends BaseCommand {
   private oldStateType?: string;
@@ -80,6 +88,8 @@ export class ChangeStateTypeCommand extends BaseCommand {
     // 1. Create new element with correct tag name
     // 2. Copy all attributes and children
     // 3. Replace old element with new element
+
+    clearWaypointsForTouchingTransitions(doc, this.nodeId);
 
     // Serialize and return
     const newContent = this.serializeXML(doc);

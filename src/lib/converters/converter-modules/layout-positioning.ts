@@ -8,6 +8,10 @@
 import type { HierarchicalNode } from '@/types/hierarchical-node';
 import type { Edge } from 'reactflow';
 import { elkLayoutService } from '@/lib/layout/elk-layout-service';
+import { computeAdaptiveSpacing } from '@/lib/layout/adaptive-spacing';
+import { computeHubCentroidNudges } from '@/lib/layout/hub-centroid-nudge';
+import { shouldWrapLevel } from '@/lib/layout/chain-wrapping';
+import { parseStateIdList } from '@/lib/validators/validator-utils';
 import type { StateRegistryEntry } from './state-registry';
 
 /**
@@ -109,6 +113,10 @@ export async function applyDefaultELKLayout(
     aspectRatio: 3,
   };
 
+  // Row-to-row gap for wrapped levels — wide enough for a transition label
+  // chip plus the arrows entering/exiting it on both sides.
+  const WRAPPED_ROW_GAP = 100;
+
   // Step 2: Run ELK per hierarchy level so each compound node is sized by its
   // own visual dimensions, not by the space its children need.
   //
@@ -130,14 +138,55 @@ export async function applyDefaultELKLayout(
       (e) => levelNodeIds.has(e.source) && levelNodeIds.has(e.target)
     );
 
+    // A level with a hub (one node whose degree is a clear outlier among its
+    // siblings) gets more node-node spacing than a plain chain/tree — that
+    // hub's many neighbors need room to fan their edges and labels apart.
+    // Ordinary levels keep ELK's default spacing untouched.
+    const levelSpacing = computeAdaptiveSpacing(levelNodes, levelEdges);
+    // A chain long enough to matter gets folded into multiple rows/columns —
+    // ELK's layered algorithm otherwise puts one node per layer and stacks a
+    // long sequence into a single tall column regardless of aspectRatio.
+    const wrapping = shouldWrapLevel(levelNodes.length);
+    // Wrapped rows need extra vertical room: the transition label chip and
+    // its connecting arrows live entirely in the row-to-row gap, which ELK
+    // has no notion of (it doesn't see the app's rendered edge labels).
+    const levelOptions = {
+      ...ELK_OPTIONS,
+      spacing: {
+        ...ELK_OPTIONS.spacing,
+        nodeNode: levelSpacing,
+        ...(wrapping && { nodeNodeBetweenLayers: WRAPPED_ROW_GAP }),
+      },
+      wrapping,
+    };
+
     const levelPositions = await elkLayoutService.computeLayout(
       levelNodes,
       levelEdges,
-      ELK_OPTIONS
+      levelOptions
     );
 
+    // ELK's layered algorithm has no notion of hub centrality — a node with
+    // far more neighbors than its siblings can end up off to one side of its
+    // spokes, forcing every edge on that side into a long detour. Nudge only
+    // genuine degree outliers back toward the horizontal centroid of their
+    // neighbors; every other node keeps its ELK position untouched.
+    const nudgeNodes = levelNodes
+      .map((n) => {
+        const pos = levelPositions.get(n.id);
+        if (!pos) return null;
+        const width = (n.data as any).width || 160;
+        const height = (n.data as any).height || 80;
+        return { id: n.id, x: pos.x, y: pos.y, width, height };
+      })
+      .filter((n): n is NonNullable<typeof n> => n !== null);
+    const nudges = computeHubCentroidNudges(nudgeNodes, levelEdges, {
+      minGap: levelSpacing,
+    });
+
     levelPositions.forEach((pos, id) => {
-      allPositions.set(id, { x: pos.x, y: pos.y });
+      const nudge = nudges.get(id);
+      allPositions.set(id, nudge ?? { x: pos.x, y: pos.y });
     });
   }
 
@@ -257,10 +306,24 @@ export function isInitialState(
   getAttribute: (element: any, attrName: string) => string | undefined,
   getElements: (parent: any, elementName: string) => any
 ): boolean {
+  const allIds = new Set(stateRegistry.keys());
+
   if (!parentPath) {
-    // Check if it's the root initial state
+    // Check if it's one of the (possibly multiple) root initial states
+    // getAttribute('initial') falls back to the unprefixed 'initial' property
+    // when '@_initial' is absent — but that property is also where the
+    // parsed <initial> CHILD ELEMENT lives (a different, valid SCXML form),
+    // so the typeof guard is required: without it, a state using the
+    // <initial> element form (no attribute) gets that element object here
+    // instead of undefined, and parseStateIdList would throw on it.
     const rootInitial = getAttribute(rootScxml, 'initial');
-    if (stateId === rootInitial) return true;
+    if (
+      typeof rootInitial === 'string' &&
+      rootInitial &&
+      parseStateIdList(rootInitial, allIds).includes(stateId)
+    ) {
+      return true;
+    }
 
     // Also check for <initial> element at root
     const initialElement = getElements(rootScxml, 'initial');
@@ -275,14 +338,20 @@ export function isInitialState(
     return false;
   }
 
-  // Find parent state and check its initial attribute
+  // Find parent state and check its (possibly multiple) initial ids
   const parentId =
     typeof parentPath === 'string' ? parentPath.split('#').pop() : null;
   if (parentId) {
     const parentInfo = stateRegistry.get(parentId);
     if (parentInfo) {
       const parentInitial = getAttribute(parentInfo.state, 'initial');
-      if (stateId === parentInitial) return true;
+      if (
+        typeof parentInitial === 'string' &&
+        parentInitial &&
+        parseStateIdList(parentInitial, allIds).includes(stateId)
+      ) {
+        return true;
+      }
 
       // Also check for <initial> element in parent
       const initialElement = getElements(parentInfo.state, 'initial');

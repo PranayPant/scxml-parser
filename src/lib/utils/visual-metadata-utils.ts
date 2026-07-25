@@ -170,10 +170,18 @@ export function validateVisualMetadataStructure(metadata: ElementVisualMetadata)
  */
 export function removeVisualMetadataFromXML(scxmlContent: string): string {
   let cleaned = scxmlContent;
-  
+
   // First, get the visual namespace prefix if it exists
   const prefix = getVisualNamespacePrefix(scxmlContent) || 'viz';
-  
+
+  // Remove visual namespace ELEMENTS (post-it notes) before stripping
+  // attributes - a <viz:note> must not survive with its namespace removed
+  const noteElementPattern = new RegExp(
+    `\\s*<${prefix}:note\\b[^>]*/>|\\s*<${prefix}:note\\b[^>]*>[\\s\\S]*?</${prefix}:note>`,
+    'g'
+  );
+  cleaned = cleaned.replace(noteElementPattern, '');
+
   // Remove visual namespace declaration
   const namespaceDeclarationPattern = new RegExp(
     `\\s*xmlns:${prefix}\\s*=\\s*["']http://visual-scxml-editor/metadata["']`,

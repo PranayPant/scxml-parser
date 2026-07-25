@@ -20,6 +20,8 @@ import {
   validateTransitionSemantics,
   validateCrossHierarchyTransitions,
 } from './transition-validator';
+import { validateInitialStateGroups } from './initial-group-validator';
+import { validateTransitionSlotConflicts } from './transition-slot-validator';
 import {
   validateW3CCompliance,
   validateRequiredAttributes,
@@ -77,6 +79,7 @@ export class SCXMLValidator {
     validateW3CCompliance(scxml, errors);
     this.validateStateMachineSemanticsInternal(scxml, stateIds, errors);
     validateTransitionSemantics(scxml, stateIds, errors);
+    validateTransitionSlotConflicts(scxml, this.xmlContent, errors);
     validateExecutableElements(scxml, errors);
 
     // Comprehensive attribute validation
@@ -89,6 +92,9 @@ export class SCXMLValidator {
       this.xmlContent,
       errors
     );
+
+    // Multiple Initial State group validation
+    validateInitialStateGroups(scxml, errors);
 
     return deduplicateErrors(errors);
   }

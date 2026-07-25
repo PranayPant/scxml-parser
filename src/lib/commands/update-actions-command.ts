@@ -1,10 +1,17 @@
 import { BaseCommand, type CommandResult } from './base-command';
+import { clearWaypointsForTouchingTransitions } from './waypoint-invalidation';
 
 /**
  * UpdateActionsCommand
  *
  * Updates onentry and onexit actions for a state element
  * Handles creating/removing onentry and onexit elements based on action arrays
+ *
+ * The entry/exit action count also changes the node's rendered height (see
+ * NodeDimensionCalculator), so stale persisted `viz:waypoints` on
+ * transitions touching it are cleared too (see waypoint-invalidation.ts).
+ * Undo re-runs execute() with the old actions, which naturally re-clears
+ * them as the node resizes back — no explicit restore needed here.
  */
 export class UpdateActionsCommand extends BaseCommand {
   private oldEntryActions?: string[];
@@ -124,6 +131,8 @@ export class UpdateActionsCommand extends BaseCommand {
       });
       stateElement.appendChild(onexit);
     }
+
+    clearWaypointsForTouchingTransitions(doc, this.nodeId);
 
     // Serialize and return
     const newContent = this.serializeXML(doc);

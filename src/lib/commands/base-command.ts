@@ -8,8 +8,32 @@
  * - Clean separation of business logic from UI
  */
 
-import { VISUAL_METADATA_CONSTANTS } from '@/types/visual-metadata';
+import { VISUAL_METADATA_CONSTANTS, isNoteId } from '@/types/visual-metadata';
 import { formatXML } from '@/lib/utils/format-utils';
+
+/**
+ * Collects <viz:note> elements in the declared traversal order used for
+ * "note:idx-N" fallback ids: an element's own direct note children first,
+ * then its state children (recursively), then parallel children, then
+ * final children. Must stay in lockstep with collectNotes() in
+ * lib/converters/converter-modules/note-conversion.ts.
+ */
+function collectNoteElementsInDeclaredOrder(element: Element): Element[] {
+  const directChildrenByTag = (tag: string): Element[] =>
+    Array.from(element.children).filter((el) => el.tagName === tag);
+
+  const result: Element[] = directChildrenByTag(
+    VISUAL_METADATA_CONSTANTS.NOTE.ELEMENT_NAME
+  );
+
+  for (const tag of ['state', 'parallel', 'final']) {
+    for (const child of directChildrenByTag(tag)) {
+      result.push(...collectNoteElementsInDeclaredOrder(child));
+    }
+  }
+
+  return result;
+}
 
 export interface CommandResult {
   /**
@@ -104,6 +128,47 @@ export abstract class BaseCommand implements Command {
     return doc.querySelector(
       `state[id="${stateId}"], parallel[id="${stateId}"], final[id="${stateId}"]`
     );
+  }
+
+  /**
+   * Whether a node id refers to a post-it note annotation
+   */
+  protected isNoteId(nodeId: string): boolean {
+    return isNoteId(nodeId);
+  }
+
+  /**
+   * Find a <viz:note> element by its viz:id.
+   * Uses getElementsByTagName because CSS selectors cannot match the
+   * qualified name of a namespaced element. Supports the transient
+   * "note:idx-N" fallback ids (used for one render cycle before ids are
+   * persisted) via collectNoteElementsInDeclaredOrder, which MUST use the
+   * exact same traversal rule as collectNotes() in
+   * lib/converters/converter-modules/note-conversion.ts (own notes first,
+   * then state/parallel/final children recursively, in that tag priority) —
+   * that object-model traversal cannot preserve true document order across
+   * different tag types, so the DOM fallback here matches its declared
+   * order instead, rather than getElementsByTagName's real DOM order.
+   */
+  protected findNoteElement(doc: Document, noteId: string): Element | null {
+    const notes = doc.getElementsByTagName(
+      VISUAL_METADATA_CONSTANTS.NOTE.ELEMENT_NAME
+    );
+    for (let i = 0; i < notes.length; i++) {
+      if (notes[i].getAttribute('viz:id') === noteId) {
+        return notes[i];
+      }
+    }
+    const indexMatch = noteId.match(/^note:idx-(\d+)$/);
+    if (indexMatch) {
+      const index = parseInt(indexMatch[1], 10);
+      const candidate = collectNoteElementsInDeclaredOrder(doc.documentElement)[index];
+      // Only trust the positional fallback if that note has no persisted id
+      if (candidate && !candidate.getAttribute('viz:id')) {
+        return candidate;
+      }
+    }
+    return null;
   }
 
   /**

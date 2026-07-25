@@ -1,9 +1,9 @@
 /**
  * Visual Metadata Types for SCXML Editor
- * 
- * These types define the structure of visual metadata stored in the 
+ *
+ * These types define the structure of visual metadata stored in the
  * custom XML namespace `xmlns:visual="http://visual-scxml-editor/metadata"`
- * 
+ *
  * All visual metadata is non-intrusive and preserves SCXML runtime behavior
  */
 
@@ -67,18 +67,18 @@ export interface DiagramMetadata {
   /** Label positioning offset */
   labelOffset?: { x: number; y: number };
   /** Curve type for edges */
-  curveType?: 'smooth' | 'step' | 'straight' | 'bezier';
+  curveType?: "smooth" | "step" | "straight" | "bezier";
   /** Arrow marker type */
-  markerType?: 'arrow' | 'diamond' | 'circle' | 'none';
+  markerType?: "arrow" | "diamond" | "circle" | "none";
   /** Connection points for edges */
   connectionPoints?: {
     source?: { x: number; y: number };
     target?: { x: number; y: number };
   };
   /** Source handle ID (top, bottom, left, right) */
-  sourceHandle?: 'top' | 'bottom' | 'left' | 'right';
+  sourceHandle?: "top" | "bottom" | "left" | "right";
   /** Target handle ID (top, bottom, left, right) */
-  targetHandle?: 'top' | 'bottom' | 'left' | 'right';
+  targetHandle?: "top" | "bottom" | "left" | "right";
 }
 
 /**
@@ -90,7 +90,7 @@ export interface Waypoint {
   /** Y coordinate of waypoint */
   y: number;
   /** Optional waypoint type */
-  type?: 'control' | 'anchor';
+  type?: "control" | "anchor";
 }
 
 /**
@@ -124,7 +124,7 @@ export interface ActionParameter {
   /** Parameter name */
   name: string;
   /** Parameter type */
-  type: 'string' | 'number' | 'boolean' | 'expression';
+  type: "string" | "number" | "boolean" | "expression";
   /** Whether parameter is required */
   required?: boolean;
   /** Default value */
@@ -159,7 +159,14 @@ export interface ViewStateMetadata {
  */
 export interface ContainerMetadata {
   /** Layout strategy for child elements */
-  childLayout: 'auto' | 'grid' | 'manual' | 'force' | 'elk-layered' | 'elk-force' | 'elk-stress';
+  childLayout:
+    | "auto"
+    | "grid"
+    | "manual"
+    | "force"
+    | "elk-layered"
+    | "elk-force"
+    | "elk-stress";
   /** Padding inside the container */
   padding: number;
   /** Minimum container size */
@@ -175,7 +182,7 @@ export interface ContainerMetadata {
     columns: number;
     rows?: number;
     spacing: { x: number; y: number };
-    alignment: 'center' | 'start' | 'end';
+    alignment: "center" | "start" | "end";
   };
   /** Force-directed layout options */
   forceOptions?: {
@@ -185,9 +192,9 @@ export interface ContainerMetadata {
   };
   /** ELK layout options */
   elkOptions?: {
-    algorithm?: 'layered' | 'force' | 'stress' | 'mrtree' | 'radial';
-    direction?: 'DOWN' | 'UP' | 'RIGHT' | 'LEFT';
-    edgeRouting?: 'ORTHOGONAL' | 'POLYLINE' | 'SPLINES' | 'UNDEFINED';
+    algorithm?: "layered" | "force" | "stress" | "mrtree" | "radial";
+    direction?: "DOWN" | "UP" | "RIGHT" | "LEFT";
+    edgeRouting?: "ORTHOGONAL" | "POLYLINE" | "SPLINES" | "UNDEFINED";
     spacing?: {
       nodeNode?: number;
       edgeNode?: number;
@@ -203,7 +210,14 @@ export interface ElementVisualMetadata extends VisualMetadata {
   /** Element ID this metadata belongs to */
   elementId: string;
   /** Element type (state, transition, etc.) */
-  elementType: 'state' | 'transition' | 'parallel' | 'final' | 'history' | 'scxml' | 'compound';
+  elementType:
+    | "state"
+    | "transition"
+    | "parallel"
+    | "final"
+    | "history"
+    | "scxml"
+    | "compound";
   /** Parent element ID (for hierarchical layout) */
   parentId?: string;
   /** Child element IDs (for compound/parallel states) */
@@ -222,10 +236,10 @@ export interface ElementVisualMetadata extends VisualMetadata {
  */
 export interface VisualXMLAttributes {
   /** Position and size attribute (x y width height) */
-  'viz:xywh'?: string;
+  "viz:xywh"?: string;
 
   /** Style attributes */
-  'viz:rgb'?: string;
+  "viz:rgb"?: string;
 }
 
 /**
@@ -289,7 +303,7 @@ export interface VisualMetadataValidationWarning {
  */
 export interface VisualMetadataChangeEvent {
   /** Type of change */
-  type: 'create' | 'update' | 'delete' | 'move' | 'resize' | 'style';
+  type: "create" | "update" | "delete" | "move" | "resize" | "style";
   /** Element ID that changed */
   elementId: string;
   /** Previous metadata (for updates) */
@@ -307,22 +321,22 @@ export interface VisualMetadataChangeEvent {
  */
 export const VISUAL_METADATA_CONSTANTS = {
   /** Default namespace URI */
-  NAMESPACE_URI: 'http://visual-scxml-editor/metadata',
+  NAMESPACE_URI: "http://visual-scxml-editor/metadata",
   /** Default namespace prefix */
-  NAMESPACE_PREFIX: 'viz',
+  NAMESPACE_PREFIX: "viz",
   /** Supported element types */
   SUPPORTED_ELEMENTS: [
-    'scxml',
-    'state', 
-    'parallel',
-    'final',
-    'history',
-    'transition'
+    "scxml",
+    "state",
+    "parallel",
+    "final",
+    "history",
+    "transition",
   ] as const,
   /** Default styling values */
   DEFAULT_STYLES: {
-    fill: '#f0f9ff',
-    stroke: '#0369a1',
+    fill: "#f0f9ff",
+    stroke: "#0369a1",
     strokeWidth: 2,
     borderRadius: 8,
     opacity: 1,
@@ -334,4 +348,28 @@ export const VISUAL_METADATA_CONSTANTS = {
     x: 100,
     y: 100,
   },
+  /** Post-it note annotation settings */
+  NOTE: {
+    /** Fixed note width in px (notes are not user-resizable) */
+    WIDTH: 500,
+    /** Base note height in px */
+    HEIGHT: 500,
+    /** Font size used until text overflows, in px */
+    FONT_SIZE_LARGE: 28,
+    /** Font size used after large-font overflow, in px */
+    FONT_SIZE_SMALL: 20,
+    /** Node id prefix; ':' is not valid in SCXML state ids, so this cannot collide */
+    ID_PREFIX: "note:",
+    /** Qualified element name in the viz namespace */
+    ELEMENT_NAME: "viz:note",
+    /** Vertical growth factor applied when small font still overflows */
+    HEIGHT_EXPANSION_FACTOR: 2,
+  },
 } as const;
+
+/**
+ * Whether a React Flow node id refers to a post-it note annotation
+ */
+export function isNoteId(id: string): boolean {
+  return id.startsWith(VISUAL_METADATA_CONSTANTS.NOTE.ID_PREFIX);
+}

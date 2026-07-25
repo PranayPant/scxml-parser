@@ -272,15 +272,21 @@ export const SCXMLStateNode = memo<NodeProps<SCXMLStateNodeData>>(
             borderColor: stateChar.color,
             borderWidth: '2px',
           }),
-      // Apply width and height from node data (set by viz:xywh)
-      ...(data.width && { width: data.width }),
-      ...(data.height && { height: data.height }),
+      // Apply width and height from node data (set by viz:xywh). Also cap
+      // with maxWidth/maxHeight: this div's overflow is forced to 'visible'
+      // below (so the connection-handle dots aren't clipped in half at the
+      // border), which restores flexbox's default min-width:auto growth —
+      // without a hard cap, a label the width estimate underestimated can
+      // grow the box past its assigned layout slot and overlap the sibling
+      // next to it, instead of just truncating its own content.
+      ...(data.width && { width: data.width, maxWidth: data.width }),
+      ...(data.height && { height: data.height, maxHeight: data.height }),
     };
 
     // Get additional classes for shadows, transitions, etc.
     const additionalClasses = visualStyles
       ? getAdditionalClasses(visualStyles, isActive, selected)
-      : 'shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-[1.02] hover:z-10 ring-2 ring-opacity-0 hover:ring-opacity-30 ring-blue-400';
+      : 'shadow-lg hover:shadow-xl transition-[box-shadow,transform] duration-200 hover:scale-[1.02] hover:z-10 ring-2 ring-opacity-0 hover:ring-opacity-30 ring-blue-400';
 
     const nodeClasses = `${getBaseClasses()} ${additionalClasses} backdrop-blur-sm border-2`;
 

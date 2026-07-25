@@ -1,218 +1,485 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="idle" name="TestStateMachine" datamodel="ecmascript" binding="early">
-  
-  <!-- Data model with various data types -->
-  <datamodel>
-    <data id="counter" expr="0" />
-    <data id="userName" expr="'anonymous'" />
-    <data id="isActive" expr="false" />
-    <data id="config" expr="{ timeout: 5000, maxRetries: 3 }" />
-  </datamodel>
-
-  <!-- Initial idle state -->
-  <state id="idle">
-    <onentry>
-      <log label="System" expr="'Entering idle state'" />
-      <assign location="isActive" expr="false" />
-    </onentry>
-    
-    <!-- Transition to active state -->
-    <transition event="start" target="active">
-      <assign location="counter" expr="counter + 1" />
-      <log label="Transition" expr="'Starting system, count: ' + counter" />
-    </transition>
-    
-    <!-- Conditional transition based on data -->
-    <transition event="quick.start" cond="counter &gt; 5" target="processing">
-      <log label="QuickStart" expr="'Fast track activated'" />
-    </transition>
-    
-    <!-- Transition to configuration -->
-    <transition event="configure" target="configuration" />
-  </state>
-
-  <!-- Active state with nested states -->
-  <state id="active" initial="ready">
-    <onentry>
-      <assign location="isActive" expr="true" />
-      <send event="status.update" delay="1s" />
-    </onentry>
-    
-    <onexit>
-      <assign location="isActive" expr="false" />
-      <log label="System" expr="'Leaving active state'" />
-    </onexit>
-
-    <!-- Nested ready state -->
-    <state id="ready">
-      <onentry>
-        <log label="Ready" expr="'System ready for processing'" />
-      </onentry>
-      
-      <transition event="process" target="processing" />
-      <transition event="pause" target="paused" />
-      <transition event="stop" target="idle" />
-      
-      <!-- Internal transition (doesn't exit/re-enter state) -->
-      <transition event="refresh" type="internal">
-        <log label="Refresh" expr="'Refreshing data...'" />
-        <raise event="data.updated" />
-      </transition>
-    </state>
-
-    <!-- Processing state -->
-    <state id="processing">
-      <onentry>
-        <log label="Processing" expr="'Starting processing...'" />
-        <send event="timeout" delay="10s" id="processingTimer" />
-      </onentry>
-      
-      <onexit>
-        <cancel sendid="processingTimer" />
-      </onexit>
-      
-      <transition event="complete" target="ready">
-        <log label="Processing" expr="'Processing completed successfully'" />
-      </transition>
-      
-      <transition event="error" target="error">
-        <assign location="counter" expr="counter - 1" />
-      </transition>
-      
-      <transition event="timeout" target="error">
-        <log label="Error" expr="'Processing timed out'" />
-      </transition>
-      
-      <transition event="pause" target="paused" />
-    </state>
-
-    <!-- Paused state -->
-    <state id="paused">
-      <onentry>
-        <log label="Paused" expr="'System paused'" />
-      </onentry>
-      
-      <transition event="resume" target="ready" />
-      <transition event="stop" target="idle" />
-    </state>
-
-    <!-- Error state with conditional logic -->
-    <state id="error">
-      <onentry>
-        <log label="Error" expr="'Error occurred, counter: ' + counter" />
-        <if cond="counter &gt; 0">
-          <send event="retry" delay="2s" />
-        <else />
-          <send event="fail" delay="1s" />
-        </if>
-      </onentry>
-      
-      <transition event="retry" cond="counter &gt; 0" target="ready">
-        <log label="Retry" expr="'Retrying operation'" />
-      </transition>
-      
-      <transition event="fail" target="failed" />
-      <transition event="reset" target="idle">
-        <assign location="counter" expr="0" />
-      </transition>
-    </state>
-  </state>
-
-  <!-- Configuration state with parallel regions -->
-  <state id="configuration">
-    <onentry>
-      <log label="Config" expr="'Entering configuration mode'" />
-    </onentry>
-    
-    <parallel id="configSections">
-      <!-- User settings section -->
-      <state id="userSettings" initial="editingName">
-        <state id="editingName">
-          <transition event="name.changed" target="editingPrefs">
-            <assign location="userName" expr="_event.data.name" />
-          </transition>
-        </state>
-        
-        <state id="editingPrefs">
-          <transition event="prefs.saved" target="editingName" />
-        </state>
-      </state>
-      
-      <!-- System settings section -->
-      <state id="systemSettings" initial="basic">
-        <state id="basic">
-          <transition event="advanced" target="advanced" />
-        </state>
-        
-        <state id="advanced">
-          <transition event="basic" target="basic" />
-        </state>
-      </state>
-    </parallel>
-    
-    <transition event="config.done" target="idle">
-      <log label="Config" expr="'Configuration completed'" />
-    </transition>
-  </state>
-
-  <!-- Failed final state -->
-  <state id="failed">
-    <onentry>
-      <log label="Failed" expr="'System failed - manual intervention required'" />
-    </onentry>
-    
-    <transition event="manual.fix" target="idle">
-      <assign location="counter" expr="0" />
-      <log label="Recovery" expr="'System manually recovered'" />
-    </transition>
-    
-    <transition event="shutdown" target="terminated" />
-  </state>
-
-  <!-- Success final state with done data -->
-  <final id="terminated">
-    <onentry>
-      <log label="Shutdown" expr="'System shutting down gracefully'" />
-    </onentry>
-    
-    <donedata>
-      <param name="finalCount" expr="counter" />
-      <param name="userName" expr="userName" />
-      <param name="shutdownTime" expr="new Date().toISOString()" />
-    </donedata>
-  </final>
-
-  <!-- History state example -->
-  <state id="maintenance">
-    <history id="maintenanceHistory" type="deep">
-      <transition target="idle" />
-    </history>
-    
-    <state id="diagnostics" initial="memoryCheck">
-      <state id="memoryCheck">
-        <transition event="memory.ok" target="diskCheck" />
-      </state>
-      
-      <state id="diskCheck">
-        <transition event="disk.ok" target="networkCheck" />
-      </state>
-      
-      <state id="networkCheck">
-        <transition event="network.ok" target="diagnosticsComplete" />
-      </state>
-      
-      <final id="diagnosticsComplete" />
-    </state>
-    
-    <transition event="maintenance.complete" target="maintenanceHistory" />
-    <transition event="exit.maintenance" target="idle" />
-  </state>
-
-  <!-- Global transitions -->
-  <transition event="emergency.stop" target="failed">
-    <log label="Emergency" expr="'Emergency stop activated!'" />
-  </transition>
-  
-  <transition event="maintenance.mode" target="maintenance" />
-
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="pneumatic_valve_actuator">
+	<datamodel>
+		<data expr="0.0" id="hotvalve_in_bar" />
+		<data expr="0.0" id="hotvalve_out_bar" />
+		<data expr="0.0" id="vacuum_gauge_mPa_apparent" />
+		<data expr="0.0" id="hotvalve_in_press_onoff" />
+		<data expr="0.0" id="hotvalve_in_vacuum_onoff" />
+		<data expr="0.0" id="hotvalve_out_press_onoff" />
+		<data expr="0.0" id="hotvalve_out_vacuum_onoff" />
+		<data expr="0.0" id="vacuum_pump_onoff" />
+		<data expr="0.0" id="turbine_pump_flow" />
+		<data expr="0.0" id="hotvalve_in_degC" />
+		<data expr="0.0" id="hotvalve_out_degC" />
+		<data expr="0.0" id="inlet_pipe_degC" />
+		<data expr="0.0" id="ovenarea1_target" />
+		<data expr="280" id="conf_temp_melting" />
+		<data expr="550" id="conf_temp_target" />
+		<data expr="25" id="conf_temp_target_overshoot" />
+		<data expr="2" id="conf_upper_target_bar" />
+		<data expr="-0.95" id="conf_lower_target_bar" />
+		<data expr="0.0" id="conf_hysterese_bar" />
+		<data expr="60" id="conf_holdtime_inlet" />
+		<data expr="30" id="conf_holdtime_between" />
+		<data expr="10" id="conf_holdtime_outlet" />
+		<data expr="10" id="conf_holdtime_error" />
+		<data expr="1" id="conf_decide_valve_out" />
+		<data expr="3.0" id="conf_system_target_mPa" />
+		<data expr="1.0" id="conf_system_target_mPa_hysterese" />
+		<data expr="1000" id="conf_start_turbine_mPa" />
+		<data expr="0.0" id="pneumatic_valve_actuator_know_state" />
+		<data expr="false" id="pneumatic_valve_actuator_leaking_error" />
+		<data expr="0" id="pneumatic_valve_actuator_counter" />
+		<data expr="false" id="pneumatic_valve_actuator_status_failed" />
+		<data expr="0.0" id="pneumatic_valve_actuator_cycles" />
+	</datamodel>
+	<state id="main_region">
+		<initial>
+			<transition target="off" type="internal">
+			</transition>
+		</initial>
+		<state id="off">
+			<onentry>
+				 <assign location="pneumatic_valve_actuator_know_state" expr="1.0"/>
+				 <assign location="hotvalve_in_press_onoff" expr="0"/>
+				 <assign location="hotvalve_out_press_onoff" expr="0"/>
+				 <assign location="hotvalve_in_vacuum_onoff" expr="0"/>
+				 <assign location="hotvalve_out_vacuum_onoff" expr="0"/>
+				 <assign location="vacuum_pump_onoff" expr="0"/>
+				 <assign location="ovenarea1_target" expr="0"/>
+				 <assign location="turbine_pump_flow" expr="0"/>
+			</onentry>
+			<transition event="start_oven"  target="Vacuum_control">
+			</transition>
+			<transition event="reset"  target="Stoped_Oven_-_Reset_Counter">
+			</transition>
+		</state>
+		<state id="test_running">
+			<onentry>
+				 <assign location="pneumatic_valve_actuator_cycles" expr="_event.data"/>
+			</onentry>
+			<initial>
+				<transition target="Control_pneumatic_pressure_and_temp_and_system_press_before_start" type="internal">
+				</transition>
+			</initial>
+			<state id="Control_pneumatic_pressure_and_temp_and_system_press_before_start">
+				<onentry>
+					<send event="Control pneumatic pressure and temp and system press  before start_t_1_timeEvent_0" delayexpr="conf_holdtime_error * 1000"/>
+				</onentry>
+				<onexit>
+					<cancel sendid="Control pneumatic pressure and temp and system press  before start_t_1_timeEvent_0" />
+				</onexit>
+				<onentry>
+					 <assign location="pneumatic_valve_actuator_know_state" expr="2.1"/>
+				</onentry>
+				<transition  cond="hotvalve_in_bar &gt;= conf_upper_target_bar &amp;&amp; hotvalve_out_bar &gt;= conf_upper_target_bar &amp;&amp; inlet_pipe_degC &gt;= conf_temp_melting &amp;&amp; vacuum_gauge_mPa_apparent &lt;= conf_system_target_mPa" target="Open_Inlet_valve">
+				</transition>
+				<transition event="Control pneumatic pressure and temp and system press  before start_t_1_timeEvent_0"  target="Error_state_start">
+				</transition>
+			</state>
+			<state id="Open_Inlet_valve">
+				<onentry>
+					<send event="Open Inlet valve_t_0_timeEvent_0" delayexpr="conf_holdtime_inlet + conf_holdtime_error * 1000"/>
+				</onentry>
+				<onexit>
+					<cancel sendid="Open Inlet valve_t_0_timeEvent_0" />
+				</onexit>
+				<onentry>
+					 <assign location="pneumatic_valve_actuator_know_state" expr="2.2"/>
+					 <assign location="hotvalve_in_press_onoff" expr="0.0"/>
+					 <assign location="hotvalve_out_press_onoff" expr="0.0"/>
+				</onentry>
+				<transition event ="vector"  type="internal" >
+					 <assign location="hotvalve_in_vacuum_onoff" expr="1"/>
+					 <assign location="vacuum_pump_onoff" expr="1"/>
+				</transition>
+				<transition event="Open Inlet valve_t_0_timeEvent_0"  target="Error_open_Inlet_valve">
+				</transition>
+				<transition  cond="hotvalve_in_bar &lt;= conf_lower_target_bar" target="Opened_inlet_valve">
+				</transition>
+			</state>
+			<state id="Decide_open_out">
+				<onentry>
+					 <assign location="pneumatic_valve_actuator_know_state" expr="2.6"/>
+				</onentry>
+				<transition  cond="pneumatic_valve_actuator_cycles * conf_decide_valve_out &lt; 1" target="Counter">
+				</transition>
+				<transition  cond="pneumatic_valve_actuator_cycles * conf_decide_valve_out &gt;= 1" target="Open_outlet">
+				</transition>
+			</state>
+			<state id="Counter">
+				<onentry>
+					<send event="Counter_t_0_timeEvent_0" delay="1s"/>
+				</onentry>
+				<onexit>
+					<cancel sendid="Counter_t_0_timeEvent_0" />
+				</onexit>
+				<onentry>
+					 <assign location="pneumatic_valve_actuator_know_state" expr="2.11"/>
+				</onentry>
+				<onexit>
+					 <assign location="pneumatic_valve_actuator_counter" expr="pneumatic_valve_actuator_counter + 1"/>
+				</onexit>
+				<transition event="Counter_t_0_timeEvent_0"  target="Control_pneumatic_pressure_and_temp_and_system_press_before_start">
+				</transition>
+			</state>
+			<state id="Error_state_start">
+				<onentry>
+					<send event="Error state start_t_0_timeEvent_0" delay="2s"/>
+				</onentry>
+				<onexit>
+					<cancel sendid="Error state start_t_0_timeEvent_0" />
+				</onexit>
+				<onentry>
+					 <assign location="pneumatic_valve_actuator_know_state" expr="5.1"/>
+				</onentry>
+				<transition event="Error state start_t_0_timeEvent_0"  target="Error_out">
+				</transition>
+			</state>
+			<state id="Open_outlet">
+				<onentry>
+					<send event="Open outlet_t_1_timeEvent_0" delayexpr="(conf_holdtime_outlet + conf_holdtime_error) * 1000"/>
+				</onentry>
+				<onexit>
+					<cancel sendid="Open outlet_t_1_timeEvent_0" />
+				</onexit>
+				<onentry>
+					 <assign location="pneumatic_valve_actuator_know_state" expr="2.7"/>
+					 <assign location="hotvalve_out_press_onoff" expr="0.0"/>
+				</onentry>
+				<transition event ="vector"  type="internal" >
+					 <assign location="hotvalve_out_vacuum_onoff" expr="1"/>
+					 <assign location="vacuum_pump_onoff" expr="1"/>
+				</transition>
+				<transition  cond="hotvalve_out_bar &lt;= conf_lower_target_bar" target="Opened_outlet">
+				</transition>
+				<transition event="Open outlet_t_1_timeEvent_0"  target="Error_Open_out">
+				</transition>
+			</state>
+			<state id="Close_Outlet">
+				<onentry>
+					<send event="Close Outlet_t_0_timeEvent_0" delayexpr="conf_holdtime_between + conf_holdtime_error * 1000"/>
+				</onentry>
+				<onexit>
+					<cancel sendid="Close Outlet_t_0_timeEvent_0" />
+				</onexit>
+				<onentry>
+					 <assign location="pneumatic_valve_actuator_know_state" expr="2.9"/>
+					 <assign location="hotvalve_out_vacuum_onoff" expr="0"/>
+					 <assign location="vacuum_pump_onoff" expr="0"/>
+				</onentry>
+				<transition event ="vector"  type="internal" >
+					 <assign location="hotvalve_out_press_onoff" expr="1"/>
+				</transition>
+				<transition event="Close Outlet_t_0_timeEvent_0"  target="Error_Close_outlet">
+				</transition>
+				<transition  cond="hotvalve_out_bar &gt;= conf_upper_target_bar" target="Closed_outlet">
+				</transition>
+			</state>
+			<state id="Opened_inlet_valve">
+				<onentry>
+					<send event="Opened inlet valve_t_0_timeEvent_0" delayexpr="conf_holdtime_inlet * 1000"/>
+				</onentry>
+				<onexit>
+					<cancel sendid="Opened inlet valve_t_0_timeEvent_0" />
+				</onexit>
+				<onentry>
+					<send event="Opened inlet valve_t_1_timeEvent_0" delayexpr="conf_holdtime_inlet + conf_holdtime_error * 1000"/>
+				</onentry>
+				<onexit>
+					<cancel sendid="Opened inlet valve_t_1_timeEvent_0" />
+				</onexit>
+				<onentry>
+					 <assign location="pneumatic_valve_actuator_know_state" expr="2.3"/>
+					 <assign location="hotvalve_in_press_onoff" expr="0"/>
+					 <assign location="hotvalve_in_vacuum_onoff" expr="0"/>
+					 <assign location="vacuum_pump_onoff" expr="0"/>
+				</onentry>
+				<transition event="Opened inlet valve_t_0_timeEvent_0"  target="Close_inletvalve">
+				</transition>
+				<transition event="Opened inlet valve_t_1_timeEvent_0"  target="Error_open_Inlet_valve">
+				</transition>
+			</state>
+			<state id="Opened_outlet">
+				<onentry>
+					<send event="Opened outlet_t_0_timeEvent_0" delayexpr="conf_holdtime_outlet * 1000"/>
+				</onentry>
+				<onexit>
+					<cancel sendid="Opened outlet_t_0_timeEvent_0" />
+				</onexit>
+				<onentry>
+					<send event="Opened outlet_t_1_timeEvent_0" delayexpr="(conf_holdtime_outlet + conf_holdtime_error) * 1000"/>
+				</onentry>
+				<onexit>
+					<cancel sendid="Opened outlet_t_1_timeEvent_0" />
+				</onexit>
+				<onentry>
+					 <assign location="pneumatic_valve_actuator_know_state" expr="2.8"/>
+					 <assign location="hotvalve_out_press_onoff" expr="0"/>
+					 <assign location="hotvalve_out_vacuum_onoff" expr="0"/>
+					 <assign location="vacuum_pump_onoff" expr="0"/>
+				</onentry>
+				<transition event="Opened outlet_t_0_timeEvent_0"  target="Close_Outlet">
+				</transition>
+				<transition event="Opened outlet_t_1_timeEvent_0"  target="Error_Open_out">
+				</transition>
+			</state>
+			<state id="Error_open_Inlet_valve">
+				<onentry>
+					<send event="Error open Inlet valve_t_0_timeEvent_0" delay="2s"/>
+				</onentry>
+				<onexit>
+					<cancel sendid="Error open Inlet valve_t_0_timeEvent_0" />
+				</onexit>
+				<onentry>
+					 <assign location="pneumatic_valve_actuator_know_state" expr="5.2"/>
+				</onentry>
+				<transition event="Error open Inlet valve_t_0_timeEvent_0"  target="Error_out">
+				</transition>
+			</state>
+			<state id="Error_Open_out">
+				<onentry>
+					<send event="Error Open out_t_0_timeEvent_0" delay="2s"/>
+				</onentry>
+				<onexit>
+					<cancel sendid="Error Open out_t_0_timeEvent_0" />
+				</onexit>
+				<onentry>
+					 <assign location="pneumatic_valve_actuator_know_state" expr="5.4"/>
+				</onentry>
+				<transition event="Error Open out_t_0_timeEvent_0"  target="Error_out">
+				</transition>
+			</state>
+			<state id="Error_Close_outlet">
+				<onentry>
+					<send event="Error Close outlet_t_0_timeEvent_0" delay="2s"/>
+				</onentry>
+				<onexit>
+					<cancel sendid="Error Close outlet_t_0_timeEvent_0" />
+				</onexit>
+				<onentry>
+					 <assign location="pneumatic_valve_actuator_know_state" expr="5.5"/>
+				</onentry>
+				<transition event="Error Close outlet_t_0_timeEvent_0"  target="Error_out">
+				</transition>
+			</state>
+			<state id="Error_out">
+				<onentry>
+					<send event="Error out_t_0_timeEvent_0" delay="5s"/>
+				</onentry>
+				<onexit>
+					<cancel sendid="Error out_t_0_timeEvent_0" />
+				</onexit>
+				<onentry>
+					 <assign location="pneumatic_valve_actuator_know_state" expr="5.0"/>
+				</onentry>
+				<transition event="Error out_t_0_timeEvent_0"  target="Error_Stop">
+				</transition>
+			</state>
+			<state id="Close_inletvalve">
+				<onentry>
+					<send event="Close inletvalve_t_1_timeEvent_0" delayexpr="conf_holdtime_inlet + conf_holdtime_error * 1000"/>
+				</onentry>
+				<onexit>
+					<cancel sendid="Close inletvalve_t_1_timeEvent_0" />
+				</onexit>
+				<onentry>
+					 <assign location="pneumatic_valve_actuator_know_state" expr="2.4"/>
+					 <assign location="hotvalve_in_vacuum_onoff" expr="0"/>
+					 <assign location="vacuum_pump_onoff" expr="0"/>
+				</onentry>
+				<transition event ="vector"  type="internal" >
+					 <assign location="hotvalve_in_press_onoff" expr="1"/>
+				</transition>
+				<transition  cond="hotvalve_in_bar &gt;= conf_upper_target_bar" target="Inlet_valve_closed">
+				</transition>
+				<transition event="Close inletvalve_t_1_timeEvent_0"  target="error_close_inlet">
+				</transition>
+			</state>
+			<state id="Inlet_valve_closed">
+				<onentry>
+					<send event="Inlet valve closed_t_0_timeEvent_0" delayexpr="conf_holdtime_between * 1000"/>
+				</onentry>
+				<onexit>
+					<cancel sendid="Inlet valve closed_t_0_timeEvent_0" />
+				</onexit>
+				<onentry>
+					<send event="Inlet valve closed_t_1_timeEvent_0" delayexpr="conf_holdtime_inlet + conf_holdtime_error * 1000"/>
+				</onentry>
+				<onexit>
+					<cancel sendid="Inlet valve closed_t_1_timeEvent_0" />
+				</onexit>
+				<onentry>
+					 <assign location="pneumatic_valve_actuator_know_state" expr="2.5"/>
+					 <assign location="hotvalve_in_press_onoff" expr="0"/>
+					 <assign location="hotvalve_in_vacuum_onoff" expr="0"/>
+					 <assign location="vacuum_pump_onoff" expr="0"/>
+				</onentry>
+				<transition event="Inlet valve closed_t_0_timeEvent_0"  target="Decide_open_out">
+				</transition>
+				<transition event="Inlet valve closed_t_1_timeEvent_0"  target="error_close_inlet">
+				</transition>
+			</state>
+			<state id="Closed_outlet">
+				<onentry>
+					<send event="Closed outlet_t_0_timeEvent_0" delayexpr="conf_holdtime_between * 1000"/>
+				</onentry>
+				<onexit>
+					<cancel sendid="Closed outlet_t_0_timeEvent_0" />
+				</onexit>
+				<onentry>
+					 <assign location="pneumatic_valve_actuator_know_state" expr="2.1"/>
+					 <assign location="hotvalve_out_vacuum_onoff" expr="0"/>
+					 <assign location="vacuum_pump_onoff" expr="0"/>
+					 <assign location="hotvalve_out_press_onoff" expr="0"/>
+				</onentry>
+				<transition event="Closed outlet_t_0_timeEvent_0"  target="Counter">
+				</transition>
+			</state>
+			<state id="error_close_inlet">
+				<onentry>
+					<send event="error close inlet_t_0_timeEvent_0" delay="2s"/>
+				</onentry>
+				<onexit>
+					<cancel sendid="error close inlet_t_0_timeEvent_0" />
+				</onexit>
+				<onentry>
+					 <assign location="pneumatic_valve_actuator_know_state" expr="5.3"/>
+				</onentry>
+				<transition event="error close inlet_t_0_timeEvent_0"  target="Error_out">
+				</transition>
+			</state>
+			<transition  cond="pneumatic_valve_actuator_counter &gt;= pneumatic_valve_actuator_cycles" target="Oven_on_Not_Counting">
+			</transition>
+			<transition event="stop"  target="Oven_on_Not_Counting">
+			</transition>
+			<transition  cond="vacuum_gauge_mPa_apparent &gt;= conf_system_target_mPa" target="Vacuum_Leak">
+			</transition>
+			<transition event="stop_oven"  target="off">
+			</transition>
+		</state>
+		<state id="Error_Stop">
+			<onentry>
+				 <assign location="pneumatic_valve_actuator_know_state" expr="9"/>
+				 <assign location="ovenarea1_target" expr="0.0"/>
+				 <assign location="turbine_pump_flow" expr="0"/>
+			</onentry>
+			<transition event="ack"  target="off">
+			</transition>
+		</state>
+		<state id="Oven_up">
+			<onentry>
+				 <assign location="pneumatic_valve_actuator_know_state" expr="1.3"/>
+				 <assign location="ovenarea1_target" expr="conf_temp_target + conf_temp_target_overshoot"/>
+			</onentry>
+			<transition  cond="hotvalve_in_degC &gt;= conf_temp_melting &amp;&amp; hotvalve_out_degC &gt;= conf_temp_melting" target="mleting_and_close_hotvalves">
+			</transition>
+			<transition  cond="vacuum_gauge_mPa_apparent &gt;= conf_system_target_mPa + conf_system_target_mPa_hysterese" target="Vacuum_Leak">
+			</transition>
+			<transition event="stop_oven"  target="off">
+			</transition>
+		</state>
+		<state id="Vacuum_control">
+			<onentry>
+				 <assign location="pneumatic_valve_actuator_know_state" expr="1.1"/>
+				 <assign location="turbine_pump_flow" expr="0"/>
+			</onentry>
+			<transition  cond="vacuum_gauge_mPa_apparent &lt;= conf_start_turbine_mPa" target="Vacuum_turbine">
+			</transition>
+		</state>
+		<state id="Vacuum_Leak">
+			<onentry>
+				<send event="Vacuum Leak_t_0_timeEvent_0" delay="10s"/>
+			</onentry>
+			<onexit>
+				<cancel sendid="Vacuum Leak_t_0_timeEvent_0" />
+			</onexit>
+			<onentry>
+				 <assign location="pneumatic_valve_actuator_know_state" expr="6"/>
+				 <assign location="turbine_pump_flow" expr="0"/>
+			</onentry>
+			<transition event="Vacuum Leak_t_0_timeEvent_0"  target="Error_Stop">
+			</transition>
+		</state>
+		<state id="Vacuum_turbine">
+			<onentry>
+				 <assign location="pneumatic_valve_actuator_know_state" expr="1.2"/>
+				 <assign location="turbine_pump_flow" expr="100"/>
+			</onentry>
+			<transition  cond="vacuum_gauge_mPa_apparent &lt;= (conf_system_target_mPa - conf_system_target_mPa_hysterese)" target="Oven_up">
+			</transition>
+			<transition event="stop_oven"  target="off">
+			</transition>
+		</state>
+		<state id="mleting_and_close_hotvalves">
+			<onentry>
+				 <assign location="pneumatic_valve_actuator_know_state" expr="1.4"/>
+			</onentry>
+			<initial>
+				<transition target="Close" type="internal">
+				</transition>
+			</initial>
+			<state id="Close">
+				<onentry>
+					 <assign location="pneumatic_valve_actuator_know_state" expr="1.4"/>
+				</onentry>
+				<transition event ="vector"  type="internal" >
+					 <assign location="hotvalve_in_press_onoff" expr="1"/>
+					 <assign location="hotvalve_out_press_onoff" expr="1"/>
+				</transition>
+				<transition  cond="hotvalve_in_bar &gt;= conf_upper_target_bar &amp;&amp; hotvalve_out_bar &gt;= conf_upper_target_bar" target="Closed">
+				</transition>
+			</state>
+			<state id="Closed">
+				<onentry>
+					 <assign location="pneumatic_valve_actuator_know_state" expr="1.5"/>
+					 <assign location="hotvalve_in_press_onoff" expr="0.0"/>
+					 <assign location="hotvalve_out_press_onoff" expr="0.0"/>
+				</onentry>
+				<transition  cond="hotvalve_in_bar + conf_hysterese_bar &lt;= conf_lower_target_bar || hotvalve_out_bar + conf_hysterese_bar &gt;= conf_lower_target_bar" target="Close">
+				</transition>
+			</state>
+			<transition  cond="vacuum_gauge_mPa_apparent &gt;= conf_system_target_mPa" target="Vacuum_Leak">
+			</transition>
+			<transition event="stop_oven"  target="off">
+			</transition>
+			<transition event="start"  target="test_running">
+			</transition>
+		</state>
+		<state id="Reset_Counter">
+			<onentry>
+				 <assign location="pneumatic_valve_actuator_counter" expr="0"/>
+				 <assign location="pneumatic_valve_actuator_cycles" expr="0"/>
+			</onentry>
+			<transition   target="Oven_on_Not_Counting">
+			</transition>
+		</state>
+		<state id="Oven_on_Not_Counting">
+			<onentry>
+				 <assign location="pneumatic_valve_actuator_know_state" expr="10"/>
+				 <assign location="hotvalve_in_press_onoff" expr="0"/>
+				 <assign location="hotvalve_out_press_onoff" expr="0"/>
+				 <assign location="hotvalve_in_vacuum_onoff" expr="0"/>
+				 <assign location="hotvalve_out_vacuum_onoff" expr="0"/>
+				 <assign location="vacuum_pump_onoff" expr="0"/>
+			</onentry>
+			<transition event="reset"  target="Reset_Counter">
+			</transition>
+			<transition event="start"  target="test_running">
+			</transition>
+			<transition event="stop_oven"  target="off">
+			</transition>
+			<transition  cond="vacuum_gauge_mPa_apparent &gt;= conf_system_target_mPa" target="Vacuum_Leak">
+			</transition>
+		</state>
+		<state id="Stoped_Oven_-_Reset_Counter">
+			<onentry>
+				 <assign location="pneumatic_valve_actuator_counter" expr="0"/>
+				 <assign location="pneumatic_valve_actuator_cycles" expr="0"/>
+			</onentry>
+			<transition   target="off">
+			</transition>
+		</state>
+	</state>
 </scxml>

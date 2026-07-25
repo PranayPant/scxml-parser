@@ -31,6 +31,10 @@ interface StateActionsPanelProps {
   exitActions: ActionRow[];
   internalEventActions: InternalEventActionRow[];
   scxmlContent: string;
+  stateType: 'simple' | 'compound' | 'parallel' | 'final';
+  isInitial: boolean;
+  canMarkInitial: boolean;
+  onToggleInitial: () => void;
   onApply: (entryActions: string[], exitActions: string[]) => void;
   onApplyReactions: (actions: InternalEventActionRow[]) => void;
 }
@@ -51,6 +55,10 @@ export function StateActionsPanel({
   exitActions: initialExit,
   internalEventActions: initialReactions,
   scxmlContent,
+  stateType,
+  isInitial,
+  canMarkInitial,
+  onToggleInitial,
   onApply,
   onApplyReactions,
 }: StateActionsPanelProps) {
@@ -376,6 +384,36 @@ export function StateActionsPanel({
             <Plus className='h-4 w-4' />
           </button>
         </div>
+
+        {/* Initial State toggle — only markable for simple/compound states.
+            Unmarking is always allowed; only marking can be blocked (it would
+            merge two Initial State groups). */}
+        {(stateType === 'simple' || stateType === 'compound') && (() => {
+          const disabled = !isInitial && !canMarkInitial;
+          const title = !isInitial && !canMarkInitial
+            ? 'This state is already connected (directly or indirectly) to another Initial State — marking it would merge two Initial State groups'
+            : undefined;
+
+          return (
+            <div className='flex items-center px-3 py-1 border-b border-default bg-muted flex-shrink-0'>
+              <label
+                className={`flex items-center gap-1.5 text-[10px] ${
+                  disabled ? 'text-dimmed cursor-not-allowed' : 'text-muted cursor-pointer'
+                }`}
+                title={title}
+              >
+                <input
+                  type='checkbox'
+                  checked={isInitial}
+                  disabled={disabled}
+                  onChange={onToggleInitial}
+                  className='h-3 w-3'
+                />
+                Initial State
+              </label>
+            </div>
+          );
+        })()}
 
         {/* Tabs */}
         <div className='flex border-b border-default flex-shrink-0'>

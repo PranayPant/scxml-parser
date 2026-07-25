@@ -11,8 +11,13 @@ import {
   addStateToDocument,
   createStateElement,
   findStateById,
+  getNextTransitionEventName,
   removeTransitionByEdgeId,
 } from '@/lib/utils/scxml-manipulation-utils';
+import {
+  checkNewConnectionSlotConflict,
+  checkTransitionEditSlotConflict,
+} from '@/lib/utils/transition-slot-rules';
 import { computeVisualStyles } from '@/lib/utils/visual-style-utils';
 import { ActionType } from '@/types/history';
 import type { SCXMLDocument, TransitionElement } from '@/types/scxml';
@@ -38,20 +43,30 @@ import {
   useEdgesState,
   useNodesState,
   useReactFlow,
+  useUpdateNodeInternals,
   type Connection,
   type Edge,
   type Node,
   type NodeTypes,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
+import { v4 as uuidv4 } from 'uuid';
+import { isNoteId, VISUAL_METADATA_CONSTANTS } from '@/types/visual-metadata';
 import { SCXMLTransitionEdge } from './edges/scxml-transition-edge';
 import { HistoryWrapperNode } from './nodes/history-wrapper-node';
 import { SCXMLStateNode } from './nodes/scxml-state-node';
+import { StickyNoteNode } from './nodes/sticky-note-node';
 import { StateActionsPanel } from '@/components/ui/state-actions-panel';
-import { TransitionPanel, type TransitionApplyArgs } from './transition-panel';
+import { TransitionPanel, type TransitionApplyArgs, type TransitionApplyResult } from './transition-panel';
+import { InitialGroupConflictBanner } from './initial-group-conflict-banner';
 import { useIsDark } from '@/lib/theme/use-is-dark';
 import { usePanelStore } from '@/stores/panel-store';
 import { isTimeEventName, formatAfterSyntax } from '@/lib/utils/time-transition';
+import {
+  wouldMergeDistinctGroups,
+  isMarkedInitial,
+  wouldConflictIfMarkedInitial,
+} from '@/lib/utils/initial-group-utils';
 
 // ==================== TYPES & INTERFACES ====================
 interface VisualDiagramProps {
@@ -71,6 +86,7 @@ interface VisualDiagramProps {
 const nodeTypes: NodeTypes = {
   scxmlState: SCXMLStateNode,
   scxmlHistory: HistoryWrapperNode,
+  scxmlNote: StickyNoteNode,
 };
 
 // Custom edge types for SCXML transitions
@@ -153,7 +169,14 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
 }) => {
   // ==================== STATE MANAGEMENT ====================
   const { fitView, screenToFlowPosition } = useReactFlow();
+  const updateNodeInternals = useUpdateNodeInternals();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  // Set right before setNodes(enhancedNodes) on a full re-parse; consumed by
+  // the effect below once that `nodes` update actually commits. Deliberately
+  // NOT set by ordinary drag/onNodesChange updates, which also change
+  // `nodes` continuously — calling updateNodeInternals on every node on
+  // every drag frame would be wasteful and janky.
+  const pendingNodeInternalsUpdateRef = React.useRef(false);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
   // UI State
@@ -192,6 +215,14 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
   } | null>(null);
   const { activePanel, setActivePanel } = usePanelStore();
 
+  const [connectionBlockedMessage, setConnectionBlockedMessage] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!connectionBlockedMessage) return;
+    const timer = setTimeout(() => setConnectionBlockedMessage(null), 4000);
+    return () => clearTimeout(timer);
+  }, [connectionBlockedMessage]);
+
   const [selectedEdgeForEdit, setSelectedEdgeForEdit] = React.useState<{
     id: string;
     source: string;
@@ -211,6 +242,9 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
     entryActions: ParsedActionRow[];
     exitActions: ParsedActionRow[];
     internalEventActions: Array<{ event: string; location: string; expr: string; type: 'internal' | 'external' }>;
+    stateType: 'simple' | 'compound' | 'parallel' | 'final';
+    isInitial: boolean;
+    canMarkInitial: boolean;
   } | null>(null);
 
   // Dark mode tracking for canvas theming
@@ -307,9 +341,33 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
   );
 
   const handleTransitionApply = React.useCallback(
-    ({ newValue, editingField, delay, cancelSendId, originalEventName, originalCancelSendId }: TransitionApplyArgs) => {
+    ({ newValue, editingField, delay, cancelSendId, originalEventName, originalCancelSendId }: TransitionApplyArgs): TransitionApplyResult => {
       if (!onSCXMLChange || !scxmlContent || !selectedEdgeForEdit) return;
       try {
+        // Pre-check: block if this edit would create a duplicate slot or an invalid
+        // event+cond-both transition, instead of applying it. UpdateTransitionCommand
+        // always clears the field NOT being edited, so the candidate is unambiguous.
+        if (parserRef.current) {
+          const preCheck = parserRef.current.parse(scxmlContent);
+          if (preCheck.success && preCheck.data) {
+            const { parseTransitionIndexFromEdgeId } = require('@/lib/converters/converter-modules');
+            const transitionIndex = parseTransitionIndexFromEdgeId(selectedEdgeForEdit.id);
+            const candidate: TransitionElement =
+              editingField === 'cond'
+                ? { '@_cond': newValue, '@_target': selectedEdgeForEdit.target }
+                : { '@_event': newValue, '@_target': selectedEdgeForEdit.target };
+            const slotCheck = checkTransitionEditSlotConflict(
+              preCheck.data,
+              selectedEdgeForEdit.source,
+              transitionIndex,
+              candidate
+            );
+            if (slotCheck.blocked) {
+              return { blocked: true, reason: slotCheck.reason };
+            }
+          }
+        }
+
         let content = scxmlContent;
 
         // Step 1: apply transition event/cond update
@@ -395,6 +453,37 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
     [scxmlContent, onSCXMLChange]
   );
 
+  const handleToggleInitialState = React.useCallback(
+    (stateId: string) => {
+      if (!onSCXMLChange || !scxmlContent) return;
+      try {
+        const { ToggleInitialStateCommand } = require('@/lib/commands');
+        const command = new ToggleInitialStateCommand(stateId);
+        const result = command.execute(scxmlContent);
+
+        if (result.success) {
+          onSCXMLChange(result.newContent, 'structure');
+          setSelectedStateForActions((prev) => {
+            if (!prev || prev.id !== stateId || !parserRef.current) return prev;
+            const parseResult = parserRef.current.parse(result.newContent);
+            if (!parseResult.success || !parseResult.data) return prev;
+            return {
+              ...prev,
+              isInitial: isMarkedInitial(parseResult.data, stateId),
+              canMarkInitial: !wouldConflictIfMarkedInitial(parseResult.data, stateId).blocked,
+            };
+          });
+        } else {
+          console.error('Failed to toggle initial state:', result.error);
+          setConnectionBlockedMessage(result.error || 'Failed to toggle Initial State.');
+        }
+      } catch (error) {
+        console.error('Failed to toggle initial state:', error);
+      }
+    },
+    [scxmlContent, onSCXMLChange]
+  );
+
   const handleNodeStateTypeChange = React.useCallback(
     (nodeId: string, newStateType: string) => {
       if (!onSCXMLChange || !scxmlContent) return;
@@ -425,19 +514,62 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
 
       try {
         // Use command pattern for unified SCXML updates
-        const { DeleteNodeCommand } = require('@/lib/commands');
-        const command = new DeleteNodeCommand(nodeIds);
+        const { DeleteNodeCommand, DeleteNoteCommand } = require('@/lib/commands');
+
+        // Notes and states live in different elements; route each to its command
+        const allIds = Array.isArray(nodeIds) ? nodeIds : [nodeIds];
+        const noteIds = allIds.filter((id) => isNoteId(id));
+        const stateIds = allIds.filter((id) => !isNoteId(id));
+
+        let content = scxmlContent;
+
+        if (stateIds.length > 0) {
+          const result = new DeleteNodeCommand(stateIds).execute(content);
+          if (!result.success) {
+            console.error('Failed to delete node:', result.error);
+            return;
+          }
+          content = result.newContent;
+        }
+
+        if (noteIds.length > 0) {
+          const result = new DeleteNoteCommand(noteIds).execute(content);
+          if (!result.success) {
+            console.error('Failed to delete note:', result.error);
+            return;
+          }
+          content = result.newContent;
+        }
+
+        if (content !== scxmlContent) {
+          onSCXMLChange(content, 'structure');
+          setActiveStates(new Set());
+        }
+      } catch (error) {
+        console.error('Failed to delete node:', error);
+      }
+    },
+    [scxmlContent, onSCXMLChange]
+  );
+
+  // ==================== NOTE HANDLERS ====================
+  const handleNoteTextChange = React.useCallback(
+    (noteId: string, newText: string) => {
+      if (!onSCXMLChange || !scxmlContent) return;
+
+      try {
+        const { UpdateNoteTextCommand } = require('@/lib/commands');
+        const command = new UpdateNoteTextCommand(noteId, newText);
 
         const result = command.execute(scxmlContent);
 
         if (result.success) {
-          onSCXMLChange(result.newContent, 'structure');
-          setActiveStates(new Set());
+          onSCXMLChange(result.newContent, 'property');
         } else {
-          console.error('Failed to delete node:', result.error);
+          console.error('Failed to update note text:', result.error);
         }
       } catch (error) {
-        console.error('Failed to delete node:', error);
+        console.error('Failed to update note text:', error);
       }
     },
     [scxmlContent, onSCXMLChange]
@@ -727,9 +859,37 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
 
   const onConnect = useCallback(
     (params: Connection) => {
+      let preParsedDoc: SCXMLDocument | undefined;
+      if (params.source && params.target && parserRef.current && scxmlContent) {
+        const preCheck = parserRef.current.parse(scxmlContent);
+        if (preCheck.success && preCheck.data) {
+          preParsedDoc = preCheck.data;
+          const { blocked, reason } = wouldMergeDistinctGroups(
+            preCheck.data,
+            params.source,
+            params.target
+          );
+          if (blocked) {
+            setConnectionBlockedMessage(
+              reason || 'Cannot connect states that belong to different Initial State groups.'
+            );
+            return;
+          }
+
+          const slotCheck = checkNewConnectionSlotConflict(preCheck.data, params.source, params.target);
+          if (slotCheck.blocked) {
+            setConnectionBlockedMessage(slotCheck.reason || 'Cannot add this transition.');
+            return;
+          }
+        }
+      }
+
       // Set intelligent defaults: outgoing from bottom, incoming to top
       const sourceHandle = params.sourceHandle || 'bottom';
       const targetHandle = params.targetHandle || 'top';
+      const nextEventName = preParsedDoc
+        ? getNextTransitionEventName(preParsedDoc)
+        : 'event1';
 
       const newEdge: Edge = {
         id: `${params.source}-${params.target}-${Date.now()}`,
@@ -745,7 +905,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
         //   color: '#6b7280',
         // },
         data: {
-          event: 'event',
+          event: nextEventName,
           condition: undefined,
           actions: [],
           sourceHandle: sourceHandle,
@@ -771,7 +931,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
 
             if (sourceState) {
               const newTransition: TransitionElement = {
-                '@_event': 'event',
+                '@_event': nextEventName,
                 '@_target': params.target!,
               };
 
@@ -795,7 +955,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
               const handleCommand = new UpdateTransitionHandlesCommand(
                 params.source!,
                 params.target!,
-                'event', // The event we just created
+                nextEventName, // The event we just created
                 undefined, // No condition
                 sourceHandle,
                 targetHandle
@@ -823,6 +983,38 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
       }
     },
     [setEdges, scxmlContent, onSCXMLChange]
+  );
+
+  const isValidConnection = useCallback(
+    (connection: Connection | Edge) => {
+      if (!connection.source || !connection.target) return true;
+      if (!parserRef.current || !scxmlContent) return true;
+      const parseResult = parserRef.current.parse(scxmlContent);
+      if (!parseResult.success || !parseResult.data) return true;
+
+      const { blocked, reason } = wouldMergeDistinctGroups(
+        parseResult.data,
+        connection.source,
+        connection.target
+      );
+      if (blocked) {
+        // ReactFlow never calls onConnect for a connection isValidConnection
+        // rejects, so this is the only place a warning can be surfaced —
+        // fires live while dragging (on hover) and again on drop.
+        setConnectionBlockedMessage(
+          reason || 'Cannot connect states that belong to different Initial State groups.'
+        );
+        return false;
+      }
+
+      const slotCheck = checkNewConnectionSlotConflict(parseResult.data, connection.source, connection.target);
+      if (slotCheck.blocked) {
+        setConnectionBlockedMessage(slotCheck.reason || 'Cannot add this transition.');
+        return false;
+      }
+      return true;
+    },
+    [scxmlContent]
   );
 
   const onReconnect = useCallback(
@@ -867,7 +1059,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
   const clickCountRef = React.useRef<number>(0);
 
   const handleStateClick = useCallback(
-    (stateId: string, event?: React.MouseEvent) => {
+    (stateId: string, event?: React.MouseEvent, nodeType?: string) => {
       // Increment click count
       clickCountRef.current++;
 
@@ -907,8 +1099,9 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
                 newStates.add(stateId);
 
                 // Show actions editor for single selected state
+                // (notes are annotations - they select but have no actions panel)
                 const node = nodes.find((n) => n.id === stateId);
-                if (node && node.data) {
+                if (node && node.data && nodeType !== 'scxmlNote') {
                   const parseActions = (actions: string[]): ParsedActionRow[] => {
                     return actions.flatMap((a): ParsedActionRow[] => {
                       if (a.startsWith('assign|')) {
@@ -930,6 +1123,16 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
                     });
                   };
 
+                  let isInitialFlag = false;
+                  let canMarkFlag = true;
+                  if (parserRef.current && scxmlContent) {
+                    const parseResult = parserRef.current.parse(scxmlContent);
+                    if (parseResult.success && parseResult.data) {
+                      isInitialFlag = isMarkedInitial(parseResult.data, stateId);
+                      canMarkFlag = !wouldConflictIfMarkedInitial(parseResult.data, stateId).blocked;
+                    }
+                  }
+
                   setSelectedEdgeForEdit(null);
                   setSelectedTransitions(new Set());
                   setActivePanel('stateActions');
@@ -938,6 +1141,9 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
                     entryActions: parseActions(node.data.entryActions || []),
                     exitActions: parseActions(node.data.exitActions || []),
                     internalEventActions: node.data.internalEventActions || [],
+                    stateType: node.data.stateType,
+                    isInitial: isInitialFlag,
+                    canMarkInitial: canMarkFlag,
                   });
                 }
               }
@@ -951,7 +1157,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
         clickCountRef.current = 0;
       }, 250); // 250ms delay to distinguish single vs double click
     },
-    [nodes]
+    [nodes, scxmlContent]
   );
 
   // ==================== REACTFLOW NODE CHANGE HANDLER ====================
@@ -1500,6 +1706,21 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
           }
 
           const enhancedNodes = nodes.map((node) => {
+            // Notes keep the converter's position and fixed size; they only
+            // need delete and text-edit callbacks (no visual styles, resize
+            // or label wiring)
+            if (node.type === 'scxmlNote') {
+              return {
+                ...node,
+                data: {
+                  ...node.data,
+                  onDelete: () => handleNodeDelete(node.id),
+                  onTextChange: (newText: string) =>
+                    handleNoteTextChange(node.id, newText),
+                },
+              };
+            }
+
             const visualMetadata = metadataManager.getVisualMetadata(node.id);
             const nodeUpdate: any = { ...node };
 
@@ -1515,19 +1736,22 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
             const vizWidth = visualMetadata?.layout?.width;
             const vizHeight = visualMetadata?.layout?.height;
 
-            // If this node became initial after it was sized, the stored width may be
-            // too narrow for the "Initial" badge — expand to the minimum required.
-            const effectiveVizWidth =
-              nodeUpdate.data?.isInitial && vizWidth
-                ? Math.max(
-                    vizWidth,
-                    nodeDimensionCalculator.calculateWidth(
-                      node.id,
-                      nodeUpdate.data?.stateType || 'simple',
-                      true
-                    )
+            // The stored width can go stale for reasons other than resizing
+            // (renaming to a longer id, adding the "Initial" badge), leaving
+            // it too narrow for what's now rendered inside — never let it
+            // shrink content below its calculated minimum; only ever widen
+            // up from the stored value, so an intentional manual widening
+            // (NodeResizer) isn't clobbered back down to the minimum.
+            const effectiveVizWidth = vizWidth
+              ? Math.max(
+                  vizWidth,
+                  nodeDimensionCalculator.calculateWidth(
+                    node.id,
+                    nodeUpdate.data?.stateType || 'simple',
+                    Boolean(nodeUpdate.data?.isInitial)
                   )
-                : vizWidth;
+                )
+              : vizWidth;
 
             // Set dimensions at multiple levels for React Flow compatibility
             nodeUpdate.width =
@@ -1594,9 +1818,20 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
             return nodeUpdate;
           });
 
+          // Group by the physical pair of connection points (node+handle), not by
+          // direction, so the curvature/offset fan-out below applies whenever two edges
+          // share the same two anchor points — including an A→B / B→A pair that landed
+          // on the same mirrored handle slot — not just literal duplicate (source,
+          // target, sourceHandle, targetHandle) tuples. Edges distributed onto genuinely
+          // different sides during handle assignment won't share a key and are left alone.
+          const edgeSlotKey = (edge: Edge) =>
+            [`${edge.source}:${edge.sourceHandle}`, `${edge.target}:${edge.targetHandle}`]
+              .sort()
+              .join('|');
+
           const edgeGroups = new Map<string, any[]>();
           edges.forEach((edge) => {
-            const key = `${edge.source}-${edge.target}`;
+            const key = edgeSlotKey(edge);
             if (!edgeGroups.has(key)) {
               edgeGroups.set(key, []);
             }
@@ -1606,7 +1841,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
 
           const edgesWithMarkers = edges.map((edge) => {
             const edgeMetadata = metadataManager.getVisualMetadata(edge.id);
-            const edgeKey = `${edge.source}-${edge.target}`;
+            const edgeKey = edgeSlotKey(edge);
             const parallelEdges = edgeGroups.get(edgeKey) || [];
             const edgeIndex = parallelEdges.findIndex((e) => e.id === edge.id);
             const hasParallelEdges = parallelEdges.length > 1;
@@ -1630,13 +1865,21 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
                 offset = (edgeIndex - (parallelEdges.length - 1) / 2) * 60;
               }
 
-              const labelOffsetY =
-                (edgeIndex - (parallelEdges.length - 1) / 2) * 25;
+              // The path bows perpendicular to its connection axis, so the label needs
+              // to separate along that same perpendicular axis: a vertical connection
+              // (top/bottom handles) bows left/right, so the label must offset in X;
+              // a horizontal connection (left/right handles) bows up/down, so it must
+              // offset in Y.
+              const labelSpread = (edgeIndex - (parallelEdges.length - 1) / 2) * 25;
+              const isVerticalConnection =
+                edge.sourceHandle === 'top' || edge.sourceHandle === 'bottom';
+
               pathOptions = {
                 offset,
                 borderRadius: 20 + edgeIndex * 10,
                 curvature: 0.25 + edgeIndex * 0.1,
-                labelOffsetY,
+                labelOffsetX: isVerticalConnection ? labelSpread : 0,
+                labelOffsetY: isVerticalConnection ? 0 : labelSpread,
               };
             }
 
@@ -1675,6 +1918,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
                 fullLabel,
                 displayEvent,
                 offset: pathOptions.offset,
+                labelOffsetX: pathOptions.labelOffsetX,
                 labelOffsetY: pathOptions.labelOffsetY,
                 onWaypointDrag: handleWaypointDrag,
                 onWaypointDragEnd: handleWaypointDragEnd,
@@ -1785,6 +2029,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
     handleNodeStateTypeChange,
     handleNodeDelete,
     handleNodeResize,
+    handleNoteTextChange,
   ]);
 
   // ==================== HIERARCHY NAVIGATION ====================
@@ -1972,6 +2217,59 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
     fitView,
   ]);
 
+  const handleAddNote = React.useCallback(() => {
+    if (!onSCXMLChange || !scxmlContent) {
+      console.error('Cannot add note: SCXML not available');
+      return;
+    }
+
+    try {
+      const noteId = `${VISUAL_METADATA_CONSTANTS.NOTE.ID_PREFIX}${uuidv4().slice(0, 8)}`;
+
+      // Place to the right of nodes already visible at the current
+      // hierarchy level (root, or whichever state we've navigated into).
+      // `nodes` only ever holds the currently displayed level's nodes.
+      let x = 100;
+      let y = 100;
+      if (nodes.length > 0) {
+        const maxX = Math.max(
+          ...nodes.map((n) => n.position.x + (n.width || 160))
+        );
+        x = maxX + 100;
+      }
+
+      const { AddNoteCommand } = require('@/lib/commands');
+      // currentParentId is set when the user has drilled into a state; the
+      // note is stored as a child of that state so it only appears there.
+      const command = new AddNoteCommand(
+        noteId,
+        x,
+        y,
+        '',
+        currentParentId || undefined
+      );
+      const result = command.execute(scxmlContent);
+
+      if (result.success) {
+        onSCXMLChange(result.newContent, 'structure');
+
+        setTimeout(() => {
+          fitView({
+            padding: 0.3,
+            includeHiddenNodes: false,
+            minZoom: 0.5,
+            maxZoom: 2,
+            duration: 600,
+          });
+        }, 200);
+      } else {
+        console.error('Failed to add note:', result.error);
+      }
+    } catch (error) {
+      console.error('Failed to add note:', error);
+    }
+  }, [scxmlContent, onSCXMLChange, nodes, fitView, currentParentId]);
+
   // ==================== NODE ENHANCEMENTS ====================
   const nodeEnhancements = React.useMemo(() => {
     const enhancements = new Map();
@@ -2000,6 +2298,7 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
           onStateTypeChange: node.data?.onStateTypeChange,
           onActionsChange: node.data?.onActionsChange,
           onDelete: node.data?.onDelete,
+          onTextChange: node.data?.onTextChange,
         },
         style: {
           ...node.style,
@@ -2108,6 +2407,16 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
           focusable: true,
         }));
         setEdges(selectableEdges);
+
+        // Node dimensions can change as a side effect of a full re-parse
+        // (e.g. the "Initial" badge resizing a node, or a label edit
+        // changing its calculated width) without going through the
+        // interactive NodeResizer drag path — the only case ReactFlow
+        // automatically re-measures handle positions for. Without this,
+        // edges render against stale handle coordinates and visually
+        // disconnect from the node. Flag it for the effect below, which
+        // fires once this nodes update has actually committed and painted.
+        pendingNodeInternalsUpdateRef.current = true;
       }
     }
   }, [
@@ -2118,6 +2427,15 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
     setEdges,
     isUpdatingFromHistory,
   ]);
+
+  // Runs strictly after the `nodes` state update above has committed and
+  // React has painted the new (possibly resized) node — see the flag's
+  // comment at its declaration for why this doesn't run on every drag frame.
+  React.useEffect(() => {
+    if (!pendingNodeInternalsUpdateRef.current) return;
+    pendingNodeInternalsUpdateRef.current = false;
+    nodes.forEach((node) => updateNodeInternals(node.id));
+  }, [nodes, updateNodeInternals]);
 
   // Sync nodes with hierarchy navigation changes
   // This effect preserves node positions during hierarchy navigation,
@@ -2259,19 +2577,25 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
           )}
         </div>
 
-        <div className='flex-1'>
+        <div className='flex-1 relative'>
           <ReactFlow
             nodes={nodes}
             edges={displayFilteredEdges}
             onNodesChange={handleNodesChange}
             onEdgesChange={handleEdgesChange}
             onConnect={onConnect}
+            isValidConnection={isValidConnection}
             onReconnect={onReconnect}
-            onNodeClick={(event, node) => handleStateClick(node.id, event)}
+            onNodeClick={(event, node) =>
+              handleStateClick(node.id, event, node.type)
+            }
             onNodeDoubleClick={(event, node) => {
               event.stopPropagation();
               const nodeElement = nodes.find((n) => n.id === node.id);
-              if (nodeElement?.data?.onLabelChange) {
+              if (
+                nodeElement?.data?.onLabelChange ||
+                nodeElement?.type === 'scxmlNote'
+              ) {
                 setNodes((nds) =>
                   nds.map((n) => {
                     if (n.id === node.id) {
@@ -2377,6 +2701,14 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
               >
                 S
               </ControlButton>
+              <ControlButton
+                onClick={handleAddNote}
+                title='Add Note'
+                aria-label='Add Note'
+                className='text-muted hover:text-default'
+              >
+                N
+              </ControlButton>
             </Controls>
             <MiniMap
               position='bottom-right'
@@ -2387,6 +2719,10 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
               className='bg-white/90 border border-slate-200 rounded-lg shadow-sm'
             />
           </ReactFlow>
+          <InitialGroupConflictBanner
+            message={connectionBlockedMessage}
+            onDismiss={() => setConnectionBlockedMessage(null)}
+          />
         </div>
       </div>
 
@@ -2425,6 +2761,14 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
         exitActions={selectedStateForActions?.exitActions ?? []}
         internalEventActions={selectedStateForActions?.internalEventActions ?? []}
         scxmlContent={scxmlContent}
+        stateType={selectedStateForActions?.stateType ?? 'simple'}
+        isInitial={selectedStateForActions?.isInitial ?? false}
+        canMarkInitial={selectedStateForActions?.canMarkInitial ?? true}
+        onToggleInitial={() => {
+          if (selectedStateForActions) {
+            handleToggleInitialState(selectedStateForActions.id);
+          }
+        }}
         onApply={(entryActions, exitActions) => {
           if (selectedStateForActions) {
             handleNodeActionsChange(

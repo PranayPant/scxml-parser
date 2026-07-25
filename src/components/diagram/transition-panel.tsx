@@ -16,6 +16,7 @@ type Suggestion = { label: string; kind: 'channel' | 'event' | 'variable' | 'new
 
 const OPERATORS = ['==', '!=', '>=', '<=', '>', '<', '&&', '||'];
 const OPERATOR_SET = new Set([...OPERATORS, '!']);
+const MAX_TEXTAREA_HEIGHT = 200;
 
 export interface TransitionApplyArgs {
   newValue: string;
@@ -26,6 +27,8 @@ export interface TransitionApplyArgs {
   originalCancelSendId: string | undefined;
 }
 
+export type TransitionApplyResult = { blocked: boolean; reason?: string } | void;
+
 interface TransitionPanelProps {
   edgeId: string;
   source: string;
@@ -35,7 +38,7 @@ interface TransitionPanelProps {
   scxmlContent: string;
   entryActions?: string[];
   exitActions?: string[];
-  onApply: (args: TransitionApplyArgs) => void;
+  onApply: (args: TransitionApplyArgs) => TransitionApplyResult;
   onNewChannel?: (
     channelName: string,
     source: string,
@@ -84,6 +87,7 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
   })();
 
   const [selectionMode, setSelectionMode] = React.useState<'undecided' | 'event' | 'cond'>(initSelectionMode);
+  const [applyError, setApplyError] = React.useState<string | null>(null);
   const [rawValue, setRawValue] = React.useState(initRawValue);
   const [activeIndex, setActiveIndex] = React.useState(-1);
   const [isOpen, setIsOpen] = React.useState(false);
@@ -124,7 +128,12 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
     if (rawValue.trimStart().startsWith('after')) return [];
 
     if (selectionMode === 'event') {
-      const prefix = rawValue.toLowerCase();
+      // Merged transitions carry a comma-separated event list; only match/suggest against
+      // the last (currently-being-typed) segment, not the whole field.
+      const endsWithSeparator = /,\s*$/.test(rawValue);
+      const segments = rawValue.split(',');
+      const lastSegment = endsWithSeparator ? '' : (segments[segments.length - 1] ?? '').trim();
+      const prefix = lastSegment.toLowerCase();
       return eventNames
         .filter((n) => n.toLowerCase().includes(prefix))
         .map((n) => ({ label: n, kind: 'event' as const }));
@@ -161,12 +170,25 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
     return tokens.join(' ');
   };
 
+  // Merged transitions carry a comma-separated event list. Appends a new event after a
+  // trailing comma, or replaces the segment currently being typed — never the whole field.
+  const buildEventValue = (label: string) => {
+    const endsWithSeparator = /,\s*$/.test(rawValue);
+    const parts = rawValue.split(',').map((p) => p.trim()).filter((p) => p !== '');
+    if (endsWithSeparator) return [...parts, label].join(', ');
+    if (parts.length === 0) return label;
+    parts[parts.length - 1] = label;
+    return parts.join(', ');
+  };
+
   const acceptSuggestion = (s: Suggestion) => {
     if (selectionMode === 'undecided') {
       setSelectionMode(s.kind === 'event' ? 'event' : 'cond');
       setRawValue(s.label);
     } else if (selectionMode === 'cond') {
       setRawValue(buildCondValue(s.label));
+    } else if (selectionMode === 'event') {
+      setRawValue(buildEventValue(s.label));
     } else {
       setRawValue(s.label);
     }
@@ -188,7 +210,7 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
         ?? appliedTimeEventRef.current;
       const eventName = existingName ?? generateTimeEventName(source, scxmlContent);
       appliedTimeEventRef.current = eventName;
-      onApply({
+      const timeResult = onApply({
         newValue: eventName,
         editingField: 'event',
         delay: timeParsed,
@@ -196,6 +218,7 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
         originalEventName: event,
         originalCancelSendId: initCancelId || undefined,
       });
+      setApplyError(timeResult && timeResult.blocked ? timeResult.reason ?? 'This change is not allowed.' : null);
       return;
     }
 
@@ -210,7 +233,7 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
       return;
     }
 
-    onApply({
+    const result = onApply({
       newValue: trimmed,
       editingField: resolvedField,
       delay: null,
@@ -218,9 +241,10 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
       originalEventName: event,
       originalCancelSendId: initCancelId || undefined,
     });
+    setApplyError(result && result.blocked ? result.reason ?? 'This change is not allowed.' : null);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const showSuggestions = isOpen && suggestions.length > 0;
     if (showSuggestions) {
       if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIndex((p) => p < suggestions.length - 1 ? p + 1 : 0); return; }
@@ -235,7 +259,8 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
       }
       if (e.key === 'Escape') { setIsOpen(false); setActiveIndex(-1); return; }
     }
-    if (e.key === 'Enter') { handleApply(); return; }
+    // Prevent inserting a newline — Enter always submits/accepts, never breaks the line.
+    if (e.key === 'Enter') { e.preventDefault(); handleApply(); return; }
     if (e.key === 'Escape') { onClose(); return; }
   };
 
@@ -251,6 +276,28 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
 
   const showSuggestions = isOpen && suggestions.length > 0;
   const showDropdown = showSuggestions || hintMessage !== null;
+
+  const displayValue = activeIndex >= 0 && suggestions[activeIndex]
+    ? editingField === 'cond' ? buildCondValue(suggestions[activeIndex].label)
+      : editingField === 'event' ? buildEventValue(suggestions[activeIndex].label)
+      : suggestions[activeIndex].label
+    : rawValue;
+
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+
+  // Auto-resize the textarea to fit its content, growing vertically up to a cap —
+  // beyond that it scrolls internally instead of pushing the Save/Cancel footer off-panel.
+  React.useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    // box-sizing: border-box means the height we set includes the border, but scrollHeight
+    // doesn't — without adding it back, content is always ~border-width short of fitting,
+    // leaving a permanent 1-2px overflow that keeps the scrollbar visible even for one line.
+    const { borderTopWidth, borderBottomWidth } = getComputedStyle(el);
+    const borderAdjustment = parseFloat(borderTopWidth) + parseFloat(borderBottomWidth);
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight + borderAdjustment, MAX_TEXTAREA_HEIGHT)}px`;
+  }, [displayValue]);
 
   const renderBadge = (s: Suggestion) => {
     if (s.kind === 'mapped-channel') {
@@ -287,23 +334,23 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
 
       <div className='px-3 py-2.5'>
         <div className='relative'>
-          <input
-            type='text'
-            value={activeIndex >= 0 && suggestions[activeIndex]
-              ? editingField === 'cond' ? buildCondValue(suggestions[activeIndex].label) : suggestions[activeIndex].label
-              : rawValue}
+          <textarea
+            ref={textareaRef}
+            rows={1}
+            value={displayValue}
             onChange={(e) => {
               const v = e.target.value;
               setRawValue(v);
               if (v === '') setSelectionMode('undecided');
               setIsOpen(true);
               setActiveIndex(-1);
+              setApplyError(null);
             }}
             onFocus={() => setIsOpen(true)}
             onBlur={() => { blurTimerRef.current = setTimeout(() => setIsOpen(false), 100); }}
             onKeyDown={handleKeyDown}
             placeholder={selectionMode === 'event' ? 'Enter event' : selectionMode === 'cond' ? 'Enter condition' : 'Search events, channels, or type "after Xs"...'}
-            className='w-full px-3 py-1.5 text-sm text-default bg-elevated border border-default rounded-md placeholder:text-dimmed focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent'
+            className='w-full px-3 py-1.5 text-sm text-default bg-elevated border border-default rounded-md placeholder:text-dimmed focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-none overflow-y-auto scrollbar-thin'
           />
           {showDropdown && (
             <div className='absolute top-full left-0 right-0 mt-1 z-50 bg-elevated border border-default rounded-md shadow-lg max-h-48 overflow-y-auto'>
@@ -326,6 +373,9 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
             </div>
           )}
         </div>
+        {applyError && (
+          <p className='mt-1.5 text-xs text-error'>{applyError}</p>
+        )}
       </div>
 
     </Panel>

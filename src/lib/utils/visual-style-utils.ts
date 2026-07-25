@@ -168,8 +168,14 @@ export function getAdditionalClasses(
     classes.push('shadow-lg', 'hover:shadow-xl');
   }
 
-  // Add transition classes
-  classes.push('transition-all', 'duration-300');
+  // Transition only the hover-polish properties (shadow/ring — both
+  // box-shadow under the hood — and the hover scale transform), not `all`:
+  // this node's width/height change as a data-driven resize (e.g. the
+  // "Initial" badge appearing), and animating those too means the DOM is
+  // still mid-transition (close to the old size) at the moment ReactFlow
+  // re-measures handle positions right after the change, so edges render
+  // against a stale anchor until the animation catches up.
+  classes.push('transition-[box-shadow,transform]', 'duration-300');
 
   return classes.join(' ');
 }

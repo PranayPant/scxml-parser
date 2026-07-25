@@ -3,6 +3,10 @@
 import React, { useCallback, useMemo, useRef } from 'react';
 import { HistoryManager } from '@/lib/history/history-manager';
 import { annotateLegacyConfTypes } from '@/lib/utils/datamodel-extractor';
+import {
+  mergeDuplicateTransitionsInDocument,
+  mergeDuplicateTransitionsByEventInDocument,
+} from '@/lib/utils/transition-merge-utils';
 import { DEFAULT_SCXML_TEMPLATE } from '@/lib/consts/default_scxml_template';
 import { useEditorStore } from '@/stores/editor-store';
 import { usePanelStore } from '@/stores/panel-store';
@@ -16,7 +20,11 @@ export function useFileOperations() {
 
   const handleFileLoad = useCallback(
     (loadedFileInfo: FileInfo) => {
-      const annotatedContent = annotateLegacyConfTypes(loadedFileInfo.content);
+      const annotatedContent = mergeDuplicateTransitionsInDocument(
+        mergeDuplicateTransitionsByEventInDocument(
+          annotateLegacyConfTypes(loadedFileInfo.content)
+        )
+      );
       const fileInfo: FileInfo = { ...loadedFileInfo, content: annotatedContent };
       setFileInfo(fileInfo);
       historyManager.initialize(annotatedContent, `Loaded ${fileInfo.name}`);
@@ -75,7 +83,11 @@ export function useFileOperations() {
       reader.onload = (e) => {
         const fileContent = e.target?.result as string;
         if (fileContent) {
-          const annotatedContent = annotateLegacyConfTypes(fileContent);
+          const annotatedContent = mergeDuplicateTransitionsInDocument(
+            mergeDuplicateTransitionsByEventInDocument(
+              annotateLegacyConfTypes(fileContent)
+            )
+          );
           const uploadedFileInfo: FileInfo = {
             name: file.name,
             size: file.size,

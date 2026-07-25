@@ -1,3 +1,5 @@
+import { measureLabelWidth } from './measure-label-width';
+
 /**
  * NodeDimensionCalculator - Calculates width and height for state nodes
  *
@@ -35,8 +37,11 @@ export class NodeDimensionCalculator {
       ? 200  // Minimum for container states
       : 160; // Minimum for simple/final states
 
-    // Calculate based on label length (8px per character)
-    const calculatedWidth = label.length * 8 + basePadding;
+    // Real measured text width when a layout engine is available; a rough
+    // per-character estimate otherwise (see measureLabelWidth's doc comment
+    // for when/why it returns null — plain-Node tests, jsdom).
+    const textWidth = measureLabelWidth(label) ?? label.length * 8;
+    const calculatedWidth = textWidth + basePadding;
 
     return Math.max(minWidth, calculatedWidth);
   }
@@ -132,12 +137,14 @@ export class NodeDimensionCalculator {
     const label = node.data?.label || node.id || '';
     const stateType = this.getStateType(node.data);
     const actions = this.countActions(node.data);
+    const isInitial = Boolean(node.data?.isInitial);
 
     return this.calculateDimensions(
       label,
       stateType,
       actions.onentry,
-      actions.onexit
+      actions.onexit,
+      isInitial
     );
   }
 }

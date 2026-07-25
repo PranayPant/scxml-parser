@@ -7,7 +7,7 @@ import { EVENT_FALLBACK_VALUE } from '@/lib/utils/common-utils';
 import { useEditorStore } from '@/stores/editor-store';
 import { usePanelStore } from '@/stores/panel-store';
 import { useHostAPIStore } from '@/stores/host-api-store';
-import type { ChannelInfo, ChannelMapping, ConfigValue, EventEntry, ScxmlEditorAPI } from '@/types/host-api';
+import type { ChannelInfo, ChannelMapping, ConfigOverride, ConfigValue, EventEntry, ScxmlEditorAPI } from '@/types/host-api';
 
 export function useHostAPIBridge() {
   const { setContent, setErrors, navigateToRoot } = useEditorStore();
@@ -49,6 +49,7 @@ export function useHostAPIBridge() {
       },
       getScxml: () => contentRef.current,
       getConfigValues: () => configValuesRef.current,
+      setConfigValues: (values: ConfigOverride[]) => useHostAPIStore.getState().setConfigOverrides(values),
       registerCommand,
       showFeedback,
       setChannels: (channels: ChannelInfo[]) => useHostAPIStore.getState().setChannels(channels),
