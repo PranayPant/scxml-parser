@@ -10,6 +10,11 @@ import React, {
 import Editor from '@monaco-editor/react';
 import type { ValidationError } from '@/types/common';
 import { ensureMonacoConfigured } from '@/lib/monaco/monaco-setup';
+import { isWholeDocumentPasteRange } from '@/lib/utils/paste-detection';
+import {
+  mergeDuplicateTransitionsInDocument,
+  mergeDuplicateTransitionsByEventInDocument,
+} from '@/lib/utils/transition-merge-utils';
 
 // Module-level guard: Monaco's language registry is a page-level singleton.
 // Registering the completion provider more than once causes duplicate suggestions.
@@ -47,6 +52,7 @@ export const XMLEditor = forwardRef<XMLEditorRef, XMLEditorProps>(
     const editorRef = useRef<
       import('monaco-editor').editor.IStandaloneCodeEditor | null
     >(null);
+    const containerRef = useRef<HTMLDivElement | null>(null);
 
     const [monacoReady, setMonacoReady] = useState(false);
 
@@ -128,6 +134,65 @@ export const XMLEditor = forwardRef<XMLEditorRef, XMLEditorProps>(
 
       // Move cursor
       editor.setPosition({ lineNumber, column: 1 });
+
+      // When a paste replaces the whole document (select-all + paste a new SCXML doc, or
+      // pasting into an empty editor), apply the same duplicate-transition normalization
+      // that file upload already gets, so pasting a whole file behaves identically to
+      // loading it. Snippet pastes into existing content are left untouched.
+      //
+      // This intercepts the native 'paste' DOM event in the capture phase — BEFORE
+      // Monaco's own paste handling — rather than reacting after the fact via
+      // editor.onDidPaste. Reacting afterward would apply the normalization as a second,
+      // separate edit on top of Monaco's own paste edit, which becomes its own entry in
+      // Monaco's native undo stack (the stack that Ctrl+Z actually uses while the editor
+      // has focus, ahead of this app's own history — see undo-redo-controls.tsx's
+      // window-level keydown listener, which never even sees the keystroke in that case).
+      // That would force the user to press Ctrl+Z twice to fully undo a normalized paste.
+      // Preventing Monaco's default handling and applying the normalized text ourselves,
+      // once, keeps it to a single undo step either way.
+      const handleNativePaste = (event: ClipboardEvent) => {
+        const model = editor.getModel();
+        const selection = editor.getSelection();
+        if (!model || !selection) return;
+
+        const lastLine = model.getLineCount();
+        const isWholeDocument = isWholeDocumentPasteRange({
+          rangeStartLineNumber: selection.startLineNumber,
+          rangeStartColumn: selection.startColumn,
+          rangeEndLineNumber: selection.endLineNumber,
+          rangeEndColumn: selection.endColumn,
+          modelLineCount: lastLine,
+          modelLastLineMaxColumn: model.getLineMaxColumn(lastLine),
+        });
+        if (!isWholeDocument) return;
+
+        const pastedText = event.clipboardData?.getData('text/plain');
+        if (pastedText == null) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        const normalized = mergeDuplicateTransitionsInDocument(
+          mergeDuplicateTransitionsByEventInDocument(pastedText)
+        );
+
+        editor.executeEdits('scxml-paste-normalize', [
+          { range: model.getFullModelRange(), text: normalized },
+        ]);
+        editor.pushUndoStop();
+      };
+
+      // Attached to our own wrapper div, not editor.getDomNode() — Monaco registers its
+      // own capture-phase paste listener directly on its own container during setup
+      // (before this onMount callback runs), and same-node listeners fire in registration
+      // order, so attaching here would lose that race and never run. The wrapper div is a
+      // genuine ancestor Monaco never touches, so parent-before-child capture ordering
+      // guarantees this listener runs first regardless of registration order.
+      const container = containerRef.current;
+      container?.addEventListener('paste', handleNativePaste, true);
+      editor.onDidDispose(() => {
+        container?.removeEventListener('paste', handleNativePaste, true);
+      });
       if (typeof window !== 'undefined') {
         import('monaco-editor').then(async (monaco) => {
           try {
@@ -232,7 +297,7 @@ export const XMLEditor = forwardRef<XMLEditorRef, XMLEditorProps>(
     }
 
     return (
-      <div className='border rounded-lg overflow-hidden h-full'>
+      <div ref={containerRef} className='border rounded-lg overflow-hidden h-full'>
         <Editor
           height={height}
           language='xml'
