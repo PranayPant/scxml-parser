@@ -65,6 +65,45 @@ export function isTimeEventName(name: string): boolean {
 }
 
 /**
+ * Finds the single time-event token inside a possibly comma-merged `@_event` value
+ * (event-merge can combine a time event with a plain event sharing the same
+ * target/cond/actions). Returns undefined if no token matches the time-event pattern.
+ */
+export function findTimeEventToken(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  return value
+    .split(',')
+    .map((t) => t.trim())
+    .find((t) => isTimeEventName(t));
+}
+
+/**
+ * Resolves a possibly comma-merged `@_event` value into its display form, replacing
+ * exactly the token(s) that follow the time-event naming pattern with their "after X"
+ * reconstruction. `findSendAction` looks up the `send|{token}|{delayType}|{delayValue}`
+ * entry-action string for a given token; a token with no match is left as-is.
+ * Returns the original value unchanged if no token resolved to a time event.
+ */
+export function resolveTimeEventDisplay(
+  value: string,
+  findSendAction: (token: string) => string | undefined
+): string {
+  const tokens = value.split(',').map((t) => t.trim()).filter(Boolean);
+  let resolvedAny = false;
+  const resolved = tokens.map((token) => {
+    if (!isTimeEventName(token)) return token;
+    const sendStr = findSendAction(token);
+    if (!sendStr) return token;
+    const parts = sendStr.split('|');
+    const dt = (parts[2] as 'delay' | 'delayexpr' | undefined) ?? 'delay';
+    const dv = parts.slice(3).join('|');
+    resolvedAny = true;
+    return formatAfterSyntax(dt, dv);
+  });
+  return resolvedAny ? resolved.join(', ') : value;
+}
+
+/**
  * Generate the next available time-event name for a source state.
  * Scans the SCXML string for existing {sourceId}_t_{N}_timeEvent_ occurrences
  * and uses max(N)+1 (starting from 0).

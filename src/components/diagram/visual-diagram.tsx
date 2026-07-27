@@ -61,7 +61,7 @@ import { TransitionPanel, type TransitionApplyArgs, type TransitionApplyResult }
 import { InitialGroupConflictBanner } from './initial-group-conflict-banner';
 import { useIsDark } from '@/lib/theme/use-is-dark';
 import { usePanelStore } from '@/stores/panel-store';
-import { isTimeEventName, formatAfterSyntax } from '@/lib/utils/time-transition';
+import { findTimeEventToken, resolveTimeEventDisplay } from '@/lib/utils/time-transition';
 import {
   wouldMergeDistinctGroups,
   isMarkedInitial,
@@ -395,14 +395,18 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
             const existingEntry: string[] = sourceNode.data.entryActions ?? [];
             const existingExit: string[] = sourceNode.data.exitActions ?? [];
 
-            // Remove send for original OR new event name, then add back if delay is set
+            // Remove send for the original OR new time-event sendId, then add back if delay is
+            // set. Keyed by cancelSendId/originalCancelSendId (the actual _t_ event name) rather
+            // than newValue/originalEventName, since those may be a comma-merged @_event list
+            // when the time event is merged with a plain event sharing target/cond/actions —
+            // delay and cancelSendId are always both-set or both-null together (TransitionApplyArgs).
             const newEntry = [
               ...existingEntry.filter((a) => {
-                if (newValue && a.startsWith(`send|${newValue}|`)) return false;
-                if (originalEventName && a.startsWith(`send|${originalEventName}|`)) return false;
+                if (cancelSendId && a.startsWith(`send|${cancelSendId}|`)) return false;
+                if (originalCancelSendId && a.startsWith(`send|${originalCancelSendId}|`)) return false;
                 return true;
               }),
-              ...(delay ? [`send|${newValue}|${delay.type}|${delay.value}`] : []),
+              ...(delay && cancelSendId ? [`send|${cancelSendId}|${delay.type}|${delay.value}`] : []),
             ];
 
             // Remove old cancel by original sendId and by new sendId, then add back if set
@@ -819,12 +823,16 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
 
               let updatedSCXML = parserRef.current.serialize(scxmlDoc, true);
 
-              // Clean up send/cancel actions on the source state for deleted _t_ time-transition edges
+              // Clean up send/cancel actions on the source state for deleted _t_ time-transition edges.
+              // The edge's event may be a comma-merged list (a time event merged with a plain event
+              // sharing the same target/cond/actions), so the actual send/cancel key is extracted
+              // from within it rather than assumed to be the whole event string.
               for (const change of deleteChanges) {
                 const deletedEdge = edges.find((e) => e.id === change.id);
-                if (!deletedEdge?.data?.event || !isTimeEventName(deletedEdge.data.event)) continue;
+                if (!deletedEdge) continue;
+                const eventName = findTimeEventToken(deletedEdge.data?.event);
+                if (!eventName) continue;
 
-                const eventName = deletedEdge.data.event as string;
                 const sourceNode = nodes.find((n) => n.id === deletedEdge.source);
                 if (!sourceNode) continue;
 
@@ -1884,19 +1892,19 @@ const VisualDiagramInner: React.FC<VisualDiagramProps> = ({
             }
 
             // For time-transition edges, reconstruct the "after X" display string
-            // from the source node's send action so the label shows "after 2s" not the raw event name
+            // from the source node's send action so the label shows "after 2s" not the raw event name.
+            // edgeEventName may be a comma-merged list (event-merge combines a time event with a
+            // plain event sharing the same target/cond/actions), so each token is resolved on its
+            // own rather than matching the whole string against a single send action.
             const edgeEventName = edge.data?.event;
             const displayEvent = (() => {
-              if (!edgeEventName || !isTimeEventName(edgeEventName)) return undefined;
+              if (!edgeEventName) return undefined;
               const sourceNode = nodes.find((n) => n.id === edge.source);
-              const sendAction = (sourceNode?.data.entryActions ?? []).find((a: string) =>
-                a.startsWith(`send|${edgeEventName}|`)
+              const entryActions: string[] = sourceNode?.data.entryActions ?? [];
+              const resolved = resolveTimeEventDisplay(edgeEventName, (token) =>
+                entryActions.find((a) => a.startsWith(`send|${token}|`))
               );
-              if (!sendAction) return undefined;
-              const parts = sendAction.split('|');
-              const dt = (parts[2] as 'delay' | 'delayexpr' | undefined) ?? 'delay';
-              const dv = parts.slice(3).join('|');
-              return formatAfterSyntax(dt, dv);
+              return resolved === edgeEventName ? undefined : resolved;
             })();
 
             const fullLabel = [

@@ -7,9 +7,10 @@ import { BADGE_COLORS, getVariableType } from '@/lib';
 import { Panel } from '@/components/ui/primitives/panel';
 import {
   parseAfterSyntax,
-  formatAfterSyntax,
   isTimeEventName,
   generateTimeEventName,
+  findTimeEventToken,
+  resolveTimeEventDisplay,
 } from '@/lib/utils/time-transition';
 
 type Suggestion = { label: string; kind: 'channel' | 'event' | 'variable' | 'new-channel' | 'mapped-channel' | 'operator' };
@@ -65,22 +66,21 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
 }) => {
   // ── event/cond search state ──
   // For time events the stored event name (e.g. Idle_t_0_timeEvent_0) is invisible to the user;
-  // we reconstruct the "after X" display string from the source state's send action.
+  // we reconstruct the "after X" display string from the source state's send action. event may
+  // be a comma-merged list (event-merge can pair a time event with a plain event sharing the
+  // same target/cond/actions), so each token is resolved independently.
   const initRawValue = (() => {
-    if (event && isTimeEventName(event)) {
-      const sendStr = (entryActions ?? []).find((a) => a.startsWith(`send|${event}|`));
-      if (sendStr) {
-        const parts = sendStr.split('|');
-        const dt = (parts[2] as 'delay' | 'delayexpr' | undefined) ?? 'delay';
-        const dv = parts.slice(3).join('|');
-        return formatAfterSyntax(dt, dv);
-      }
-    }
-    return event ?? cond ?? '';
+    if (!event) return cond ?? '';
+    return resolveTimeEventDisplay(event, (token) =>
+      (entryActions ?? []).find((a) => a.startsWith(`send|${token}|`))
+    );
   })();
 
+  // Pure single time-transition (no comma) keeps the dedicated "after X" flow (initSelectionMode
+  // 'undecided'); a merged list containing a time-event token alongside other events is edited
+  // as a plain comma event list instead, since its raw text already shows "after X, other-event".
   const initSelectionMode = (() => {
-    if (event && isTimeEventName(event)) return 'undecided' as const; // shown as "after X"
+    if (event && !event.includes(',') && isTimeEventName(event)) return 'undecided' as const;
     if (event) return 'event' as const;
     if (cond) return 'cond' as const;
     return 'undecided' as const;
@@ -99,8 +99,8 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
   // ── originalCancelSendId — only track the cancel that belongs to THIS transition's event.
   // Searching for any cancel| in exitActions is wrong when a source state has multiple time
   // transitions: it would grab a sibling's cancel and incorrectly remove it on save.
-  // For the after-X flow the cancel sendid always equals the event name.
-  const initCancelId = event && isTimeEventName(event) ? event : '';
+  // For the after-X flow the cancel sendid always equals the (possibly merged-out) time-event token.
+  const initCancelId = findTimeEventToken(event) ?? '';
 
   const editingField: 'event' | 'cond' = selectionMode === 'event' ? 'event' : 'cond';
 
@@ -206,8 +206,7 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
       // Preserve existing _t_ event name (prop), or the one we already generated this session,
       // or generate a fresh one. The ref prevents a rapid double-click from incrementing the
       // index a second time before the parent re-renders with the updated event prop.
-      const existingName = (event && isTimeEventName(event) ? event : null)
-        ?? appliedTimeEventRef.current;
+      const existingName = findTimeEventToken(event) ?? appliedTimeEventRef.current;
       const eventName = existingName ?? generateTimeEventName(source, scxmlContent);
       appliedTimeEventRef.current = eventName;
       const timeResult = onApply({
@@ -219,6 +218,38 @@ export const TransitionPanel: React.FC<TransitionPanelProps> = ({
         originalCancelSendId: initCancelId || undefined,
       });
       setApplyError(timeResult && timeResult.blocked ? timeResult.reason ?? 'This change is not allowed.' : null);
+      return;
+    }
+
+    // Merged event list containing exactly one "after X" segment alongside plain event(s) —
+    // event-merge can pair a time event with a plain event sharing target/cond/actions. The
+    // "after X" segment maps back onto the underlying _t_ event name; other segments pass through
+    // as literal event names, rejoined in place so the merged @_event list round-trips correctly.
+    const segments = trimmed.split(',').map((s) => s.trim()).filter(Boolean);
+    const afterMatches = segments
+      .map((s, index) => ({ index, parsed: parseAfterSyntax(s) }))
+      .filter((m): m is { index: number; parsed: { type: 'delay' | 'delayexpr'; value: string } } => m.parsed !== null);
+
+    if (segments.length > 1 && afterMatches.length === 1) {
+      const { index: afterIndex, parsed } = afterMatches[0];
+      const existingName = findTimeEventToken(event) ?? appliedTimeEventRef.current;
+      const eventName = existingName ?? generateTimeEventName(source, scxmlContent);
+      appliedTimeEventRef.current = eventName;
+      const newValue = segments.map((s, i) => (i === afterIndex ? eventName : s)).join(', ');
+      const timeResult = onApply({
+        newValue,
+        editingField: 'event',
+        delay: parsed,
+        cancelSendId: eventName,
+        originalEventName: event,
+        originalCancelSendId: initCancelId || undefined,
+      });
+      setApplyError(timeResult && timeResult.blocked ? timeResult.reason ?? 'This change is not allowed.' : null);
+      return;
+    }
+
+    if (segments.length > 1 && afterMatches.length > 1) {
+      setApplyError('Only one time transition ("after X") is allowed per merged event list.');
       return;
     }
 
