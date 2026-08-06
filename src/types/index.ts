@@ -1,4 +1,6 @@
-// Export all types from subdirectories
-export * from './scxml';
-export * from './common';
-export * from './api';
+/**
+ * Public type exports for @your-org/scxml-parser.
+ */
+export * from './ast';
+export * from './diagnostics';
+export * from './options';
