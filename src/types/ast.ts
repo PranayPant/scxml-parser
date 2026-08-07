@@ -5,6 +5,7 @@
  * and consumed by the validator and serializer. They are intentionally
  * UI-agnostic and map 1:1 to the W3C SCXML element vocabulary.
  */
+import type { CustomASTNode } from './extensibility';
 
 /**
  * Root of an SCXML document.
@@ -42,6 +43,8 @@ export interface SCXMLElement {
   datamodelChildren?: DataElement[];
   /** Raw unrecognized / extension metadata blocks. Always an array. */
   metadata: MetadataBlock[];
+  /** Registered custom (non-standard) child tags, when present. */
+  customChildren?: CustomASTNode[];
 }
 
 /**
@@ -98,6 +101,8 @@ export interface StateNode {
   onexit?: ExecutableContent[];
   /** Datamodel invocations. */
   invoke: InvokeElement[];
+  /** Registered custom (non-standard) child tags, when present. */
+  customChildren?: CustomASTNode[];
 }
 
 /**
@@ -126,6 +131,8 @@ export interface ParallelNode {
   onexit?: ExecutableContent[];
   /** Datamodel invocations. */
   invoke: InvokeElement[];
+  /** Registered custom (non-standard) child tags, when present. */
+  customChildren?: CustomASTNode[];
 }
 
 /**
@@ -168,6 +175,8 @@ export interface Transition {
   type?: 'internal' | 'external';
   /** Executable content run when the transition fires. */
   executable: ExecutableContent[];
+  /** Registered custom (non-standard) child tags, when present. */
+  customChildren?: CustomASTNode[];
 }
 
 /**

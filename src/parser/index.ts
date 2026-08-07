@@ -6,6 +6,7 @@
  * is fully UI-agnostic — it never touches the DOM, Monaco, or any store.
  */
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
+import { TagRegistry } from '../registry/TagRegistry';
 import type {
   ContentElement,
   DataElement,
@@ -28,6 +29,7 @@ import type {
   Transition,
 } from '../types/ast';
 import type { ParseResult, ValidationDiagnostic } from '../types/diagnostics';
+import type { CustomASTNode, CustomTagParseContext } from '../types/extensibility';
 
 /** The raw object-tree shapes emitted by fast-xml-parser. */
 type RawRecord = Record<string, unknown>;
@@ -169,6 +171,12 @@ function normalizeSCXMLElement(raw: RawRecord): SCXMLElement {
   // Preserve unrecognized namespace/extension blocks as metadata.
   element.metadata = extractMetadataBlocks(raw);
 
+  // Registered custom tags are routed to customChildren instead of metadata.
+  const customChildren = extractCustomChildren(raw, element);
+  if (customChildren.length > 0) {
+    element.customChildren = customChildren;
+  }
+
   return element;
 }
 
@@ -214,6 +222,11 @@ function normalizeStateNode(raw: RawRecord): StateNode {
     state.datamodel = extractDataElements(datamodelRaw as RawRecord);
   }
 
+  const customChildren = extractCustomChildren(raw, state);
+  if (customChildren.length > 0) {
+    state.customChildren = customChildren;
+  }
+
   return state;
 }
 
@@ -255,6 +268,11 @@ function normalizeParallelNode(raw: RawRecord): ParallelNode {
   const datamodelRaw = raw.datamodel;
   if (datamodelRaw) {
     parallel.datamodel = extractDataElements(datamodelRaw as RawRecord);
+  }
+
+  const customChildren = extractCustomChildren(raw, parallel);
+  if (customChildren.length > 0) {
+    parallel.customChildren = customChildren;
   }
 
   return parallel;
@@ -332,7 +350,69 @@ function normalizeTransition(raw: RawRecord): Transition {
   };
 
   transition.executable = extractTransitionExecutable(raw);
+  const customChildren = extractCustomChildren(raw, transition);
+  if (customChildren.length > 0) {
+    transition.customChildren = customChildren;
+  }
   return transition;
+}
+
+/**
+ * Extracts registered custom-tag children from a raw element and attaches
+ * them to the given parent AST node. Unknown tags that are not registered
+ * are skipped (they are ignored or preserved as metadata elsewhere).
+ */
+function extractCustomChildren(
+  raw: RawRecord,
+  parent: CustomTagParseContext['parentASTNode'],
+): CustomASTNode[] {
+  const customChildren: CustomASTNode[] = [];
+  for (const key of Object.keys(raw)) {
+    if (key.startsWith(ATTR_PREFIX) || key === TEXT_KEY) {
+      continue;
+    }
+    const values = readChildArray(raw, key);
+    for (const value of values) {
+      const node = buildCustomASTNode(key, value as RawRecord, parent);
+      if (node) {
+        customChildren.push(node);
+      }
+    }
+  }
+  return customChildren;
+}
+
+/**
+ * Builds a CustomASTNode for a registered tag, delegating to its `parse`
+ * hook. Returns undefined when the tag is not registered.
+ */
+function buildCustomASTNode(
+  tagName: string,
+  raw: RawRecord,
+  parentASTNode: CustomTagParseContext['parentASTNode'],
+): CustomASTNode | undefined {
+  const registry = TagRegistry.getInstance();
+  if (!registry.has(tagName)) {
+    return undefined;
+  }
+  const spec = registry.get(tagName)!;
+  const attributes: Record<string, string> = {};
+  for (const attrKey of Object.keys(raw)) {
+    if (attrKey.startsWith(ATTR_PREFIX)) {
+      attributes[attrKey.slice(2)] = String(raw[attrKey]);
+    }
+  }
+  const text = raw[TEXT_KEY];
+  const ctx: CustomTagParseContext = {
+    tagName: tagName.toLowerCase(),
+    attributes,
+    children: Object.keys(raw)
+      .filter((k) => !k.startsWith(ATTR_PREFIX) && k !== TEXT_KEY)
+      .flatMap((k) => readChildArray(raw, k)),
+    textContent: text !== undefined && text !== null ? String(text) : undefined,
+    parentASTNode,
+  };
+  return spec.parse(ctx);
 }
 
 /**
@@ -598,6 +678,10 @@ function extractMetadataBlocks(raw: RawRecord): MetadataBlock[] {
       'initial',
     ];
     if (knownChildren.includes(key)) {
+      continue;
+    }
+    // Registered custom tags are handled as customChildren, not metadata.
+    if (TagRegistry.getInstance().has(key)) {
       continue;
     }
     const values = readChildArray(raw, key);

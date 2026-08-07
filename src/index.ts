@@ -5,8 +5,11 @@
  * UI-agnostic: works in Node.js, browsers, CLIs, and host applications.
  */
 import { parseSCXML } from './parser';
+import { TagRegistry } from './registry/TagRegistry';
 import { serializeSCXML } from './serializer';
 import type {
+  CustomASTNode,
+  CustomTagSpec,
   ParseResult,
   PrintASTOptions,
   SCXMLDocument,
@@ -18,6 +21,7 @@ import { toMermaid } from './utils/mermaid';
 import { printAST } from './utils/printer';
 import { validateAST } from './validator';
 
+export { TagRegistry } from './registry/TagRegistry';
 export * from './types';
 export type { MermaidOptions } from './utils/mermaid';
 export { toMermaid } from './utils/mermaid';
@@ -52,5 +56,16 @@ export class SCXMLEngine {
   /** Renders an AST as a Mermaid state diagram for IDE/editor preview. */
   static toMermaid(doc: SCXMLDocument, options?: MermaidOptions): string {
     return toMermaid(doc, options);
+  }
+
+  /**
+   * Registers a custom (non-standard) tag spec so the parser, validator, and
+   * serializer handle it as a first-class extension.
+   *
+   * @param spec - The custom tag specification to register.
+   * @returns The registry for chaining.
+   */
+  static registerTag<T extends CustomASTNode = CustomASTNode>(spec: CustomTagSpec<T>): TagRegistry {
+    return TagRegistry.getInstance().register(spec);
   }
 }

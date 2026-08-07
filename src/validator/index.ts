@@ -5,8 +5,16 @@
  * returns a list of diagnostics. This module mirrors and generalizes the
  * W3C / authoring constraints with a stable diagnostic-code contract.
  */
-import type { InitialBlock, SCXMLDocument, Transition } from '../types/ast';
+import { TagRegistry } from '../registry/TagRegistry';
+import type {
+  InitialBlock,
+  SCXMLDocument,
+  SCXMLElement,
+  StateNode,
+  Transition,
+} from '../types/ast';
 import type { ValidationDiagnostic } from '../types/diagnostics';
+import type { CustomASTNode } from '../types/extensibility';
 import {
   buildStateHierarchy,
   collectAllStateIds,
@@ -35,6 +43,7 @@ export function validateAST(doc: SCXMLDocument): ValidationDiagnostic[] {
   validateTransitionTypes(doc, diagnostics);
   validateEventNames(doc, diagnostics);
   validateDuplicateDataIds(doc, diagnostics);
+  validateCustomChildren(doc, diagnostics);
 
   return diagnostics;
 }
@@ -242,4 +251,59 @@ function validateDuplicateDataIds(doc: SCXMLDocument, diagnostics: ValidationDia
       checkData(node.datamodel);
     }
   });
+}
+
+/**
+ * Validates registered custom-tag children attached to the root, states, and
+ * transitions. For each custom node it enforces the spec's `allowedParents`
+ * scope and runs the spec's custom `validate` hook.
+ */
+function validateCustomChildren(doc: SCXMLDocument, diagnostics: ValidationDiagnostic[]): void {
+  const root = doc.scxml;
+  if (root.customChildren) {
+    for (const custom of root.customChildren) {
+      applyCustomScope(custom, root, 'scxml', diagnostics);
+    }
+  }
+
+  walkStateNodes(doc, (stateLike) => {
+    if ('customChildren' in stateLike && stateLike.customChildren) {
+      for (const custom of stateLike.customChildren) {
+        applyCustomScope(custom, stateLike as StateNode, 'state', diagnostics);
+      }
+    }
+    const transitions = 'transitions' in stateLike ? stateLike.transitions : [];
+    for (const t of transitions) {
+      if (t.customChildren) {
+        for (const custom of t.customChildren) {
+          applyCustomScope(custom, t, 'transition', diagnostics);
+        }
+      }
+    }
+  });
+}
+
+/**
+ * Applies parent-scope and custom-hook validation to a single custom node.
+ */
+function applyCustomScope(
+  custom: CustomASTNode,
+  parent: SCXMLElement | StateNode | Transition,
+  parentTagName: string,
+  diagnostics: ValidationDiagnostic[],
+): void {
+  const spec = TagRegistry.getInstance().get(custom.tagName);
+  if (!spec) {
+    return;
+  }
+  if (spec.allowedParents && !spec.allowedParents.includes(parentTagName)) {
+    diagnostics.push({
+      severity: 'error',
+      code: 'ERR_CUSTOM_TAG_INVALID_PARENT',
+      message: `<${custom.tagName}> is not allowed inside <${parentTagName}>. Allowed parents: ${spec.allowedParents.join(', ')}`,
+    });
+  }
+  if (spec.validate) {
+    diagnostics.push(...spec.validate(custom, parent));
+  }
 }

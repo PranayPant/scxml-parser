@@ -5,6 +5,7 @@
  * pretty-printed and minified output, optional escaping, and lossless
  * round-tripping (AST -> XML -> AST).
  */
+import { TagRegistry } from '../registry/TagRegistry';
 import type {
   ContentElement,
   DataElement,
@@ -23,6 +24,7 @@ import type {
   StateNode,
   Transition,
 } from '../types/ast';
+import type { CustomASTNode } from '../types/extensibility';
 import type { SerializationOptions } from '../types/options';
 
 /** The set of XML reserved characters and their escapes. */
@@ -139,6 +141,11 @@ function renderSCXMLElement(el: SCXMLElement, ctx: SerializeContext, depth: numb
       children.push(renderMetadataBlock(block, ctx, depth + 1));
     }
   }
+  if (el.customChildren && el.customChildren.length > 0) {
+    for (const custom of el.customChildren) {
+      children.push(renderCustomASTNode(custom, ctx, depth + 1));
+    }
+  }
 
   return renderContainer('scxml', attrs, children, ctx, depth);
 }
@@ -186,6 +193,11 @@ function renderStateNode(state: StateNode, ctx: SerializeContext, depth: number)
   for (const invoke of state.invoke) {
     children.push(renderInvokeElement(invoke, ctx, depth + 1));
   }
+  if (state.customChildren && state.customChildren.length > 0) {
+    for (const custom of state.customChildren) {
+      children.push(renderCustomASTNode(custom, ctx, depth + 1));
+    }
+  }
 
   return renderContainer('state', attrs, children, ctx, depth);
 }
@@ -226,6 +238,11 @@ function renderParallelNode(parallel: ParallelNode, ctx: SerializeContext, depth
   }
   for (const invoke of parallel.invoke) {
     children.push(renderInvokeElement(invoke, ctx, depth + 1));
+  }
+  if (parallel.customChildren && parallel.customChildren.length > 0) {
+    for (const custom of parallel.customChildren) {
+      children.push(renderCustomASTNode(custom, ctx, depth + 1));
+    }
   }
 
   return renderContainer('parallel', attrs, children, ctx, depth);
@@ -283,9 +300,39 @@ function renderTransition(t: Transition, ctx: SerializeContext, depth: number): 
 
   if (t.executable && t.executable.length > 0) {
     const children = t.executable.map((e) => renderExecutableElement(e, ctx, depth + 1));
+    if (t.customChildren && t.customChildren.length > 0) {
+      for (const custom of t.customChildren) {
+        children.push(renderCustomASTNode(custom, ctx, depth + 1));
+      }
+    }
+    return renderContainer('transition', attrs, children, ctx, depth);
+  }
+  if (t.customChildren && t.customChildren.length > 0) {
+    const children = t.customChildren.map((c) => renderCustomASTNode(c, ctx, depth + 1));
     return renderContainer('transition', attrs, children, ctx, depth);
   }
   return renderSelfClosing('transition', attrs, ctx, depth);
+}
+
+/**
+ * Renders a custom (non-standard) AST node, delegating to its registered
+ * `serialize` hook or falling back to generic key/value XML formatting.
+ */
+function renderCustomASTNode(node: CustomASTNode, ctx: SerializeContext, depth: number): string {
+  const spec = TagRegistry.getInstance().get(node.tagName);
+  if (spec?.serialize) {
+    return spec.serialize(node, depth);
+  }
+
+  const attrs = Object.entries(node.attributes).map(([k, v]) => [k, v] as [string, string]);
+  if (node.textContent !== undefined) {
+    return (
+      renderOpenTag(node.tagName, attrs, ctx, depth) +
+      renderText(node.textContent, ctx) +
+      renderCloseTag(node.tagName, ctx, depth)
+    );
+  }
+  return renderSelfClosing(node.tagName, attrs, ctx, depth);
 }
 
 /**
