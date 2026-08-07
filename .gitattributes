@@ -1,0 +1,17 @@
+# Normalize line endings to LF and keep them LF on checkout.
+# The Biome config (`biome.json`) declares `lineEnding: "lf"`, so source
+# files must be LF in the working tree regardless of the host OS.
+# This file overrides any user-level `core.autocrlf` setting so checks
+# (e.g. the lefthook `biome check src tests` pre-push hook) pass everywhere.
+
+* text=auto eol=lf
+
+*.ts   text eol=lf
+*.mjs  text eol=lf
+*.cjs  text eol=lf
+*.js   text eol=lf
+*.json text eol=lf
+*.md   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.scxml text eol=lf
