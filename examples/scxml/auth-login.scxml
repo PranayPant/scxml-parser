@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  User authentication / login flow.
+
+  Demonstrates: nested atomic states, onentry/onexit executable content,
+  conditional guards (too many failed attempts), and a <history> pseudo-state
+  to return the user to the exact screen they left.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       version="1.0"
+       datamodel="ecmascript"
+       initial="Idle"
+       name="AuthFlow">
+
+  <datamodel>
+    <data id="username" expr="''" />
+    <data id="password" expr="''" />
+    <data id="failedAttempts" expr="0" />
+    <data id="maxAttempts" expr="3" />
+    <data id="isAuthenticated" expr="false" />
+  </datamodel>
+
+  <state id="Idle">
+    <transition event="START_LOGIN" target="Login" />
+  </state>
+
+  <state id="Login">
+    <initial>
+      <transition target="EnterCredentials" />
+    </initial>
+    <state id="EnterCredentials">
+      <onentry>
+        <log label="Auth" expr="'prompting for credentials'" />
+      </onentry>
+      <transition event="CREDENTIALS_ENTERED" target="Authenticating">
+        <assign location="username" expr="event.user" />
+        <assign location="password" expr="event.pass" />
+      </transition>
+      <transition event="CANCEL" target="Idle" />
+    </state>
+
+    <state id="Authenticating">
+      <onentry>
+        <log label="Auth" expr="'verifying credentials'" />
+      </onentry>
+      <transition event="AUTH_SUCCESS" target="Authenticated" cond="failedAttempts < maxAttempts">
+        <assign location="isAuthenticated" expr="true" />
+      </transition>
+      <transition event="AUTH_FAILURE" target="EnterCredentials" cond="failedAttempts + 1 < maxAttempts">
+        <assign location="failedAttempts" expr="failedAttempts + 1" />
+      </transition>
+      <transition event="AUTH_FAILURE" target="LockedOut" cond="failedAttempts + 1 >= maxAttempts">
+        <assign location="failedAttempts" expr="failedAttempts + 1" />
+      </transition>
+    </state>
+
+    <state id="Authenticated">
+      <!-- History: returns here (the deepest screen) after a brief lockout -->
+      <history id="loginHistory" />
+      <transition event="LOGOUT" target="Idle" />
+    </state>
+
+    <state id="LockedOut">
+      <onexit>
+        <log label="Auth" expr="'unlocking account'" />
+      </onexit>
+      <transition event="UNLOCK" target="loginHistory" />
+    </state>
+  </state>
+</scxml>

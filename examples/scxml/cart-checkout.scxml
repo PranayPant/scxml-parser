@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Online shopping cart checkout flow.
+
+  Demonstrates: parallel blocks (cart review and payment method run
+  independently), conditional transitions (discount validation), and the
+  history pseudo-state pattern.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       version="1.0"
+       datamodel="ecmascript"
+       initial="Checkout"
+       name="CartCheckout">
+
+  <datamodel>
+    <data id="cartSubtotal" expr="0" />
+    <data id="cartDiscount" expr="0" />
+    <data id="cartTotal" expr="0" />
+    <data id="paymentMethod" expr="''" />
+    <data id="isGuestCheckout" expr="false" />
+  </datamodel>
+
+  <!-- Parallel region: cart review + payment selection happen concurrently -->
+  <parallel id="Checkout">
+    <state id="ReviewCart">
+      <transition event="UPDATE_QTY" target="ReviewCart">
+        <assign location="cartSubtotal" expr="cartSubtotal + 10" />
+      </transition>
+      <transition event="APPLY_COUPON" cond="cartSubtotal > 50" target="ReviewCart">
+        <assign location="cartDiscount" expr="cartSubtotal * 0.1" />
+      </transition>
+      <transition event="SubtotalUpdated" target="ReviewCart">
+        <assign location="cartTotal" expr="cartSubtotal - cartDiscount" />
+      </transition>
+    </state>
+
+    <state id="SelectPayment">
+      <transition event="CHOOSE_CARD" target="SelectPayment">
+        <assign location="paymentMethod" expr="'card'" />
+      </transition>
+      <transition event="CHOOSE_PAYPAL" target="SelectPayment">
+        <assign location="paymentMethod" expr="'paypal'" />
+      </transition>
+      <transition event="CHOOSE_GUEST" target="SelectPayment">
+        <assign location="isGuestCheckout" expr="true" />
+      </transition>
+    </state>
+
+    <!-- Completion of both parallel regions -->
+    <transition event="CheckoutReady" target="OrderPlaced">
+      <assign location="cartTotal" expr="cartTotal" />
+    </transition>
+  </parallel>
+
+  <state id="OrderPlaced">
+    <onentry>
+      <log label="Checkout" expr="'order placed: $' + cartTotal" />
+    </onentry>
+    <transition event="CONFIRM" target="Done" />
+  </state>
+
+  <final id="Done" />
+</scxml>

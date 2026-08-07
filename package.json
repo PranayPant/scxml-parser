@@ -25,7 +25,15 @@
     "lint": "biome lint --write .",
     "lint:check": "biome lint .",
     "check": "biome check src tests",
-    "hooks:install": "lefthook install"
+    "hooks:install": "lefthook install",
+    "examples:ast": "node examples/ast-print.mjs",
+    "examples:ast:cart": "node examples/ast-print.mjs examples/scxml/cart-checkout.scxml",
+    "examples:ast:reservation": "node examples/ast-print.mjs examples/scxml/reservation.scxml",
+    "examples:ast:auth": "node examples/ast-print.mjs examples/scxml/auth-login.scxml",
+    "examples:mermaid": "node examples/ast-to-mermaid.mjs",
+    "examples:mermaid:cart": "node examples/ast-to-mermaid.mjs examples/scxml/cart-checkout.scxml",
+    "examples:mermaid:reservation": "node examples/ast-to-mermaid.mjs examples/scxml/reservation.scxml",
+    "examples:mermaid:auth": "node examples/ast-to-mermaid.mjs examples/scxml/auth-login.scxml"
   },
   "keywords": [
     "scxml",

@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Restaurant / hotel reservation booking flow.
+
+  Demonstrates: a sequential user journey (search -> select -> confirm ->
+  payment), the <initial> block for a nested entry point, and a
+  cancel/rework loop via a history-style transition back into a region.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       version="1.0"
+       datamodel="ecmascript"
+       initial="Search"
+       name="Reservation">
+
+  <datamodel>
+    <data id="searchCriteria" expr="{}" />
+    <data id="selectedSlot" expr="null" />
+    <data id="partySize" expr="2" />
+    <data id="confirmationCode" expr="''" />
+  </datamodel>
+
+  <state id="Search">
+    <onentry>
+      <log label="Reservation" expr="'searching available slots'" />
+    </onentry>
+    <transition event="SUBMIT_SEARCH" target="SelectSlot" cond="partySize >= 1">
+      <assign location="searchCriteria" expr="searchCriteria" />
+    </transition>
+    <transition event="CANCEL" target="Cancelled" />
+  </state>
+
+  <state id="SelectSlot">
+    <transition event="CHOOSE_SLOT" target="ConfirmDetails">
+      <assign location="selectedSlot" expr="event.data" />
+    </transition>
+    <transition event="BACK" target="Search" />
+  </state>
+
+  <state id="ConfirmDetails">
+    <onentry>
+      <log label="Reservation" expr="'confirming party of ' + partySize" />
+    </onentry>
+    <transition event="EDIT_DETAILS" target="SelectSlot" />
+    <transition event="CONFIRM" cond="selectedSlot != null" target="ProcessingPayment" />
+  </state>
+
+  <state id="ProcessingPayment">
+    <!-- Nested initial state demonstrates an entry block inside a region -->
+    <initial>
+      <transition target="AwaitingAuth" />
+    </initial>
+    <state id="AwaitingAuth">
+      <transition event="AUTH_OK" target="Authorized" />
+      <transition event="AUTH_FAIL" target="PaymentFailed" />
+    </state>
+    <state id="Authorized">
+      <onentry>
+        <assign location="confirmationCode" expr="'RES-' + Date.now()" />
+      </onentry>
+      <transition event="DONE" target="BookingConfirmed" />
+    </state>
+    <state id="PaymentFailed">
+      <transition event="RETRY_PAYMENT" target="AwaitingAuth" />
+      <transition event="CANCEL" target="Cancelled" />
+    </state>
+  </state>
+
+  <!-- Cancel/rework loop: a final state plus a cancel sink -->
+  <final id="BookingConfirmed">
+    <onentry>
+      <log label="Reservation" expr="'confirmed ' + confirmationCode" />
+    </onentry>
+  </final>
+
+  <final id="Cancelled" />
+</scxml>

@@ -1,4 +1,4 @@
-# @your-org/scxml-parser
+# scxml-parser
 
 Headless SCXML **parser**, **AST validator**, and **serializer** library.
 100% UI-agnostic — works in Node.js, browsers, CLIs, and any host
@@ -21,7 +21,7 @@ or published to npm.
 
 ```bash
 # From npm (once published)
-npm install @your-org/scxml-parser
+npm install scxml-parser
 
 # Directly from GitHub
 npm install github:PranayPant/web-scxml-editor
@@ -30,8 +30,8 @@ npm install github:PranayPant/web-scxml-editor
 ## Quick Start
 
 ```typescript
-import { SCXMLEngine } from "@your-org/scxml-parser";
-import type { SCXMLDocument } from "@your-org/scxml-parser";
+import { SCXMLEngine } from "scxml-parser";
+import type { SCXMLDocument } from "scxml-parser";
 
 // 1. Parse raw XML
 const result = SCXMLEngine.parse(rawXmlContent);
@@ -59,13 +59,22 @@ const finalXml = SCXMLEngine.serialize(ast, { pretty: true });
 
 ## Module API
 
-| Export                       | Signature                                   | Description                                   |
-| ---------------------------- | ------------------------------------------- | --------------------------------------------- |
-| `parseSCXML(xml)`            | `(string) => ParseResult`                   | Parse XML into an AST + diagnostics.          |
-| `validateAST(doc)`           | `(SCXMLDocument) => ValidationDiagnostic[]` | Validate a parsed AST.                        |
-| `serializeSCXML(doc, opts?)` | `(doc, SerializationOptions?) => string`    | Serialize AST to XML.                         |
-| `printAST(doc, opts?)`       | `(doc, PrintASTOptions?) => string`         | Print a debug tree.                           |
-| `SCXMLEngine`                | static facade                               | `parse` / `validate` / `serialize` / `print`. |
+| Export                       | Signature                                   | Description                                                 |
+| ---------------------------- | ------------------------------------------- | ----------------------------------------------------------- |
+| `parseSCXML(xml)`            | `(string) => ParseResult`                   | Parse XML into an AST + diagnostics.                        |
+| `validateAST(doc)`           | `(SCXMLDocument) => ValidationDiagnostic[]` | Validate a parsed AST.                                      |
+| `serializeSCXML(doc, opts?)` | `(doc, SerializationOptions?) => string`    | Serialize AST to XML.                                       |
+| `printAST(doc, opts?)`       | `(doc, PrintASTOptions?) => string`         | Print a debug tree.                                         |
+| `toMermaid(doc, opts?)`      | `(doc, MermaidOptions?) => string`          | Render a Mermaid state diagram.                             |
+| `SCXMLEngine`                | static facade                               | `parse` / `validate` / `serialize` / `print` / `toMermaid`. |
+
+### `MermaidOptions`
+
+- `direction` (`'LR' | 'TB'`, default `'LR'`) — diagram direction.
+- `includeTitle` (`boolean`, default `true`) — emit a `title` from the SCXML
+  `name`.
+- `includeEdgeLabels` (`boolean`, default `true`) — show event / condition on
+  transition edges.
 
 ### `SerializationOptions`
 
@@ -147,6 +156,43 @@ v8 attributes the ternary's branch count as `0`. Rewriting this idiomatic
 ternary into `if/else` solely to satisfy the counter would be "testing noise"
 for no consumer benefit, so we leave it and guard the threshold at 99%.
 
+## Examples
+
+A runnable `examples/` folder is included with sample SCXML statecharts for
+common flows (online cart checkout, booking a reservation, user
+authentication) plus CLIs that run the `parse -> validate -> print` and
+`parse -> validate -> toMermaid` pipelines against any SCXML file.
+
+```bash
+# Build the library first (the CLIs import dist/index.mjs)
+npm run build
+
+# Print the AST of a sample flow (stdout)
+npm run examples:ast:cart
+
+# Render a Mermaid state diagram of a sample flow (stdout)
+npm run examples:mermaid:cart
+
+# Any SCXML file works; write to a file with --out
+node examples/ast-print.mjs examples/scxml/reservation.scxml --out ast.txt
+node examples/ast-to-mermaid.mjs examples/scxml/reservation.scxml --md --out diagram.md
+```
+
+The Mermaid output can be pasted into any Markdown file to preview in VS
+Code, GitHub, or Mermaid Live Editor:
+
+````md
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> Checkout
+    ...
+```
+````
+
+See [`examples/README.md`](./examples/README.md) for the full list of sample
+flows and CLI options.
+
 ## Project Layout
 
 ```
@@ -156,8 +202,10 @@ src/
 ├── validator/      # AST structural & semantic checks
 ├── serializer/     # SCXML AST -> formatted XML
 ├── utils/printer.ts# Visual ASCII AST debugger
+├── utils/mermaid.ts# Mermaid state diagram renderer
 └── index.ts        # Public API entry point (SCXMLEngine)
 tests/              # Vitest suite (parser, validator, serializer, printer, engine, integration)
+examples/           # Sample SCXML statecharts + AST print CLI
 ```
 
 ## License

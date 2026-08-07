@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { SCXMLDocument, ValidationDiagnostic } from '../src/index';
-import { parseSCXML, printAST, SCXMLEngine, serializeSCXML, validateAST } from '../src/index';
+import {
+  parseSCXML,
+  printAST,
+  SCXMLEngine,
+  serializeSCXML,
+  toMermaid,
+  validateAST,
+} from '../src/index';
 
 describe('SCXMLEngine facade', () => {
   const validXml = `
@@ -45,7 +52,10 @@ describe('SCXMLEngine facade', () => {
     const ast = SCXMLEngine.parse(validXml).data!;
     // Mutate the AST by appending a datamodel rule.
     ast.scxml.datamodelChildren = ast.scxml.datamodelChildren || [];
-    ast.scxml.datamodelChildren.push({ id: 'additional_rule', expr: 'Order.count > 0' });
+    ast.scxml.datamodelChildren.push({
+      id: 'additional_rule',
+      expr: 'Order.count > 0',
+    });
 
     const errors = SCXMLEngine.validate(ast);
     expect(errors).toHaveLength(0);
@@ -59,6 +69,14 @@ describe('SCXMLEngine facade', () => {
     expect(typeof validateAST).toBe('function');
     expect(typeof serializeSCXML).toBe('function');
     expect(typeof printAST).toBe('function');
+    expect(typeof toMermaid).toBe('function');
+  });
+
+  it('renders a Mermaid diagram via SCXMLEngine.toMermaid', () => {
+    const ast = SCXMLEngine.parse(validXml).data!;
+    const out = SCXMLEngine.toMermaid(ast);
+    expect(out.split('\n')[0]).toBe('stateDiagram-v2');
+    expect(out).toContain('[*] --> Draft');
   });
 
   it('exposes the SCXMLDocument type', () => {
