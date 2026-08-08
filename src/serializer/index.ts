@@ -136,15 +136,9 @@ function renderSCXMLElement(el: SCXMLElement, ctx: SerializeContext, depth: numb
   for (const final of el.finals) {
     children.push(renderFinalNode(final, ctx, depth + 1));
   }
-  if (el.metadata.length > 0) {
-    for (const block of el.metadata) {
-      children.push(renderMetadataBlock(block, ctx, depth + 1));
-    }
-  }
-  if (el.customChildren && el.customChildren.length > 0) {
-    for (const custom of el.customChildren) {
-      children.push(renderCustomASTNode(custom, ctx, depth + 1));
-    }
+  const metadata = renderMetadataContainer(el.metadata, el.customChildren, ctx, depth + 1);
+  if (metadata) {
+    children.push(metadata);
   }
 
   return renderContainer('scxml', attrs, children, ctx, depth);
@@ -193,10 +187,9 @@ function renderStateNode(state: StateNode, ctx: SerializeContext, depth: number)
   for (const invoke of state.invoke) {
     children.push(renderInvokeElement(invoke, ctx, depth + 1));
   }
-  if (state.customChildren && state.customChildren.length > 0) {
-    for (const custom of state.customChildren) {
-      children.push(renderCustomASTNode(custom, ctx, depth + 1));
-    }
+  const metadata = renderMetadataContainer(state.metadata, state.customChildren, ctx, depth + 1);
+  if (metadata) {
+    children.push(metadata);
   }
 
   return renderContainer('state', attrs, children, ctx, depth);
@@ -239,10 +232,14 @@ function renderParallelNode(parallel: ParallelNode, ctx: SerializeContext, depth
   for (const invoke of parallel.invoke) {
     children.push(renderInvokeElement(invoke, ctx, depth + 1));
   }
-  if (parallel.customChildren && parallel.customChildren.length > 0) {
-    for (const custom of parallel.customChildren) {
-      children.push(renderCustomASTNode(custom, ctx, depth + 1));
-    }
+  const metadata = renderMetadataContainer(
+    parallel.metadata,
+    parallel.customChildren,
+    ctx,
+    depth + 1,
+  );
+  if (metadata) {
+    children.push(metadata);
   }
 
   return renderContainer('parallel', attrs, children, ctx, depth);
@@ -261,6 +258,10 @@ function renderFinalNode(final: FinalNode, ctx: SerializeContext, depth: number)
   }
   if (final.donedata) {
     children.push(renderDonedata(final.donedata, ctx, depth + 1));
+  }
+  const metadata = renderMetadataContainer(final.metadata, final.customChildren, ctx, depth + 1);
+  if (metadata) {
+    children.push(metadata);
   }
   return renderContainer('final', [['id', final.id]], children, ctx, depth);
 }
@@ -298,20 +299,17 @@ function renderTransition(t: Transition, ctx: SerializeContext, depth: number): 
     attrs.push(['type', t.type]);
   }
 
+  const children: string[] = [];
   if (t.executable && t.executable.length > 0) {
-    const children = t.executable.map((e) => renderExecutableElement(e, ctx, depth + 1));
-    if (t.customChildren && t.customChildren.length > 0) {
-      for (const custom of t.customChildren) {
-        children.push(renderCustomASTNode(custom, ctx, depth + 1));
-      }
+    for (const e of t.executable) {
+      children.push(renderExecutableElement(e, ctx, depth + 1));
     }
-    return renderContainer('transition', attrs, children, ctx, depth);
   }
-  if (t.customChildren && t.customChildren.length > 0) {
-    const children = t.customChildren.map((c) => renderCustomASTNode(c, ctx, depth + 1));
-    return renderContainer('transition', attrs, children, ctx, depth);
+  const metadata = renderMetadataContainer(t.metadata, t.customChildren, ctx, depth + 1);
+  if (metadata) {
+    children.push(metadata);
   }
-  return renderSelfClosing('transition', attrs, ctx, depth);
+  return renderContainer('transition', attrs, children, ctx, depth);
 }
 
 /**
@@ -641,6 +639,34 @@ function renderMetadataBlock(block: MetadataBlock, ctx: SerializeContext, depth:
     );
   }
   return renderSelfClosing(block.tag, attrs, ctx, depth);
+}
+
+/**
+ * Renders a single <metadata> container holding both opaque metadata blocks
+ * and registered custom children, mirroring how the parser extracts them.
+ * Emits nothing when there is no metadata or custom content.
+ */
+function renderMetadataContainer(
+  metadata: MetadataBlock[] | undefined,
+  customChildren: CustomASTNode[] | undefined,
+  ctx: SerializeContext,
+  depth: number,
+): string {
+  const children: string[] = [];
+  if (metadata) {
+    for (const block of metadata) {
+      children.push(renderMetadataBlock(block, ctx, depth + 1));
+    }
+  }
+  if (customChildren) {
+    for (const custom of customChildren) {
+      children.push(renderCustomASTNode(custom, ctx, depth + 1));
+    }
+  }
+  if (children.length === 0) {
+    return '';
+  }
+  return renderContainer('metadata', [], children, ctx, depth);
 }
 
 /**

@@ -6,15 +6,9 @@
  * W3C / authoring constraints with a stable diagnostic-code contract.
  */
 import { TagRegistry } from '../registry/TagRegistry';
-import type {
-  InitialBlock,
-  SCXMLDocument,
-  SCXMLElement,
-  StateNode,
-  Transition,
-} from '../types/ast';
+import type { InitialBlock, SCXMLDocument, Transition } from '../types/ast';
 import type { ValidationDiagnostic } from '../types/diagnostics';
-import type { CustomASTNode } from '../types/extensibility';
+import type { CustomASTNode, CustomParentNode } from '../types/extensibility';
 import {
   buildStateHierarchy,
   collectAllStateIds,
@@ -269,7 +263,7 @@ function validateCustomChildren(doc: SCXMLDocument, diagnostics: ValidationDiagn
   walkStateNodes(doc, (stateLike) => {
     if ('customChildren' in stateLike && stateLike.customChildren) {
       for (const custom of stateLike.customChildren) {
-        applyCustomScope(custom, stateLike as StateNode, 'state', diagnostics);
+        applyCustomScope(custom, stateLike, 'state', diagnostics);
       }
     }
     const transitions = 'transitions' in stateLike ? stateLike.transitions : [];
@@ -288,7 +282,7 @@ function validateCustomChildren(doc: SCXMLDocument, diagnostics: ValidationDiagn
  */
 function applyCustomScope(
   custom: CustomASTNode,
-  parent: SCXMLElement | StateNode | Transition,
+  parent: CustomParentNode,
   parentTagName: string,
   diagnostics: ValidationDiagnostic[],
 ): void {

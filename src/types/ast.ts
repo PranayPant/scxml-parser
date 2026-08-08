@@ -101,6 +101,8 @@ export interface StateNode {
   onexit?: ExecutableContent[];
   /** Datamodel invocations. */
   invoke: InvokeElement[];
+  /** Raw unrecognized / extension metadata blocks. Always an array. */
+  metadata: MetadataBlock[];
   /** Registered custom (non-standard) child tags, when present. */
   customChildren?: CustomASTNode[];
 }
@@ -131,6 +133,8 @@ export interface ParallelNode {
   onexit?: ExecutableContent[];
   /** Datamodel invocations. */
   invoke: InvokeElement[];
+  /** Raw unrecognized / extension metadata blocks. Always an array. */
+  metadata: MetadataBlock[];
   /** Registered custom (non-standard) child tags, when present. */
   customChildren?: CustomASTNode[];
 }
@@ -147,6 +151,10 @@ export interface FinalNode {
   onexit?: ExecutableContent[];
   /** Done-data payload. */
   donedata?: DoneDataElement;
+  /** Raw unrecognized / extension metadata blocks. Always an array. */
+  metadata: MetadataBlock[];
+  /** Registered custom (non-standard) child tags, when present. */
+  customChildren?: CustomASTNode[];
 }
 
 /**
@@ -175,6 +183,8 @@ export interface Transition {
   type?: 'internal' | 'external';
   /** Executable content run when the transition fires. */
   executable: ExecutableContent[];
+  /** Raw unrecognized / extension metadata blocks. Always an array. */
+  metadata: MetadataBlock[];
   /** Registered custom (non-standard) child tags, when present. */
   customChildren?: CustomASTNode[];
 }

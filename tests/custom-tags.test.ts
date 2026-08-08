@@ -3,6 +3,7 @@ import { SCXMLEngine } from '../src/index';
 import { parseSCXML } from '../src/parser';
 import { TagRegistry } from '../src/registry/TagRegistry';
 import { serializeSCXML } from '../src/serializer';
+import type { MetadataBlock } from '../src/types/ast';
 import type { CustomASTNode } from '../src/types/extensibility';
 import { validateAST } from '../src/validator';
 
@@ -10,12 +11,6 @@ import { validateAST } from '../src/validator';
 interface GateASTNode extends CustomASTNode {
   tagName: 'gate';
   payload: { gateType: 'AND' | 'OR' | 'NOT'; ruleId: string };
-}
-
-/** A strongly-typed custom `<note>` node (text content, no payload). */
-interface NoteASTNode extends CustomASTNode {
-  tagName: 'note';
-  textContent: string;
 }
 
 /** Registers a `<gate>` spec that mimics the CUSTOM_TAG.md example. */
@@ -95,15 +90,17 @@ describe('TagRegistry', () => {
   });
 });
 
-describe('parser: custom tags', () => {
+describe('parser: custom tags in metadata', () => {
   beforeEach(() => registerGate());
 
-  it('populates customChildren on a transition with a registered tag', () => {
+  it('populates customChildren on a transition from a registered metadata tag', () => {
     const xml = `
       <scxml version="1.0" initial="Idle">
         <state id="Idle">
           <transition event="SUBMIT" target="Processing">
-            <gate type="AND" ruleId="rule_verify_credit" />
+            <metadata>
+              <gate type="AND" ruleId="rule_verify_credit" />
+            </metadata>
           </transition>
         </state>
         <state id="Processing" />
@@ -119,11 +116,13 @@ describe('parser: custom tags', () => {
     expect(gate.payload?.ruleId).toBe('rule_verify_credit');
   });
 
-  it('populates customChildren on a state and the root element', () => {
+  it('populates customChildren on a state from metadata', () => {
     const xml = `
       <scxml version="1.0">
         <state id="Idle">
-          <gate type="OR" ruleId="rule_a" />
+          <metadata>
+            <gate type="OR" ruleId="rule_a" />
+          </metadata>
         </state>
       </scxml>
     `;
@@ -132,64 +131,103 @@ describe('parser: custom tags', () => {
     expect(ast.scxml.states[0].customChildren![0].tagName).toBe('gate');
   });
 
-  it('populates customChildren on a parallel node', () => {
+  it('populates customChildren on a parallel and a final from metadata', () => {
     const xml = `
       <scxml version="1.0" initial="p">
         <parallel id="p">
-          <gate type="AND" ruleId="rule_p" />
+          <metadata><gate type="AND" ruleId="rp" /></metadata>
           <state id="a" />
-          <state id="b" />
         </parallel>
+        <final id="done">
+          <metadata><gate type="NOT" ruleId="rf" /></metadata>
+        </final>
       </scxml>
     `;
     const ast = parseSCXML(xml).data!;
     expect(ast.scxml.parallels[0].customChildren).toHaveLength(1);
-    expect(ast.scxml.parallels[0].customChildren![0].tagName).toBe('gate');
+    expect(ast.scxml.finals[0].customChildren).toHaveLength(1);
   });
 
-  it('routes a registered root-level custom tag to customChildren, not metadata', () => {
-    const xml = `<scxml version="1.0"><gate type="NOT" ruleId="r" /></scxml>`;
+  it('preserves unregistered metadata children as opaque blocks', () => {
+    const xml = `
+      <scxml version="1.0">
+        <state id="a">
+          <metadata>
+            <viz:note layout="true" x="4" />
+          </metadata>
+        </state>
+      </scxml>
+    `;
     const ast = parseSCXML(xml).data!;
-    expect(ast.scxml.metadata).toHaveLength(0);
-    expect(ast.scxml.customChildren).toHaveLength(1);
+    const blocks = ast.scxml.states[0].metadata as MetadataBlock[];
+    expect(blocks.length).toBeGreaterThan(0);
+    expect(blocks[0].tag).toBe('viz:note');
+    expect(blocks[0].attributes.layout).toBe('true');
   });
 
-  it('preserves textContent and attributes from the raw node', () => {
-    const registry = TagRegistry.getInstance();
-    registry.register<NoteASTNode>({
-      tagName: 'note',
-      parse: (ctx) => ({
-        type: 'custom',
-        tagName: 'note',
-        attributes: ctx.attributes,
-        textContent: ctx.textContent ?? '',
-      }),
-    });
-    const xml = `<scxml version="1.0"><note author="me">hello &amp; goodbye</note></scxml>`;
-    const ast = parseSCXML(xml).data!;
-    const note = ast.scxml.customChildren![0] as NoteASTNode;
-    expect(note.attributes.author).toBe('me');
-    expect(note.textContent).toBe('hello & goodbye');
+  it('warns when a registered tag appears outside metadata', () => {
+    const xml = `
+      <scxml version="1.0">
+        <state id="a">
+          <gate type="AND" ruleId="r1" />
+        </state>
+      </scxml>
+    `;
+    const result = parseSCXML(xml);
+    expect(result.success).toBe(true);
+    const diag = result.errors.find((d) => d.code === 'WARN_CUSTOM_TAG_OUTSIDE_METADATA');
+    expect(diag).toBeDefined();
+    expect(result.data!.scxml.states[0].customChildren).toBeUndefined();
   });
 
-  it('does not populate customChildren when a tag is unregistered', () => {
-    const xml = `<scxml version="1.0"><unknownTag x="1" /></scxml>`;
+  it('warns when an unregistered tag appears inside metadata', () => {
+    const xml = `
+      <scxml version="1.0">
+        <state id="a">
+          <metadata>
+            <unknownThing x="1" />
+          </metadata>
+        </state>
+      </scxml>
+    `;
+    const result = parseSCXML(xml);
+    expect(result.success).toBe(true);
+    const diag = result.errors.find((d) => d.code === 'WARN_UNREGISTERED_METADATA_TAG');
+    expect(diag).toBeDefined();
+    expect(result.data!.scxml.states[0].customChildren).toBeUndefined();
+  });
+
+  it('handles metadata containing only plain text (no custom children)', () => {
+    const xml = `<scxml version="1.0"><state id="a"><metadata>just text</metadata></state></scxml>`;
     const ast = parseSCXML(xml).data!;
-    expect(ast.scxml.customChildren).toBeUndefined();
-    // Unregistered unknown tags are preserved as metadata instead.
-    expect(ast.scxml.metadata.length).toBeGreaterThan(0);
+    expect(ast.scxml.states[0].customChildren).toBeUndefined();
+  });
+
+  it('ignores metadata element attributes when scanning children', () => {
+    const xml = `
+      <scxml version="1.0">
+        <state id="a">
+          <metadata kind="layout">
+            <gate type="AND" ruleId="r1" />
+          </metadata>
+        </state>
+      </scxml>
+    `;
+    const ast = parseSCXML(xml).data!;
+    expect(ast.scxml.states[0].customChildren).toHaveLength(1);
+    expect(ast.scxml.states[0].customChildren![0].tagName).toBe('gate');
   });
 });
 
 describe('validator: custom tags', () => {
   beforeEach(() => registerGate());
 
-  it('accepts a custom tag inside an allowed parent', () => {
+  it('accepts a custom tag in metadata inside an allowed parent', () => {
     const xml = `
       <scxml version="1.0" initial="a">
         <state id="a">
           <transition event="GO" target="b">
-            <gate type="AND" ruleId="r1" />
+            <metadata><gate type="AND" ruleId="r1" /></metadata>
           </transition>
         </state>
         <state id="b" />
@@ -200,7 +238,7 @@ describe('validator: custom tags', () => {
   });
 
   it('emits ERR_CUSTOM_TAG_INVALID_PARENT when the parent violates allowedParents', () => {
-    const xml = `<scxml version="1.0"><gate type="AND" ruleId="r1" /></scxml>`;
+    const xml = `<scxml version="1.0"><metadata><gate type="AND" ruleId="r1" /></metadata></scxml>`;
     const ast = parseSCXML(xml).data!;
     const diagnostics = validateAST(ast);
     expect(diagnostics.some((d) => d.code === 'ERR_CUSTOM_TAG_INVALID_PARENT')).toBe(true);
@@ -211,7 +249,7 @@ describe('validator: custom tags', () => {
       <scxml version="1.0" initial="a">
         <state id="a">
           <transition event="GO" target="b">
-            <gate type="AND" />
+            <metadata><gate type="AND" /></metadata>
           </transition>
         </state>
         <state id="b" />
@@ -222,15 +260,20 @@ describe('validator: custom tags', () => {
     expect(diagnostics.some((d) => d.code === 'ERR_GATE_RULE_ID_REQUIRED')).toBe(true);
   });
 
-  it('applies scoping/hooks to custom tags on a state', () => {
-    // gate allows 'state' as a parent, and ruleId is provided -> valid.
+  it('validates custom children attached directly to a state', () => {
     const xml = `
       <scxml version="1.0">
-        <state id="Idle">
-          <gate type="OR" ruleId="rule_a" />
+        <state id="a">
+          <metadata><gate type="OR" ruleId="ra" /></metadata>
         </state>
       </scxml>
     `;
+    const ast = parseSCXML(xml).data!;
+    expect(validateAST(ast)).toEqual([]);
+  });
+
+  it('does not validate unregistered metadata children', () => {
+    const xml = `<scxml version="1.0"><metadata><unknownX /></metadata></scxml>`;
     const ast = parseSCXML(xml).data!;
     expect(validateAST(ast)).toEqual([]);
   });
@@ -246,12 +289,12 @@ describe('validator: custom tags', () => {
 describe('serializer: custom tags', () => {
   beforeEach(() => registerGate());
 
-  it('uses the registered serialize hook to render a custom tag', () => {
+  it('serializes custom children inside a metadata container', () => {
     const xml = `
       <scxml version="1.0" initial="a">
         <state id="a">
           <transition event="GO" target="b">
-            <gate type="AND" ruleId="r1" />
+            <metadata><gate type="AND" ruleId="r1" /></metadata>
           </transition>
         </state>
         <state id="b" />
@@ -259,45 +302,11 @@ describe('serializer: custom tags', () => {
     `;
     const ast = parseSCXML(xml).data!;
     const out = serializeSCXML(ast, { pretty: true });
+    expect(out).toContain('<metadata>');
     expect(out).toContain('<gate type="AND" ruleId="r1" />');
   });
 
-  it('falls back to generic XML formatting when no serialize hook is registered', () => {
-    const registry = TagRegistry.getInstance();
-    registry.register<NoteASTNode>({
-      tagName: 'note',
-      parse: (ctx) => ({
-        type: 'custom',
-        tagName: 'note',
-        attributes: ctx.attributes,
-        textContent: ctx.textContent ?? '',
-      }),
-    });
-    const xml = `<scxml version="1.0"><note author="me">text</note></scxml>`;
-    const ast = parseSCXML(xml).data!;
-    const out = serializeSCXML(ast, { pretty: true });
-    expect(out).toContain('<note author="me">');
-  });
-
-  it('serializes a transition that has both executable content and a custom child', () => {
-    const xml = `
-      <scxml version="1.0" initial="a">
-        <state id="a">
-          <transition event="GO" target="b">
-            <log label="probe" expr="1" />
-            <gate type="AND" ruleId="r1" />
-          </transition>
-        </state>
-        <state id="b" />
-      </scxml>
-    `;
-    const ast = parseSCXML(xml).data!;
-    const out = serializeSCXML(ast, { pretty: true });
-    expect(out).toContain('<log label="probe"');
-    expect(out).toContain('<gate type="AND" ruleId="r1" />');
-  });
-
-  it('self-closes a custom tag with no text and no serialize hook', () => {
+  it('falls back to generic formatting when a custom tag has no serialize hook', () => {
     const registry = TagRegistry.getInstance();
     registry.register({
       tagName: 'flag',
@@ -307,27 +316,64 @@ describe('serializer: custom tags', () => {
         attributes: ctx.attributes,
       }),
     });
-    const xml = `<scxml version="1.0"><flag enabled="true" /></scxml>`;
+    const xml = `<scxml version="1.0"><metadata><flag enabled="true" /></metadata></scxml>`;
     const ast = parseSCXML(xml).data!;
     const out = serializeSCXML(ast, { pretty: true });
     expect(out).toContain('<flag enabled="true" />');
   });
 
-  it('serializes a custom tag on a state and a parallel', () => {
+  it('wraps custom tag text content in the generic fallback', () => {
+    const registry = TagRegistry.getInstance();
+    registry.register({
+      tagName: 'note',
+      parse: (ctx) => ({
+        type: 'custom',
+        tagName: 'note',
+        attributes: ctx.attributes,
+        textContent: ctx.textContent ?? '',
+      }),
+    });
+    const xml = `<scxml version="1.0"><metadata><note author="me">hi</note></metadata></scxml>`;
+    const ast = parseSCXML(xml).data!;
+    const out = serializeSCXML(ast, { pretty: true });
+    expect(out).toContain('<note author="me">');
+    expect(out).toContain('hi');
+  });
+
+  it('does not emit a metadata container for parallel/final without layout', () => {
     const xml = `
       <scxml version="1.0" initial="p">
         <parallel id="p">
-          <gate type="AND" ruleId="rp" />
-          <state id="a">
-            <gate type="OR" ruleId="ra" />
-          </state>
+          <state id="a" />
         </parallel>
+        <final id="done" />
       </scxml>
     `;
     const ast = parseSCXML(xml).data!;
     const out = serializeSCXML(ast, { pretty: true });
+    expect(out).not.toContain('<metadata>');
+    expect(out).toContain('<parallel id="p">');
+    expect(out).toContain('<final id="done" />');
+  });
+
+  it('serializes custom children on a parallel and a final', () => {
+    const xml = `
+      <scxml version="1.0" initial="p">
+        <parallel id="p">
+          <metadata><gate type="AND" ruleId="rp" /></metadata>
+          <state id="a" />
+        </parallel>
+        <final id="done">
+          <metadata><gate type="NOT" ruleId="rf" /></metadata>
+        </final>
+      </scxml>
+    `;
+    const ast = parseSCXML(xml).data!;
+    const out = serializeSCXML(ast, { pretty: true });
+    expect(out).toContain('<parallel id="p">');
     expect(out).toContain('<gate type="AND" ruleId="rp" />');
-    expect(out).toContain('<gate type="OR" ruleId="ra" />');
+    expect(out).toContain('<final id="done">');
+    expect(out).toContain('<gate type="NOT" ruleId="rf" />');
   });
 
   it('round-trips a custom tag through parse -> serialize -> parse', () => {
@@ -335,7 +381,7 @@ describe('serializer: custom tags', () => {
       <scxml version="1.0" initial="a">
         <state id="a">
           <transition event="GO" target="b">
-            <gate type="OR" ruleId="r2" />
+            <metadata><gate type="OR" ruleId="r2" /></metadata>
           </transition>
         </state>
         <state id="b" />
@@ -347,6 +393,24 @@ describe('serializer: custom tags', () => {
     const gate = reparsed.scxml.states[0].transitions[0].customChildren![0] as GateASTNode;
     expect(gate.payload?.gateType).toBe('OR');
     expect(gate.payload?.ruleId).toBe('r2');
+  });
+
+  it('preserves opaque metadata blocks through a round-trip', () => {
+    const xml = `
+      <scxml version="1.0">
+        <state id="a">
+          <metadata>
+            <viz:note layout="true" x="9" />
+          </metadata>
+        </state>
+      </scxml>
+    `;
+    const ast = parseSCXML(xml).data!;
+    const out = serializeSCXML(ast, { pretty: true });
+    const reparsed = parseSCXML(out).data!;
+    const blocks = reparsed.scxml.states[0].metadata as MetadataBlock[];
+    expect(blocks[0].tag).toBe('viz:note');
+    expect(blocks[0].attributes.x).toBe('9');
   });
 });
 

@@ -16,17 +16,18 @@ import type {
   SerializationOptions,
   ValidationDiagnostic,
 } from './types';
+import type { StateNodeLike } from './types/ast';
 import type { MermaidOptions } from './utils/mermaid';
 import { toMermaid } from './utils/mermaid';
 import { printAST } from './utils/printer';
 import { validateAST } from './validator';
+import { walkStateNodes as walkStates } from './validator/walker';
 
 export { TagRegistry } from './registry/TagRegistry';
 export * from './types';
 export type { MermaidOptions } from './utils/mermaid';
 export { toMermaid } from './utils/mermaid';
-
-export { parseSCXML, printAST, serializeSCXML, validateAST };
+export { parseSCXML, printAST, serializeSCXML, validateAST, walkStates };
 
 /**
  * Unified headless SCXML engine providing a single static facade over the
@@ -67,5 +68,14 @@ export class SCXMLEngine {
    */
   static registerTag<T extends CustomASTNode = CustomASTNode>(spec: CustomTagSpec<T>): TagRegistry {
     return TagRegistry.getInstance().register(spec);
+  }
+
+  /**
+   * Visits every state-like node (state, parallel, final) in the document in
+   * a single pass. Useful for indexing layouts / ids or batching updates
+   * without hand-rolling recursion.
+   */
+  static walkStates(doc: SCXMLDocument, visit: (node: StateNodeLike) => void): void {
+    walkStates(doc, visit);
   }
 }

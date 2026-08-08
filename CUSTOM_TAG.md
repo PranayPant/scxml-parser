@@ -22,15 +22,18 @@ This document outlines the architecture for allowing end-users to register custo
 ```
 
 ### Core Design Guarantees
+
 1. **Zero Core Modifications:** Adding support for non-standard or domain-specific tags (e.g., `<gate>`, `<rule>`, `<policy>`, `<log>`) does not require editing core AST types, parser loops, or validation logic.
 2. **Type Safety:** Custom tags supply their own AST interfaces extending `CustomASTNode`, preserving full TypeScript autocompletion and type checking for end-consumers.
 3. **Pipeline Isolation:** A malformed custom tag triggers isolated diagnostic warnings in `validateAST` without crashing the core parser or invalidating surrounding standard SCXML nodes.
+4. **Metadata-Scoped Placement:** Custom tags are **only honored inside a `<metadata>` block** (the W3C-sanctioned escape hatch). This keeps the emitted SCXML structurally valid for standards-tight consumers and SCXML UI editors, and avoids tag collisions with domain content. Bare registered tags are reported via `WARN_CUSTOM_TAG_OUTSIDE_METADATA` and preserved as opaque metadata.
 
 ---
 
 ## 2. Core Extension Specifications & Data Contracts
 
 ### A. Custom AST Node Base Contract (`src/types/extensibility.ts`)
+
 All custom tags are stored as structured nodes within the `customChildren` array on standard SCXML AST nodes (`SCXMLDocument`, `StateNode`, `TransitionNode`).
 
 ```typescript
@@ -129,19 +132,20 @@ export class TagRegistry {
 ## 3. Engine Pipeline Integration
 
 ### A. Parser Integration (`src/parser/index.ts`)
+
 When the XML parser encounters an unhandled tag, it checks `TagRegistry`. If present, it delegates creation to the registered `parse` function and attaches the output to `parentASTNode.customChildren`.
 
 ```typescript
-import { TagRegistry } from '../registry/TagRegistry';
-import type { SCXMLNode } from '../types';
+import { TagRegistry } from "../registry/TagRegistry";
+import type { SCXMLNode } from "../types";
 
 export function handleUnknownOrCustomTag(
   tagName: string,
   rawXmlNode: any,
-  parentASTNode: SCXMLNode
+  parentASTNode: SCXMLNode,
 ): boolean {
   const registry = TagRegistry.getInstance();
-  
+
   if (!registry.has(tagName)) {
     return false; // Tag is unrecognized; defer to default fallback/warning
   }
@@ -149,7 +153,7 @@ export function handleUnknownOrCustomTag(
   const spec = registry.get(tagName)!;
   const customNode = spec.parse({
     tagName,
-    attributes: rawXmlNode[':@'] || {},
+    attributes: rawXmlNode[":@"] || {},
     children: rawXmlNode.children || [],
     textContent: rawXmlNode.text,
     parentASTNode,
@@ -164,15 +168,16 @@ export function handleUnknownOrCustomTag(
 ---
 
 ### B. Validator Integration (`src/validator/index.ts`)
+
 During AST traversal, `validateAST` inspects `customChildren` and evaluates both structural parent rules and custom validation hooks.
 
 ```typescript
-import { TagRegistry } from '../registry/TagRegistry';
-import type { SCXMLNode, ValidationDiagnostic } from '../types';
+import { TagRegistry } from "../registry/TagRegistry";
+import type { SCXMLNode, ValidationDiagnostic } from "../types";
 
 export function validateCustomChildren(
   parentNode: SCXMLNode,
-  parentTagName: string
+  parentTagName: string,
 ): ValidationDiagnostic[] {
   const diagnostics: ValidationDiagnostic[] = [];
   const registry = TagRegistry.getInstance();
@@ -184,11 +189,14 @@ export function validateCustomChildren(
     if (!spec) continue;
 
     // 1. Parent Scope Check
-    if (spec.allowedParents && !spec.allowedParents.includes(parentTagName.toLowerCase())) {
+    if (
+      spec.allowedParents &&
+      !spec.allowedParents.includes(parentTagName.toLowerCase())
+    ) {
       diagnostics.push({
-        severity: 'error',
-        code: 'ERR_CUSTOM_TAG_INVALID_PARENT',
-        message: `<${customNode.tagName}> is not allowed inside <${parentTagName}>. Allowed parents: ${spec.allowedParents.join(', ')}`,
+        severity: "error",
+        code: "ERR_CUSTOM_TAG_INVALID_PARENT",
+        message: `<${customNode.tagName}> is not allowed inside <${parentTagName}>. Allowed parents: ${spec.allowedParents.join(", ")}`,
       });
     }
 
@@ -205,15 +213,19 @@ export function validateCustomChildren(
 ---
 
 ### C. Serializer Integration (`src/serializer/index.ts`)
+
 `serializeSCXML` delegates custom node string generation back to the registered `serialize` hook, or falls back to standard key-value XML string formatting.
 
 ```typescript
-import { TagRegistry } from '../registry/TagRegistry';
-import type { CustomASTNode } from '../types';
+import { TagRegistry } from "../registry/TagRegistry";
+import type { CustomASTNode } from "../types";
 
-export function serializeCustomASTNodes(nodes: CustomASTNode[], indentLevel: number): string {
+export function serializeCustomASTNodes(
+  nodes: CustomASTNode[],
+  indentLevel: number,
+): string {
   const registry = TagRegistry.getInstance();
-  const indent = '  '.repeat(indentLevel);
+  const indent = "  ".repeat(indentLevel);
   const lines: string[] = [];
 
   for (const node of nodes) {
@@ -224,12 +236,12 @@ export function serializeCustomASTNodes(nodes: CustomASTNode[], indentLevel: num
       // Default fallback XML formatting
       const attrs = Object.entries(node.attributes)
         .map(([k, v]) => `${k}="${v}"`)
-        .join(' ');
-      lines.push(`${indent}<${node.tagName}${attrs ? ' ' + attrs : ''} />`);
+        .join(" ");
+      lines.push(`${indent}<${node.tagName}${attrs ? " " + attrs : ""} />`);
     }
   }
 
-  return lines.join('\n');
+  return lines.join("\n");
 }
 ```
 
@@ -239,30 +251,36 @@ export function serializeCustomASTNodes(nodes: CustomASTNode[], indentLevel: num
 
 The example below demonstrates how an external consumer registers a custom `<gate>` tag to define logic gate expressions inside transition elements.
 
+> **Placement rule:** custom tags are **only honored inside a `<metadata>` block**. A registered tag appearing as a bare direct child emits `WARN_CUSTOM_TAG_OUTSIDE_METADATA`; an unregistered tag inside `<metadata>` emits `WARN_UNREGISTERED_METADATA_TAG` and is preserved as opaque metadata. This keeps the emitted SCXML structurally valid per the standard.
+
 ```typescript
-import { SCXMLEngine, TagRegistry, type CustomASTNode } from '@your-org/scxml-parser';
+import {
+  SCXMLEngine,
+  TagRegistry,
+  type CustomASTNode,
+} from "@your-org/scxml-parser";
 
 // 1. Define Strongly-Typed Custom Node
 interface GateASTNode extends CustomASTNode {
-  tagName: 'gate';
+  tagName: "gate";
   payload: {
-    gateType: 'AND' | 'OR' | 'NOT';
+    gateType: "AND" | "OR" | "NOT";
     ruleId: string;
   };
 }
 
 // 2. Register Spec via TagRegistry or SCXMLEngine
 SCXMLEngine.registerTag<GateASTNode>({
-  tagName: 'gate',
-  allowedParents: ['transition', 'state'],
+  tagName: "gate",
+  allowedParents: ["transition", "state"],
 
   parse: (ctx) => ({
-    type: 'custom',
-    tagName: 'gate',
+    type: "custom",
+    tagName: "gate",
     attributes: ctx.attributes,
     payload: {
-      gateType: (ctx.attributes.type as 'AND' | 'OR' | 'NOT') || 'AND',
-      ruleId: ctx.attributes.ruleId || '',
+      gateType: (ctx.attributes.type as "AND" | "OR" | "NOT") || "AND",
+      ruleId: ctx.attributes.ruleId || "",
     },
   }),
 
@@ -270,8 +288,8 @@ SCXMLEngine.registerTag<GateASTNode>({
     const errors = [];
     if (!node.payload.ruleId) {
       errors.push({
-        severity: 'error' as const,
-        code: 'ERR_GATE_RULE_ID_REQUIRED',
+        severity: "error" as const,
+        code: "ERR_GATE_RULE_ID_REQUIRED",
         message: '<gate> element requires a non-empty "ruleId" attribute.',
       });
     }
@@ -279,7 +297,7 @@ SCXMLEngine.registerTag<GateASTNode>({
   },
 
   serialize: (node, indentLevel) => {
-    const indent = '  '.repeat(indentLevel);
+    const indent = "  ".repeat(indentLevel);
     return `${indent}<gate type="${node.payload.gateType}" ruleId="${node.payload.ruleId}" />`;
   },
 });
@@ -289,7 +307,9 @@ const rawXML = `
 <scxml version="1.0" initial="Idle">
   <state id="Idle">
     <transition event="SUBMIT" target="Processing">
-      <gate type="AND" ruleId="rule_verify_credit" />
+      <metadata>
+        <gate type="AND" ruleId="rule_verify_credit" />
+      </metadata>
     </transition>
   </state>
   <state id="Processing" />
@@ -301,7 +321,7 @@ const ast = SCXMLEngine.parse(rawXML);
 
 // Validate
 const diagnostics = SCXMLEngine.validate(ast);
-console.log('Validation Diagnostics:', diagnostics); // Output: []
+console.log("Validation Diagnostics:", diagnostics); // Output: []
 
 // Serialize
 const outputXML = SCXMLEngine.serialize(ast, { pretty: true });
@@ -314,10 +334,10 @@ console.log(outputXML);
 
 To maintain 100% path coverage, unit tests verify registry handling, validation enforcement, and serialization fidelity.
 
-| Test Case | Scope | Expected Outcome |
-| :--- | :--- | :--- |
-| `TagRegistry.register()` | Registry | Successfully registers and retrieves `CustomTagSpec` by case-insensitive name. |
-| `parseSCXML` with Custom Tag | Parser | Populates `customChildren` array on parent AST node with structured payload. |
-| `validateAST` Scope Violation | Validator | Emits `ERR_CUSTOM_TAG_INVALID_PARENT` if tag appears outside `allowedParents`. |
-| `validateAST` Custom Logic | Validator | Emits user-defined diagnostics when custom validation constraints fail. |
-| `serializeSCXML` Formatting | Serializer | Output XML string matches custom `serialize()` layout or default tag fallback. |
+| Test Case                     | Scope      | Expected Outcome                                                               |
+| :---------------------------- | :--------- | :----------------------------------------------------------------------------- |
+| `TagRegistry.register()`      | Registry   | Successfully registers and retrieves `CustomTagSpec` by case-insensitive name. |
+| `parseSCXML` with Custom Tag  | Parser     | Populates `customChildren` array on parent AST node with structured payload.   |
+| `validateAST` Scope Violation | Validator  | Emits `ERR_CUSTOM_TAG_INVALID_PARENT` if tag appears outside `allowedParents`. |
+| `validateAST` Custom Logic    | Validator  | Emits user-defined diagnostics when custom validation constraints fail.        |
+| `serializeSCXML` Formatting   | Serializer | Output XML string matches custom `serialize()` layout or default tag fallback. |

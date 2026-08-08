@@ -7,7 +7,7 @@
  * parse, validate, and serialize hooks and a typed AST node via
  * `CustomTagSpec<T>`.
  */
-import type { SCXMLElement, StateNode, Transition } from './ast';
+import type { FinalNode, ParallelNode, SCXMLElement, StateNode, Transition } from './ast';
 import type { ValidationDiagnostic } from './diagnostics';
 
 /**
@@ -44,7 +44,7 @@ export interface CustomTagParseContext {
   /** Text content, when present. */
   textContent?: string;
   /** The parent AST node that will own this custom node. */
-  parentASTNode: SCXMLElement | StateNode | Transition;
+  parentASTNode: CustomParentNode;
 }
 
 /**
@@ -58,7 +58,13 @@ export interface CustomTagSpec<T extends CustomASTNode = CustomASTNode> {
   /** Transforms raw XML attributes and children into a typed AST node. */
   parse: (ctx: CustomTagParseContext) => T;
   /** Validates a custom AST node, returning zero or more diagnostics. */
-  validate?: (node: T, parentNode: SCXMLElement | StateNode | Transition) => ValidationDiagnostic[];
+  validate?: (node: T, parentNode: CustomParentNode) => ValidationDiagnostic[];
   /** Serializes a custom AST node back into a formatted XML string. */
   serialize?: (node: T, indentLevel: number) => string;
 }
+
+/**
+ * The AST node types that can contain a `<metadata>` block holding custom
+ * tags: the document root, states, parallels, finals, and transitions.
+ */
+export type CustomParentNode = SCXMLElement | StateNode | ParallelNode | FinalNode | Transition;

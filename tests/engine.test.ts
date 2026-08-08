@@ -7,6 +7,7 @@ import {
   serializeSCXML,
   toMermaid,
   validateAST,
+  walkStates,
 } from '../src/index';
 
 describe('SCXMLEngine facade', () => {
@@ -70,6 +71,36 @@ describe('SCXMLEngine facade', () => {
     expect(typeof serializeSCXML).toBe('function');
     expect(typeof printAST).toBe('function');
     expect(typeof toMermaid).toBe('function');
+    expect(typeof walkStates).toBe('function');
+  });
+
+  it('walks every state-like node via the exported walkStates', () => {
+    const xml = `
+      <scxml version="1.0" initial="a">
+        <state id="a"><state id="a1" /></state>
+        <parallel id="p"><state id="p1" /></parallel>
+        <final id="f" />
+      </scxml>
+    `;
+    const ast = SCXMLEngine.parse(xml).data!;
+    const ids: string[] = [];
+    walkStates(ast, (node) => ids.push(node.id));
+    expect(ids).toEqual(expect.arrayContaining(['a', 'a1', 'p', 'p1', 'f']));
+  });
+
+  it('walks states via the SCXMLEngine.walkStates facade', () => {
+    const xml = `
+      <scxml version="1.0" initial="x">
+        <state id="x"><state id="y" /></state>
+        <final id="z" />
+      </scxml>
+    `;
+    const ast = SCXMLEngine.parse(xml).data!;
+    const ids: string[] = [];
+    SCXMLEngine.walkStates(ast, (node) => ids.push(node.id));
+    expect(ids).toContain('x');
+    expect(ids).toContain('y');
+    expect(ids).toContain('z');
   });
 
   it('renders a Mermaid diagram via SCXMLEngine.toMermaid', () => {

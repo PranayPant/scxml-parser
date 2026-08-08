@@ -66,6 +66,14 @@ interface XMLErrorLike {
 }
 
 /**
+ * Module-scoped diagnostics collected during normalization (e.g. misplaced
+ * custom tags that appear outside `<metadata>`). Reset per parse call and
+ * merged into the returned result so deep-normalization warnings surface
+ * without threading a diagnostics array through every normalizer.
+ */
+let parserDiagnostics: ValidationDiagnostic[] = [];
+
+/**
  * Parses a raw SCXML string into an in-memory AST.
  *
  * @param xmlString - Raw SCXML XML content (or any well-formed XML).
@@ -73,6 +81,7 @@ interface XMLErrorLike {
  */
 export function parseSCXML(xmlString: string): ParseResult {
   const diagnostics: ValidationDiagnostic[] = [];
+  parserDiagnostics = [];
 
   if (typeof xmlString !== 'string' || xmlString.trim().length === 0) {
     diagnostics.push({
@@ -132,10 +141,11 @@ export function parseSCXML(xmlString: string): ParseResult {
     });
   }
 
+  const allDiagnostics = [...diagnostics, ...parserDiagnostics];
   return {
-    success: diagnostics.every((d) => d.severity !== 'error'),
+    success: allDiagnostics.every((d) => d.severity !== 'error'),
     data: document,
-    errors: diagnostics,
+    errors: allDiagnostics,
   };
 }
 
@@ -168,14 +178,16 @@ function normalizeSCXMLElement(raw: RawRecord): SCXMLElement {
     element.datamodelChildren = extractDataElements(datamodelRaw as RawRecord);
   }
 
-  // Preserve unrecognized namespace/extension blocks as metadata.
+  // Preserve unrecognized extension/namespace blocks as opaque metadata.
   element.metadata = extractMetadataBlocks(raw);
 
-  // Registered custom tags are routed to customChildren instead of metadata.
-  const customChildren = extractCustomChildren(raw, element);
-  if (customChildren.length > 0) {
-    element.customChildren = customChildren;
-  }
+  // Handle the <metadata> element: registered tags -> customChildren,
+  // everything else -> opaque metadata blocks.
+  applyMetadataToNode(raw, element);
+
+  // Bare registered tags outside <metadata> are reported so the user can fix
+  // their placement (they are preserved as opaque metadata, not dropped).
+  warnMisplacedCustomTags(raw);
 
   return element;
 }
@@ -194,6 +206,7 @@ function normalizeStateNode(raw: RawRecord): StateNode {
     finals: [],
     history: [],
     invoke: [],
+    metadata: [],
   };
 
   state.transitions = readChildArray(raw, 'transition').map(normalizeTransition);
@@ -222,10 +235,8 @@ function normalizeStateNode(raw: RawRecord): StateNode {
     state.datamodel = extractDataElements(datamodelRaw as RawRecord);
   }
 
-  const customChildren = extractCustomChildren(raw, state);
-  if (customChildren.length > 0) {
-    state.customChildren = customChildren;
-  }
+  applyMetadataToNode(raw, state);
+  warnMisplacedCustomTags(raw);
 
   return state;
 }
@@ -242,6 +253,7 @@ function normalizeParallelNode(raw: RawRecord): ParallelNode {
     finals: [],
     history: [],
     invoke: [],
+    metadata: [],
   };
 
   parallel.transitions = readChildArray(raw, 'transition').map(normalizeTransition);
@@ -270,10 +282,8 @@ function normalizeParallelNode(raw: RawRecord): ParallelNode {
     parallel.datamodel = extractDataElements(datamodelRaw as RawRecord);
   }
 
-  const customChildren = extractCustomChildren(raw, parallel);
-  if (customChildren.length > 0) {
-    parallel.customChildren = customChildren;
-  }
+  applyMetadataToNode(raw, parallel);
+  warnMisplacedCustomTags(raw);
 
   return parallel;
 }
@@ -284,6 +294,7 @@ function normalizeParallelNode(raw: RawRecord): ParallelNode {
 function normalizeFinalNode(raw: RawRecord): FinalNode {
   const final: FinalNode = {
     id: readAttr(raw, 'id') ?? '',
+    metadata: [],
   };
 
   const onentryRaw = raw.onentry;
@@ -299,6 +310,9 @@ function normalizeFinalNode(raw: RawRecord): FinalNode {
   if (donedataRaw) {
     final.donedata = normalizeDoneData(donedataRaw as RawRecord);
   }
+
+  applyMetadataToNode(raw, final);
+  warnMisplacedCustomTags(raw);
 
   return final;
 }
@@ -347,39 +361,117 @@ function normalizeTransition(raw: RawRecord): Transition {
     target: readAttr(raw, 'target'),
     type: readAttr(raw, 'type') as 'internal' | 'external' | undefined,
     executable: [],
+    metadata: [],
   };
 
   transition.executable = extractTransitionExecutable(raw);
-  const customChildren = extractCustomChildren(raw, transition);
-  if (customChildren.length > 0) {
-    transition.customChildren = customChildren;
-  }
+  applyMetadataToNode(raw, transition);
+  warnMisplacedCustomTags(raw);
   return transition;
 }
 
 /**
- * Extracts registered custom-tag children from a raw element and attaches
- * them to the given parent AST node. Unknown tags that are not registered
- * are skipped (they are ignored or preserved as metadata elsewhere).
+ * Extracts <metadata> children from a raw element and attaches them to the
+ * given parent AST node. Registered custom tags are parsed into
+ * `customChildren`; every other metadata child is preserved verbatim as an
+ * opaque `MetadataBlock` (and reported to the user so they know it is not
+ * interpreted).
  */
-function extractCustomChildren(
+function extractMetadataAndCustom(
   raw: RawRecord,
   parent: CustomTagParseContext['parentASTNode'],
-): CustomASTNode[] {
+): { metadata: MetadataBlock[]; customChildren: CustomASTNode[] } {
+  const metadata: MetadataBlock[] = [];
   const customChildren: CustomASTNode[] = [];
-  for (const key of Object.keys(raw)) {
-    if (key.startsWith(ATTR_PREFIX) || key === TEXT_KEY) {
+  const registry = TagRegistry.getInstance();
+  const metadataRows = readChildArray(raw, 'metadata');
+  for (const meta of metadataRows) {
+    if (typeof meta !== 'object' || meta === null) {
       continue;
     }
-    const values = readChildArray(raw, key);
-    for (const value of values) {
-      const node = buildCustomASTNode(key, value as RawRecord, parent);
-      if (node) {
-        customChildren.push(node);
+    for (const key of Object.keys(meta)) {
+      if (key.startsWith(ATTR_PREFIX) || key === TEXT_KEY) {
+        continue;
+      }
+      const values = readChildArray(meta, key);
+      for (const value of values) {
+        if (registry.has(key)) {
+          customChildren.push(buildCustomASTNode(key, value as RawRecord, parent));
+        } else {
+          metadata.push(toMetadataBlock(key, value as RawRecord));
+          parserDiagnostics.push({
+            severity: 'warning',
+            code: 'WARN_UNREGISTERED_METADATA_TAG',
+            message: `<${key}> inside <metadata> is not a registered custom tag; it will be preserved as opaque metadata but not interpreted.`,
+          });
+        }
       }
     }
   }
-  return customChildren;
+  return { metadata, customChildren };
+}
+
+/**
+ * Wraps a raw child element as an opaque MetadataBlock (tag + attributes +
+ * text), preserving it verbatim for lossless round-tripping.
+ */
+function toMetadataBlock(tag: string, record: RawRecord): MetadataBlock {
+  const attributes: Record<string, string> = {};
+  for (const attrKey of Object.keys(record)) {
+    if (attrKey.startsWith(ATTR_PREFIX)) {
+      attributes[attrKey.slice(2)] = String(record[attrKey]);
+    }
+  }
+  const text = record[TEXT_KEY];
+  return {
+    tag,
+    attributes,
+    text:
+      text !== undefined && text !== null
+        ? typeof text === 'number'
+          ? text
+          : String(text)
+        : undefined,
+  };
+}
+
+/**
+ * Assigns `metadata` / `customChildren` on a node from its <metadata> block,
+ * merging with any blocks already recorded on the node (e.g. bare unknown
+ * root-level elements captured by `extractMetadataBlocks`).
+ */
+function applyMetadataToNode(
+  raw: RawRecord,
+  node: { metadata: MetadataBlock[]; customChildren?: CustomASTNode[] },
+): void {
+  const extracted = extractMetadataAndCustom(raw, node as CustomTagParseContext['parentASTNode']);
+  if (extracted.metadata.length > 0) {
+    node.metadata.push(...extracted.metadata);
+  }
+  if (extracted.customChildren.length > 0) {
+    node.customChildren = extracted.customChildren;
+  }
+}
+
+/**
+ * Warns when a registered custom tag appears as a bare direct child (outside
+ * `<metadata>`). Per the metadata-only convention, custom tags must live
+ * inside a `<metadata>` block to be honored.
+ */
+function warnMisplacedCustomTags(raw: RawRecord): void {
+  const registry = TagRegistry.getInstance();
+  for (const key of Object.keys(raw)) {
+    if (key.startsWith(ATTR_PREFIX) || key === TEXT_KEY || key === 'metadata') {
+      continue;
+    }
+    if (registry.has(key)) {
+      parserDiagnostics.push({
+        severity: 'warning',
+        code: 'WARN_CUSTOM_TAG_OUTSIDE_METADATA',
+        message: `<${key}> is a registered custom tag but must be nested inside a <metadata> block to be honored.`,
+      });
+    }
+  }
 }
 
 /**
@@ -390,11 +482,8 @@ function buildCustomASTNode(
   tagName: string,
   raw: RawRecord,
   parentASTNode: CustomTagParseContext['parentASTNode'],
-): CustomASTNode | undefined {
+): CustomASTNode {
   const registry = TagRegistry.getInstance();
-  if (!registry.has(tagName)) {
-    return undefined;
-  }
   const spec = registry.get(tagName)!;
   const attributes: Record<string, string> = {};
   for (const attrKey of Object.keys(raw)) {
@@ -664,6 +753,7 @@ function extractMetadataBlocks(raw: RawRecord): MetadataBlock[] {
       continue;
     }
     const knownChildren = [
+      'metadata',
       'state',
       'parallel',
       'final',
@@ -680,30 +770,12 @@ function extractMetadataBlocks(raw: RawRecord): MetadataBlock[] {
     if (knownChildren.includes(key)) {
       continue;
     }
-    // Registered custom tags are handled as customChildren, not metadata.
-    if (TagRegistry.getInstance().has(key)) {
-      continue;
-    }
+    // Preserve any other unrecognized / extension / namespace-scoped element
+    // (including bare registered tags outside <metadata>) as an opaque block
+    // so nothing is lost on round-trip.
     const values = readChildArray(raw, key);
     for (const value of values) {
-      const record = value as RawRecord;
-      const attributes: Record<string, string> = {};
-      for (const attrKey of Object.keys(record)) {
-        if (attrKey.startsWith(ATTR_PREFIX)) {
-          attributes[attrKey.slice(2)] = String(record[attrKey]);
-        }
-      }
-      const text = record[TEXT_KEY];
-      metadata.push({
-        tag: key,
-        attributes,
-        text:
-          text !== undefined && text !== null
-            ? typeof text === 'number'
-              ? text
-              : String(text)
-            : undefined,
-      });
+      metadata.push(toMetadataBlock(key, value as RawRecord));
     }
   }
   return metadata;
