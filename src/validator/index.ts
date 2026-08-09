@@ -54,6 +54,7 @@ function validateDuplicateStateIds(doc: SCXMLDocument, diagnostics: ValidationDi
         message: `Duplicate state id '${id}'. State ids must be unique within the document`,
         code: 'ERR_DUPLICATE_STATE_ID',
         severity: 'error',
+        nodeId: id,
       });
     }
     seen.add(id);
@@ -69,7 +70,7 @@ function validateTransitionTargets(
   stateIds: Set<string>,
   diagnostics: ValidationDiagnostic[],
 ): void {
-  const checkTargets = (transitions: Transition[]): void => {
+  const checkTargets = (transitions: Transition[], ownerId?: string): void => {
     for (const t of transitions) {
       if (!t.target) {
         continue;
@@ -80,6 +81,8 @@ function validateTransitionTargets(
             message: `Transition target '${target}' not found. Make sure a state with id="${target}" exists in your SCXML document`,
             code: 'ERR_INVALID_TRANSITION_TARGET',
             severity: 'error',
+            nodeId: ownerId,
+            transitionId: t.id,
           });
         }
       }
@@ -88,7 +91,7 @@ function validateTransitionTargets(
 
   walkStateNodes(doc, (node) => {
     if ('transitions' in node) {
-      checkTargets(node.transitions);
+      checkTargets(node.transitions, node.id);
     }
   });
 }
@@ -102,26 +105,27 @@ function validateInitialReferences(
   diagnostics: ValidationDiagnostic[],
 ): void {
   const root = doc.scxml;
-  const checkInitial = (value: string | undefined, ownerLabel: string): void => {
+  const checkInitial = (value: string | undefined, ownerId?: string): void => {
     if (!value) {
       return;
     }
     for (const id of parseIdList(value)) {
       if (!stateIds.has(id)) {
         diagnostics.push({
-          message: `Initial state '${id}'${ownerLabel} not found. Make sure a state with id="${id}" exists in your SCXML document`,
+          message: `Initial state '${id}'${ownerId ? ` in state '${ownerId}'` : ''} not found. Make sure a state with id="${id}" exists in your SCXML document`,
           code: 'ERR_INITIAL_STATE_NOT_FOUND',
           severity: 'error',
+          nodeId: ownerId,
         });
       }
     }
   };
 
-  checkInitial(root.initial, '');
+  checkInitial(root.initial);
 
   walkStateNodes(doc, (node) => {
     if ('initial' in node && node.initial) {
-      checkInitial(node.initial, ` in state '${node.id}'`);
+      checkInitial(node.initial, node.id);
     }
     // Validate <initial> block default-transition targets when present.
     const initialBlock = (node as unknown as { initialBlock?: InitialBlock }).initialBlock;
@@ -150,6 +154,7 @@ function checkInitialBlockTargets(
             message: `Initial transition target '${id}' not found. Make sure a state with id="${id}" exists in your SCXML document`,
             code: 'ERR_INITIAL_STATE_NOT_FOUND',
             severity: 'error',
+            transitionId: t.id,
           });
         }
       }
@@ -176,6 +181,7 @@ function validateTransitionTypes(doc: SCXMLDocument, diagnostics: ValidationDiag
           message: `Invalid transition type '${t.type}'. Must be 'internal' or 'external'`,
           code: 'ERR_INVALID_TRANSITION_TYPE',
           severity: 'error',
+          transitionId: t.id,
         });
       }
     }
@@ -205,6 +211,7 @@ function validateEventNames(doc: SCXMLDocument, diagnostics: ValidationDiagnosti
             message: `Invalid event name '${event}'. Event names must be valid identifiers`,
             code: 'ERR_INVALID_EVENT_NAME',
             severity: 'warning',
+            transitionId: t.id,
           });
         }
       }

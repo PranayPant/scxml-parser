@@ -305,7 +305,12 @@ function renderTransition(t: Transition, ctx: SerializeContext, depth: number): 
       children.push(renderExecutableElement(e, ctx, depth + 1));
     }
   }
-  const metadata = renderMetadataContainer(t.metadata, t.customChildren, ctx, depth + 1);
+  const metadata = renderMetadataContainer(
+    withTransitionId(t.metadata, t.id),
+    t.customChildren,
+    ctx,
+    depth + 1,
+  );
   if (metadata) {
     children.push(metadata);
   }
@@ -667,6 +672,29 @@ function renderMetadataContainer(
     return '';
   }
   return renderContainer('metadata', [], children, ctx, depth);
+}
+
+/**
+ * Ensures a transition's stable id is authoritatively persisted as a
+ * `transitionId` metadata block (a direct child of `<metadata>`). When `id`
+ * is set, any stale `transitionId` block is replaced with a fresh one
+ * carrying the current id so manual edits to `transition.id` win. When `id`
+ * is undefined, metadata is left untouched.
+ */
+function withTransitionId(
+  metadata: MetadataBlock[] | undefined,
+  id: string | undefined,
+): MetadataBlock[] | undefined {
+  if (id === undefined) {
+    return metadata;
+  }
+  const rest = (metadata ?? []).filter((b) => b.tag !== 'transitionId');
+  const block: MetadataBlock = {
+    tag: 'transitionId',
+    attributes: {},
+    text: id,
+  };
+  return rest.length > 0 ? [block, ...rest] : [block];
 }
 
 /**

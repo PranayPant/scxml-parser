@@ -4,7 +4,22 @@
  * Shared utility functions used across the validator rules: target list
  * parsing, state collection, and hierarchy building.
  */
-import type { ParallelNode, SCXMLDocument, StateNode, StateNodeLike } from '../types/ast';
+import type {
+  HistoryNode,
+  InitialBlock,
+  ParallelNode,
+  SCXMLDocument,
+  StateNode,
+  StateNodeLike,
+  Transition,
+} from '../types/ast';
+
+/**
+ * The element that owns a transition: a state/parallel (from its
+ * `transitions` array), an initial block (default transition), or a history
+ * pseudo-state (default transition).
+ */
+export type TransitionParent = StateNodeLike | InitialBlock | HistoryNode;
 
 /**
  * Splits a space-separated target / initial id list into individual ids,
@@ -177,5 +192,92 @@ function walkParallel(parallel: ParallelNode, visit: (node: StateNodeLike) => vo
   for (const p of parallel.parallels) {
     visit(p);
     walkParallel(p, visit);
+  }
+}
+
+/**
+ * Walks every transition in the document, including nested state/parallel
+ * transitions, initial-block (default) transitions, and history default
+ * transitions. Each transition is visited with its owning `parent` so
+ * consumers can derive edge identity (e.g. via `transition.id` when present).
+ */
+export function walkTransitions(
+  doc: SCXMLDocument,
+  visit: (transition: Transition, parent: TransitionParent) => void,
+): void {
+  const root = doc.scxml;
+  for (const s of root.states) {
+    walkStateTransitions(s, visit);
+  }
+  for (const p of root.parallels) {
+    walkParallelTransitions(p, visit);
+  }
+}
+
+function walkStateTransitions(
+  state: StateNode,
+  visit: (transition: Transition, parent: TransitionParent) => void,
+): void {
+  visitOwnTransitions(state, visit);
+  visitInitialBlock(state.initialBlock, state, visit);
+  for (const h of state.history) {
+    visitHistoryNode(h, visit);
+  }
+  for (const s of state.states) {
+    walkStateTransitions(s, visit);
+  }
+  for (const p of state.parallels) {
+    walkParallelTransitions(p, visit);
+  }
+}
+
+function walkParallelTransitions(
+  parallel: ParallelNode,
+  visit: (transition: Transition, parent: TransitionParent) => void,
+): void {
+  visitOwnTransitions(parallel, visit);
+  visitInitialBlock(parallel.initialBlock, parallel, visit);
+  for (const h of parallel.history) {
+    visitHistoryNode(h, visit);
+  }
+  for (const s of parallel.states) {
+    walkStateTransitions(s, visit);
+  }
+  for (const p of parallel.parallels) {
+    walkParallelTransitions(p, visit);
+  }
+}
+
+function visitOwnTransitions(
+  node: StateNode | ParallelNode,
+  visit: (transition: Transition, parent: TransitionParent) => void,
+): void {
+  for (const t of node.transitions) {
+    visit(t, node);
+  }
+}
+
+function visitInitialBlock(
+  block: InitialBlock | undefined,
+  owner: StateNode | ParallelNode,
+  visit: (transition: Transition, parent: TransitionParent) => void,
+): void {
+  if (!block) {
+    return;
+  }
+  for (const t of block.transition ?? []) {
+    visit(t, block);
+  }
+  for (const nested of block.blocks ?? []) {
+    visitInitialBlock(nested, owner, visit);
+  }
+}
+
+function visitHistoryNode(
+  history: HistoryNode,
+  visit: (transition: Transition, parent: TransitionParent) => void,
+): void {
+  if (history.transition) {
+    visit(history.transition, history);
   }
 }

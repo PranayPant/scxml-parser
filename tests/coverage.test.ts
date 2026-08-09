@@ -464,6 +464,19 @@ describe('targeted coverage: metadata text variants', () => {
     expect(meta?.text).toBe(42);
   });
 
+  it('preserves a bare numeric metadata child as a number', () => {
+    const xml = `
+      <scxml version="1.0" initial="a">
+        <state id="a">
+          <metadata><count>5</count></metadata>
+        </state>
+      </scxml>
+    `;
+    const { doc } = rt(xml);
+    const meta = doc.scxml.states[0].metadata.find((m) => m.tag === 'count');
+    expect(meta?.text).toBe(5);
+  });
+
   it('parses data elements carrying text alongside attributes', () => {
     const xml = `
       <scxml version="1.0" initial="a">

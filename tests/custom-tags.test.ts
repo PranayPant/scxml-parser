@@ -219,6 +219,225 @@ describe('parser: custom tags in metadata', () => {
   });
 });
 
+describe('transition ids', () => {
+  it('reads an id persisted in transition metadata', () => {
+    const xml = `
+      <scxml version="1.0" initial="a">
+        <state id="a">
+          <transition event="GO" target="b">
+            <metadata><transitionId id="t_submit" /></metadata>
+          </transition>
+        </state>
+        <state id="b" />
+      </scxml>
+    `;
+    const ast = parseSCXML(xml).data!;
+    const t = ast.scxml.states[0].transitions[0];
+    expect(t.id).toBe('t_submit');
+  });
+
+  it('serializes an id set on the AST into transition metadata', () => {
+    const ast = parseSCXML(
+      '<scxml version="1.0" initial="a"><state id="a"><transition event="GO" target="b" /></state><state id="b" /></scxml>',
+    ).data!;
+    ast.scxml.states[0].transitions[0].id = 't_next';
+    const out = serializeSCXML(ast, { pretty: true });
+    expect(out).toContain('<transitionId');
+    expect(out).toContain('t_next');
+  });
+
+  it('round-trips a transition id through parse -> serialize -> parse', () => {
+    const xml = `
+      <scxml version="1.0" initial="a">
+        <state id="a">
+          <transition event="GO" target="b">
+            <metadata><transitionId id="t_persist" /></metadata>
+          </transition>
+        </state>
+        <state id="b" />
+      </scxml>
+    `;
+    const ast = parseSCXML(xml).data!;
+    const out = serializeSCXML(ast, { pretty: true });
+    const reparsed = parseSCXML(out).data!;
+    expect(reparsed.scxml.states[0].transitions[0].id).toBe('t_persist');
+  });
+
+  it('derives a deterministic id when none is set', () => {
+    const ast = parseSCXML(
+      '<scxml version="1.0" initial="a"><state id="a"><transition event="GO" target="b" /></state><state id="b" /></scxml>',
+    ).data!;
+    expect(ast.scxml.states[0].transitions[0].id).toBe('a:b');
+    const out = serializeSCXML(ast, { pretty: true });
+    expect(out).toContain('<transitionId');
+    expect(out).toContain('a:b');
+  });
+
+  it('suffixes duplicate derived ids between the same source->target pair', () => {
+    const ast = parseSCXML(
+      '<scxml version="1.0" initial="a"><state id="a"><transition event="E1" target="b" /><transition event="E2" target="b" /></state><state id="b" /></scxml>',
+    ).data!;
+    const ids = ast.scxml.states[0].transitions.map((t) => t.id);
+    expect(ids).toEqual(['a:b', 'a:b_1']);
+  });
+
+  it('lets an explicit id win over the deterministic derivation', () => {
+    const xml = `
+      <scxml version="1.0" initial="a">
+        <state id="a">
+          <transition event="GO" target="b">
+            <metadata><transitionId id="t_custom" /></metadata>
+          </transition>
+        </state>
+        <state id="b" />
+      </scxml>
+    `;
+    const ast = parseSCXML(xml).data!;
+    expect(ast.scxml.states[0].transitions[0].id).toBe('t_custom');
+  });
+
+  it('round-trips a derived id so it stays stable across parse -> serialize -> parse', () => {
+    const xml = `
+      <scxml version="1.0" initial="a">
+        <state id="a"><transition event="GO" target="b" /></state>
+        <state id="b" />
+      </scxml>
+    `;
+    const ast = parseSCXML(xml).data!;
+    expect(ast.scxml.states[0].transitions[0].id).toBe('a:b');
+    const out = serializeSCXML(ast, { pretty: true });
+    const reparsed = parseSCXML(out).data!;
+    expect(reparsed.scxml.states[0].transitions[0].id).toBe('a:b');
+  });
+
+  it('reads a transition id from the text form of a transitionId block', () => {
+    const xml = `
+      <scxml version="1.0" initial="a">
+        <state id="a">
+          <transition event="GO" target="b">
+            <metadata><transitionId>t_text_id</transitionId></metadata>
+          </transition>
+        </state>
+        <state id="b" />
+      </scxml>
+    `;
+    const ast = parseSCXML(xml).data!;
+    expect(ast.scxml.states[0].transitions[0].id).toBe('t_text_id');
+  });
+
+  it('falls back to a derived id when a transitionId block is empty', () => {
+    const xml = `
+      <scxml version="1.0" initial="a">
+        <state id="a">
+          <transition event="GO" target="b">
+            <metadata><transitionId /></metadata>
+          </transition>
+        </state>
+        <state id="b" />
+      </scxml>
+    `;
+    const ast = parseSCXML(xml).data!;
+    expect(ast.scxml.states[0].transitions[0].id).toBe('a:b');
+  });
+
+  it('ignores whitespace-only transitionId text and derives an id', () => {
+    const xml = `
+      <scxml version="1.0" initial="a">
+        <state id="a">
+          <transition event="GO" target="b">
+            <metadata><transitionId>   </transitionId></metadata>
+          </transition>
+        </state>
+        <state id="b" />
+      </scxml>
+    `;
+    const ast = parseSCXML(xml).data!;
+    expect(ast.scxml.states[0].transitions[0].id).toBe('a:b');
+  });
+
+  it('serializes a manual transition with no id and no metadata without error', () => {
+    // A hand-built transition (no derived/persisted id and no metadata) must
+    // serialize cleanly: the serializer skips the transitionId block.
+    const ast = {
+      scxml: {
+        version: '1.0',
+        initial: 'a',
+        states: [
+          {
+            id: 'a',
+            transitions: [{ event: 'GO', target: 'b', executable: [] }],
+            states: [],
+            parallels: [],
+            finals: [],
+            history: [],
+            invoke: [],
+            metadata: [],
+          },
+        ],
+        parallels: [],
+        finals: [],
+        scripts: [],
+        metadata: [],
+      },
+    };
+    const out = serializeSCXML(ast as never, { pretty: true });
+    expect(out).toContain('<transition event="GO" target="b"');
+    expect(out).not.toContain('transitionId');
+  });
+
+  it('persists a manually-set id on a transition with no other metadata', () => {
+    const xml = `
+      <scxml version="1.0" initial="a">
+        <state id="a"><transition event="GO" target="b" /></state>
+        <state id="b" />
+      </scxml>
+    `;
+    const ast = parseSCXML(xml).data!;
+    const t = ast.scxml.states[0].transitions[0];
+    // Replace the derived metadata with just a manually-assigned id.
+    t.id = 't_manual';
+    // Keep metadata but strip the auto-persisted block to mimic a bare id set.
+    const out = serializeSCXML(ast, { pretty: true });
+    expect(out).toContain('<transitionId');
+    expect(out).toContain('t_manual');
+    expect(out).not.toContain('a:b');
+  });
+
+  it('reads a transition id from the value attribute fallback', () => {
+    const xml = `
+      <scxml version="1.0" initial="a">
+        <state id="a">
+          <transition event="GO" target="b">
+            <metadata><transitionId value="t_val" /></metadata>
+          </transition>
+        </state>
+        <state id="b" />
+      </scxml>
+    `;
+    const ast = parseSCXML(xml).data!;
+    expect(ast.scxml.states[0].transitions[0].id).toBe('t_val');
+  });
+
+  it('prepends a transitionId block when the transition also has other metadata', () => {
+    const xml = `
+      <scxml version="1.0" initial="a">
+        <state id="a">
+          <transition event="GO" target="b">
+            <metadata><viz:note x="1" /></metadata>
+          </transition>
+        </state>
+        <state id="b" />
+      </scxml>
+    `;
+    const ast = parseSCXML(xml).data!;
+    ast.scxml.states[0].transitions[0].id = 't_meta';
+    const out = serializeSCXML(ast, { pretty: true });
+    expect(out).toContain('<transitionId');
+    expect(out).toContain('t_meta');
+    expect(out).toContain('viz:note');
+  });
+});
+
 describe('validator: custom tags', () => {
   beforeEach(() => registerGate());
 

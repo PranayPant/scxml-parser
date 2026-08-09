@@ -129,14 +129,47 @@ shows this pattern.
 
 ## Module API
 
-| Export                       | Signature                                   | Description                                                 |
-| ---------------------------- | ------------------------------------------- | ----------------------------------------------------------- |
-| `parseSCXML(xml)`            | `(string) => ParseResult`                   | Parse XML into an AST + diagnostics.                        |
-| `validateAST(doc)`           | `(SCXMLDocument) => ValidationDiagnostic[]` | Validate a parsed AST.                                      |
-| `serializeSCXML(doc, opts?)` | `(doc, SerializationOptions?) => string`    | Serialize AST to XML.                                       |
-| `printAST(doc, opts?)`       | `(doc, PrintASTOptions?) => string`         | Print a debug tree.                                         |
-| `toMermaid(doc, opts?)`      | `(doc, MermaidOptions?) => string`          | Render a Mermaid state diagram.                             |
-| `SCXMLEngine`                | static facade                               | `parse` / `validate` / `serialize` / `print` / `toMermaid`. |
+| Export                             | Signature                                       | Description                                                                                                     |
+| ---------------------------------- | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `parseSCXML(xml, opts?)`           | `(string, ParseOptions?) => ParseResult`        | Parse XML into an AST + diagnostics.                                                                            |
+| `parseSCXMLPartial(xml, opts?)`    | `(string, ParseOptions?) => PartialParseResult` | Best-effort parse; always returns a tree (`recoverable` flags fallback).                                        |
+| `validateAST(doc)`                 | `(SCXMLDocument) => ValidationDiagnostic[]`     | Validate a parsed AST.                                                                                          |
+| `serializeSCXML(doc, opts?)`       | `(doc, SerializationOptions?) => string`        | Serialize AST to XML.                                                                                           |
+| `printAST(doc, opts?)`             | `(doc, PrintASTOptions?) => string`             | Print a debug tree.                                                                                             |
+| `toMermaid(doc, opts?)`            | `(doc, MermaidOptions?) => string`              | Render a Mermaid state diagram.                                                                                 |
+| `walkStates(doc, visit)`           | `(doc, (stateLike) => void)`                    | Visit every state/parallel/final node.                                                                          |
+| `walkTransitions(doc, visit)`      | `(doc, (transition, parent) => void)`           | Visit every transition, incl. `<initial>`/`<history>` edges.                                                    |
+| `renameState(doc, old, new)`       | `(doc, string, string) => void`                 | Rename a state and cascade target/initial/history refs.                                                         |
+| `removeState(doc, id)`             | `(doc, string) => void`                         | Remove a state; prune dangling transitions.                                                                     |
+| `addState(doc, parent, cfg)`       | `(doc, string\|null, cfg) => StateNode`         | Construct + append a state; returns it.                                                                         |
+| `addTransition(doc, s, t, e?, o?)` | `(...) => Transition`                           | Construct + append a well-formed transition; returns it.                                                        |
+| `removeTransition(doc, id)`        | `(doc, string) => void`                         | Remove a transition by id across parent kinds.                                                                  |
+| `SCXMLEngine`                      | static facade                                   | `parse` / `parsePartial` / `validate` / `serialize` / `print` / `toMermaid` / `walkStates` / `walkTransitions`. |
+
+Each `Transition` carries a stable `id`: either a consumer-provided id (from a
+`<transitionId>` metadata element) or a deterministic `${sourceId}:${targetId}`
+fallback (with `_1`, `_2`, … suffixes for parallel edges between the same pair),
+persisted in `<metadata>` so it survives round-trips. Use `walkTransitions` +
+`transition.id` for reliable edge identity in graph editors.
+
+`validateAST` diagnostics carry optional `nodeId` / `transitionId` (when the
+offending node or edge is known) so editors can color-code specific canvas
+nodes/edges without secondary lookups.
+
+For the **Canvas → Code** direction, the mutation helpers (`renameState`,
+`removeState`, `addState`, `addTransition`, `removeTransition`) bundle the
+cascading AST updates (target/initial/history rewrites and dangling-transition
+pruning) into single in-place calls before re-serializing to text. See
+[`API.md`](./API.md).
+
+> **Full reference:** see [`API.md`](./API.md) for the complete end-to-end API
+> spec — every export, type, option, diagnostic code, and the full AST shape.
+
+### `ParseOptions`
+
+- `captureStringPositions` (`boolean`, default `false`) — record each AST
+  node's `scxmlStringRange` (its source span in the raw string). Adds a
+  source-scanning pass; useful for editor code↔canvas sync (Monaco).
 
 ### `MermaidOptions`
 
@@ -268,6 +301,8 @@ flows and CLI options.
 Architecture notes for the extensibility and execution layers live alongside
 the code:
 
+- **[`API.md`](./API.md)** — the complete end-to-end API reference: every
+  export, type, option, diagnostic code, and the full AST shape.
 - **[`CUSTOM_TAG.md`](./CUSTOM_TAG.md)** — Open-Closed extension of the
   parser/validator/serializer via a custom tag registry. Custom tags are
   scoped to `<metadata>` blocks so the emitted SCXML stays standards-valid.

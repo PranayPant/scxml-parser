@@ -8,9 +8,10 @@ This document provides a complete technical guide and TypeScript implementation 
 
 When synchronizing a textual code editor with a visual drag-and-drop canvas, three major pitfalls must be addressed:
 
-| Challenge | Cause | Architectural Solution |
-| :--- | :--- | :--- |
-| **Infinite Feedback Loops** | Monaco updates AST $
+| Challenge                   | Cause                | Architectural Solution |
+| :-------------------------- | :------------------- | :--------------------- |
+| **Infinite Feedback Loops** | Monaco updates AST $ |
+
 ightarrow$ Canvas re-renders $
 ightarrow$ Canvas emits change $
 ightarrow$ Monaco updates text $
@@ -60,9 +61,15 @@ ightarrow$ AST updates canvas immediately (60fps) but debounces AST/XML serializ
 The following self-contained TypeScript module contains the state store, debouncing logic, Monaco handlers, React Flow adapters, and cursor/selection cross-highlighting logic.
 
 ```typescript
-import { create } from 'zustand';
-import type { editor, Position } from 'monaco-editor';
-import type { Node, Edge, OnNodesChange, OnEdgesChange, NodeChange } from 'reactflow';
+import { create } from "zustand";
+import type { editor, Position } from "monaco-editor";
+import type {
+  Node,
+  Edge,
+  OnNodesChange,
+  OnEdgesChange,
+  NodeChange,
+} from "reactflow";
 
 // ============================================================================
 // 1. AST & Store Types
@@ -96,7 +103,7 @@ export interface ASTTransition {
 
 export interface ASTState {
   id: string;
-  type?: 'normal' | 'parallel' | 'final' | 'history';
+  type?: "normal" | "parallel" | "final" | "history";
   initial?: string;
   transitions?: ASTTransition[];
   states?: Record<string, ASTState>;
@@ -109,7 +116,7 @@ export interface StatechartAST {
   states: Record<string, ASTState>;
 }
 
-export type SyncOrigin = 'monaco' | 'canvas' | 'external' | null;
+export type SyncOrigin = "monaco" | "canvas" | "external" | null;
 
 // ============================================================================
 // 2. Statechart Synchronization Store (Zustand)
@@ -128,8 +135,8 @@ interface StatechartStore {
 }
 
 export const useStatechartStore = create<StatechartStore>((set) => ({
-  ast: { id: 'root', states: {} },
-  xmlString: '',
+  ast: { id: "root", states: {} },
+  xmlString: "",
   activeOrigin: null,
   selectedStateId: null,
 
@@ -137,7 +144,7 @@ export const useStatechartStore = create<StatechartStore>((set) => ({
     set({
       xmlString: xml,
       ast: parsedAst,
-      activeOrigin: 'monaco',
+      activeOrigin: "monaco",
     }),
 
   setLayoutFromCanvas: (updatedAst) =>
@@ -145,7 +152,7 @@ export const useStatechartStore = create<StatechartStore>((set) => ({
       ast: updatedAst,
       // Re-serialize AST back to XML string while keeping canvas origin
       xmlString: serializeAstToScxml(updatedAst),
-      activeOrigin: 'canvas',
+      activeOrigin: "canvas",
     })),
 
   setSelectedState: (stateId, origin) =>
@@ -160,7 +167,10 @@ declare function serializeAstToScxml(ast: StatechartAST): string;
 // 3. React Flow Adapters (AST <-> Visual Nodes/Edges)
 // ============================================================================
 
-export function astToReactFlow(ast: StatechartAST): { nodes: Node[]; edges: Edge[] } {
+export function astToReactFlow(ast: StatechartAST): {
+  nodes: Node[];
+  edges: Edge[];
+} {
   const nodes: Node[] = [];
   const edges: Edge[] = [];
 
@@ -170,21 +180,26 @@ export function astToReactFlow(ast: StatechartAST): { nodes: Node[]; edges: Edge
     nodes.push({
       id: state.id,
       parentNode: parentId,
-      extent: parentId ? 'parent' : undefined,
+      extent: parentId ? "parent" : undefined,
       position: { x: layout.x, y: layout.y },
       style: { width: layout.width, height: layout.height },
       data: { label: state.id, stateRef: state },
-      type: state.states && Object.keys(state.states).length > 0 ? 'group' : 'default',
+      type:
+        state.states && Object.keys(state.states).length > 0
+          ? "group"
+          : "default",
     });
 
     if (state.transitions) {
-      state.transitions.forEach((t, idx) => {
+      state.transitions.forEach((t) => {
         if (t.target) {
           edges.push({
-            id: t.id || `${state.id}->${t.target}-${idx}`,
+            // `t.id` is always present (explicit or deterministic). Use it as
+            // the stable React Flow edge key so re-renders don't churn edges.
+            id: t.id || `${state.id}->${t.target}`,
             source: state.id,
             target: t.target,
-            label: t.event || '',
+            label: t.event || "",
             data: { transitionRef: t },
           });
         }
@@ -192,7 +207,9 @@ export function astToReactFlow(ast: StatechartAST): { nodes: Node[]; edges: Edge
     }
 
     if (state.states) {
-      Object.values(state.states).forEach((child) => processState(child, state.id));
+      Object.values(state.states).forEach((child) =>
+        processState(child, state.id),
+      );
     }
   }
 
@@ -201,7 +218,7 @@ export function astToReactFlow(ast: StatechartAST): { nodes: Node[]; edges: Edge
 }
 
 function getLayout(state: ASTState): NodeLayout {
-  const custom = state.customChildren?.find((c) => c.tagName === 'layout:node');
+  const custom = state.customChildren?.find((c) => c.tagName === "layout:node");
   return custom?.payload || { x: 0, y: 0, width: 160, height: 80 };
 }
 
@@ -234,17 +251,18 @@ export class MonacoSyncController {
           useStatechartStore.getState().setXmlFromMonaco(text, parsedAst);
         } catch (err) {
           // Syntax Error: Ignore partial XML, keep existing canvas state intact
-          console.warn('SCXML Parse warning (user still typing):', err);
+          console.warn("SCXML Parse warning (user still typing):", err);
         }
       }, 300);
     });
 
     // 2. Cursor movement -> Highlight selected node on Canvas
     this.editor.onDidChangeCursorPosition((e) => {
-      const lineText = this.editor.getModel()?.getLineContent(e.position.lineNumber) || '';
+      const lineText =
+        this.editor.getModel()?.getLineContent(e.position.lineNumber) || "";
       const match = lineText.match(/<state[^>]*id=["']([^"']+)["']/);
       if (match && match[1]) {
-        useStatechartStore.getState().setSelectedState(match[1], 'monaco');
+        useStatechartStore.getState().setSelectedState(match[1], "monaco");
       }
     });
   }
@@ -273,7 +291,7 @@ export class MonacoSyncController {
             text: newXml,
           },
         ],
-        () => null
+        () => null,
       );
     }
 
@@ -290,7 +308,14 @@ export class MonacoSyncController {
     const model = this.editor.getModel();
     if (!model) return;
 
-    const matches = model.findMatches(`id="${stateId}"`, true, false, true, null, true);
+    const matches = model.findMatches(
+      `id="${stateId}"`,
+      true,
+      false,
+      true,
+      null,
+      true,
+    );
     if (matches.length > 0) {
       const targetRange = matches[0].range;
       this.editor.revealLineInCenter(targetRange.startLineNumber);
@@ -309,7 +334,9 @@ export function createCanvasChangeHandler() {
   return {
     onNodesChange: (changes: NodeChange[]) => {
       // Process position drag changes
-      const dragChanges = changes.filter((c) => c.type === 'position' && c.dragging);
+      const dragChanges = changes.filter(
+        (c) => c.type === "position" && c.dragging,
+      );
 
       if (dragChanges.length === 0) return;
 
@@ -323,10 +350,14 @@ export function createCanvasChangeHandler() {
         let modified = false;
 
         dragChanges.forEach((change) => {
-          if (change.type === 'position' && change.position) {
+          if (change.type === "position" && change.position) {
             const stateNode = findStateInAst(currentAst, change.id);
             if (stateNode) {
-              updateStateLayout(stateNode, change.position.x, change.position.y);
+              updateStateLayout(
+                stateNode,
+                change.position.x,
+                change.position.y,
+              );
               modified = true;
             }
           }
@@ -356,7 +387,9 @@ function findStateInAst(ast: StatechartAST, id: string): ASTState | null {
 
 function updateStateLayout(state: ASTState, x: number, y: number) {
   if (!state.customChildren) state.customChildren = [];
-  const index = state.customChildren.findIndex((c) => c.tagName === 'layout:node');
+  const index = state.customChildren.findIndex(
+    (c) => c.tagName === "layout:node",
+  );
 
   const layoutPayload: NodeLayout = {
     x: Math.round(x),
@@ -366,7 +399,7 @@ function updateStateLayout(state: ASTState, x: number, y: number) {
   };
 
   const node: CustomASTNode<NodeLayout> = {
-    tagName: 'layout:node',
+    tagName: "layout:node",
     attributes: { x: String(Math.round(x)), y: String(Math.round(y)) },
     payload: layoutPayload,
   };
@@ -385,10 +418,9 @@ function updateStateLayout(state: ASTState, x: number, y: number) {
 
 1. **Monaco Setup**: Instantiated with `MonacoSyncController`. Binds keystroke changes to a 300ms debounced parser.
 2. **React Flow Setup**: Binds `onNodesChange` to `createCanvasChangeHandler()` with a 100ms layout debounce.
-3. **Cross-Highlighting**: 
+3. **Cross-Highlighting**:
    - Node selection on React Flow calls `monacoSync.revealStateId(id)`.
    - Cursor movement on Monaco state tags updates `selectedStateId` in store to highlight nodes on Canvas.
-
 
 ## 7. Performance Considerations for Consumer-driven Layout Metadata Extraction
 
@@ -402,6 +434,70 @@ There is a **minor performance overhead** compared to direct, built-in AST prope
 
 1. **W3C SCXML Spec Compliance:** The SCXML specification explicitly permits `<metadata>` tags inside `<scxml>`, `<state>`, `<parallel>`, and `<transition>` elements. Wrapping your custom `<layout:node>` inside `<metadata>` ensures third-party SCXML tools won't reject your files.
 2. **Strict Domain Boundary:** The core engine only needs to know how to route element tags; it remains 100% statechart-pure. The consuming app defines the TypeScript types, parsing logic, and serialization format for its own UI metadata.
+
+---
+
+## 8. Integration Considerations (Comment Loss, Echo Loops, Coordinate Schema)
+
+These three concerns are **consumer-layer responsibilities**, not core-library
+features. The library already provides the mechanisms to solve each one; the
+patterns below keep the editor resilient without changing the headless core.
+
+### 8.1 Comment & whitespace loss during serialization
+
+`serializeSCXML` re-emits XML from the AST and (correctly) does **not** preserve
+raw comments or reformatting. In a two-way editor, treat the **Monaco buffer as
+the source of truth** and apply **localized text edits** rather than full-buffer
+replacement:
+
+- Use `scxmlStringRange` (via `parseSCXML(xml, { captureStringPositions: true })`)
+  to locate a node's exact span in the current buffer.
+- For Canvas→Code changes, either build the replacement snippet and call
+  `serializeSCXML` only for the affected subtree, or — where feasible — write a
+  targeted Monaco edit at the node's range.
+
+Comments are not part of the SCXML semantic model, so they are intentionally
+not captured in the AST. Editors that want to keep comments should edit the
+live Monaco text (which preserves them natively) instead of round-tripping the
+whole AST.
+
+### 8.2 Circular sync prevention (echo loop)
+
+When a canvas edit serializes back into Monaco, and Monaco's own change event
+re-parses and re-renders the canvas, you can get an echo loop. This is pure
+**editor plumbing** — the library has no event system and cannot (and should
+not) own it. Apply two standard mitigations in the controller:
+
+- **Transaction source flag**: tag each update as `source: 'editor' | 'canvas'`.
+  When the controller pushes text into Monaco because of a canvas action, mark
+  the Monaco change handler to ignore that write and not re-emit a canvas
+  update.
+- **Debounce**: debounce Monaco keystroke parsing (150–300ms) via
+  `parseSCXMLPartial`, and debounce canvas layout writes (e.g. 100ms). This
+  collapses bursts and avoids feedback thrash.
+
+### 8.3 Coordinate storage schema
+
+Visual layouts must persist across sessions. The library provides the
+**mechanism** via `TagRegistry` + `<metadata>` scoping; the editor owns the
+**schema**. Register a `layout` tag spec and read/write coordinates through it:
+
+```xml
+<metadata>
+  <layout:node id="StateA" x="100" y="200" width="160" height="80" />
+  <layout:waypoint x="120" y="130" />
+</metadata>
+```
+
+- Register `layout:node` / `layout:waypoint` with `SCXMLEngine.registerTag(...)`
+  (see `CUSTOM_TAG.md` / `LAYOUT-NODES.md`).
+- Because layout lives in `<metadata>`, it survives both Monaco edits and
+  canvas moves, and round-trips through `serializeSCXML` losslessly.
+
+> The library is intentionally **name-agnostic**: it routes registered tags
+> but does not hard-code `layout:node`. The schema above is a consumer
+> convention (see `LAYOUT-NODES.md`); the mechanism is generic.
+
 3. **Flexible Extensibility:** If you later add new visual elements (e.g., sticky notes, annotations, group boundaries, or visual theme overrides), you register new tags on the consumer side without modifying or redeploying the parser engine.
 
 ---
@@ -412,26 +508,52 @@ While the model works, relying on `customChildren.find()` across your state tree
 
 #### 1. $O(K)$ Array Lookups per Node (`customChildren.find()`)
 
-* **The Penalty:** Calling `.find(c => c.tagName === 'layout:node')` requires a linear search through the `customChildren` array. Doing this on every frame or canvas update for $N$ states results in $O(N \times K)$ operations (where $K$ is the number of custom children per state).
-* **Impact:** Negligible for 50 states, but noticeable during smooth 60fps zooming/panning if recalculating layout dynamically on statecharts with hundreds of states.
-* **Mitigation:** Index or extract the layout payloads into a Map or weak-map lookup table during the `AST -> Canvas` transformation pass rather than calling `.find()` inside canvas render loops:
+- **The Penalty:** Calling `.find(c => c.tagName === 'layout:node')` requires a linear search through the `customChildren` array. Doing this on every frame or canvas update for $N$ states results in $O(N \times K)$ operations (where $K$ is the number of custom children per state).
+- **Impact:** Negligible for 50 states, but noticeable during smooth 60fps zooming/panning if recalculating layout dynamically on statecharts with hundreds of states.
+- **Mitigation:** Index or extract the layout payloads into a Map or weak-map lookup table during the `AST -> Canvas` transformation pass rather than calling `.find()` inside canvas render loops:
+
 ```typescript
 // Indexing once after parse:
 const layoutMap = new Map<string, NodeLayoutPayload>();
 
 function indexLayouts(state: ASTState) {
-  const layout = state.customChildren?.find(c => c.tagName === 'layout:node')?.payload;
+  const layout = state.customChildren?.find(
+    (c) => c.tagName === "layout:node",
+  )?.payload;
   if (layout) layoutMap.set(state.id, layout);
   state.states?.forEach(indexLayouts);
 }
-
 ```
 
+The same indexing applies to **edges**: enumerate transitions once into a Map
+keyed by the transition's stable id instead of searching per frame. The library
+exposes `walkTransitions(doc, visit)` for this, which also covers `<initial>`
+default transitions and `<history>` default transitions that a plain
+state-walk would miss:
 
+```typescript
+import { walkTransitions } from "scxml-parser";
+
+const edgeMap = new Map<
+  string,
+  { source: string; target?: string; label?: string }
+>();
+walkTransitions(ast, (t, parent) => {
+  const source =
+    "id" in parent ? parent.id : /* initial parent -> owning state */ "";
+  edgeMap.set(t.id!, { source, target: t.target, label: t.event });
+});
+```
+
+Each `Transition` now carries a stable `id` — either an explicit consumer id
+(via a `<transitionId>` metadata element) or a deterministic
+`${sourceId}:${targetId}` fallback (with `_1`, `_2`, … for parallel edges
+between the same pair) — so edge identity is reliable for React Flow `Edge.id`.
 
 #### 2. Heap Allocation & Garbage Collection
 
-* **The Penalty:** Every custom node creates multiple wrapper objects:
+- **The Penalty:** Every custom node creates multiple wrapper objects:
+
 ```typescript
 {
   type: 'custom',
@@ -442,14 +564,13 @@ function indexLayouts(state: ASTState) {
 
 ```
 
-
-* **Impact:** Generates double the object allocations per state node during XML parsing. In browser environments, parsing massive files ($>5,000$ states) will trigger short Garbage Collection (GC) pauses.
-* **Mitigation:** If memory/GC becomes a bottleneck, have `parse()` mutate or assign attributes directly to `payload` without storing duplicated string key-values in `attributes`.
+- **Impact:** Generates double the object allocations per state node during XML parsing. In browser environments, parsing massive files ($>5,000$ states) will trigger short Garbage Collection (GC) pauses.
+- **Mitigation:** If memory/GC becomes a bottleneck, have `parse()` mutate or assign attributes directly to `payload` without storing duplicated string key-values in `attributes`.
 
 #### 3. SAX Map Lookup Overhead
 
-* **The Penalty:** During XML parsing, every start tag triggers a lookup in the `SCXMLEngine` tag registry (`Map.get(tagName)`).
-* **Impact:** Modern JS engines (V8) execute `Map.get()` in nanoseconds. This adds $<1\text{ms}$ of overhead for standard statechart file sizes.
+- **The Penalty:** During XML parsing, every start tag triggers a lookup in the `SCXMLEngine` tag registry (`Map.get(tagName)`).
+- **Impact:** Modern JS engines (V8) execute `Map.get()` in nanoseconds. This adds $<1\text{ms}$ of overhead for standard statechart file sizes.
 
 ---
 
@@ -462,19 +583,18 @@ If you use React Flow or another reactive DOM canvas, mutating the `payload` obj
 layoutNode.payload.x = newX;
 
 // ✅ Better: Immutably update the payload and parent customChildren array
-state.customChildren = state.customChildren.map(child => 
-  child.tagName === 'layout:node'
+state.customChildren = state.customChildren.map((child) =>
+  child.tagName === "layout:node"
     ? { ...child, payload: { ...child.payload, x: newX, y: newY } }
-    : child
+    : child,
 );
-
 ```
 
 ### Summary Verdict
 
-| Metric | Rating | Notes |
-| --- | --- | --- |
-| **Architectural Design** | **Excellent** | Complete decoupling of core statechart parser and UI layer. |
-| **Parsing Speed** | **Fast** | Negligible registry lookup overhead during SAX parsing. |
-| **Memory Footprint** | **Slightly Higher** | Small wrapper object overhead per node; fine for typical files. |
-| **Render Performance** | **Good** | $O(N)$ lookup cost is easily mitigated by indexing layout payloads during the canvas conversion pass. |
+| Metric                   | Rating              | Notes                                                                                                 |
+| ------------------------ | ------------------- | ----------------------------------------------------------------------------------------------------- |
+| **Architectural Design** | **Excellent**       | Complete decoupling of core statechart parser and UI layer.                                           |
+| **Parsing Speed**        | **Fast**            | Negligible registry lookup overhead during SAX parsing.                                               |
+| **Memory Footprint**     | **Slightly Higher** | Small wrapper object overhead per node; fine for typical files.                                       |
+| **Render Performance**   | **Good**            | $O(N)$ lookup cost is easily mitigated by indexing layout payloads during the canvas conversion pass. |

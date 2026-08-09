@@ -126,6 +126,62 @@ export function setTransitionWaypoints(
 - All functions are framework-agnostic; any canvas/editor can map its own
   coordinates to/from this API.
 
+### Stable transition ids (for edge identity)
+
+Edges (transitions) carry a stable, editor-facing `id` on the AST `Transition`
+node. It is persisted inside the transition's `<metadata>` as a `transitionId`
+element so it survives round-trips while keeping the SCXML standard-compliant:
+
+```xml
+<transition event="SUBMIT" target="Processing">
+  <metadata>
+    <transitionId id="t_submit" />
+    <layout:waypoint layout="true" x="120" y="130" />
+  </metadata>
+</transition>
+```
+
+Id resolution (explicit wins, deterministic fallback):
+
+- **Explicit id**: the parser reads a consumer-provided `transitionId`
+  (attribute form `id` or `value`, or trimmed text form) → `transition.id`.
+- **Deterministic fallback**: when no explicit id is present, the parser
+  derives a stable id from the source and target states —
+  `${sourceId}:${targetId}` — and appends `_1`, `_2`, … when multiple
+  transitions share the same `source:target` pair (e.g. different events
+  between two states). The derived id is **persisted** as a `transitionId`
+  metadata element so it stays stable across `parse → serialize → parse`.
+- **Serializer**: `transition.id` is always authoritatively written back as a
+  `transitionId` metadata element (replacing any stale one), so manual edits
+  to `transition.id` win and other metadata (waypoints, notes, …) are kept.
+- This gives readers a stable identity for React Flow edge keys, waypoint
+  indexing, and Monaco ↔ canvas cross-highlighting.
+
+For initial-block (`<initial>`) and `<history>` default transitions, the
+source for the derived id is the **owning state / parallel / history id**.
+
+### Indexing every edge with `walkTransitions`
+
+`walkStates` only visits state-like nodes — it misses `<initial>` default
+transitions and `<history>` default transitions. Use the library's
+`walkTransitions(doc, visit)` helper to enumerate **every** edge, indexed by
+the now-always-present `transition.id`:
+
+```typescript
+import { walkTransitions } from "scxml-parser";
+import type { TransitionParent } from "scxml-parser";
+
+const edges = new Map<string, EdgeInfra>();
+walkTransitions(ast, (transition, parent: TransitionParent) => {
+  const id = transition.id!; // explicit or deterministic
+  edges.set(id, { transition, parent, label: transition.event });
+});
+// render loop: const edge = edges.get(edgeId)
+```
+
+This mirrors the mitigation in `monaco_reactflow_sync.md` §7 while keeping all
+layout-specific logic consumer-side.
+
 ### Avoid repeating `.find()` in render loops
 
 Reading layout via `customChildren.find()` on every frame is `O(K)` per node
@@ -134,7 +190,7 @@ AST → canvas conversion pass using the library's structural
 `walkStates(doc, visit)` helper, then read from a `Map` in the render loop:
 
 ```typescript
-import { walkStates } from 'scxml-parser';
+import { walkStates } from "scxml-parser";
 
 const layoutMap = new Map<string, NodeLayout>();
 walkStates(ast, (node) => {
