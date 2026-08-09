@@ -5,8 +5,10 @@
  * returns a list of diagnostics. This module mirrors and generalizes the
  * W3C / authoring constraints with a stable diagnostic-code contract.
  */
+import { TagRegistry } from '../registry/TagRegistry';
 import type { InitialBlock, SCXMLDocument, Transition } from '../types/ast';
 import type { ValidationDiagnostic } from '../types/diagnostics';
+import type { CustomASTNode, CustomParentNode } from '../types/extensibility';
 import {
   buildStateHierarchy,
   collectAllStateIds,
@@ -35,6 +37,7 @@ export function validateAST(doc: SCXMLDocument): ValidationDiagnostic[] {
   validateTransitionTypes(doc, diagnostics);
   validateEventNames(doc, diagnostics);
   validateDuplicateDataIds(doc, diagnostics);
+  validateCustomChildren(doc, diagnostics);
 
   return diagnostics;
 }
@@ -51,6 +54,7 @@ function validateDuplicateStateIds(doc: SCXMLDocument, diagnostics: ValidationDi
         message: `Duplicate state id '${id}'. State ids must be unique within the document`,
         code: 'ERR_DUPLICATE_STATE_ID',
         severity: 'error',
+        nodeId: id,
       });
     }
     seen.add(id);
@@ -66,7 +70,7 @@ function validateTransitionTargets(
   stateIds: Set<string>,
   diagnostics: ValidationDiagnostic[],
 ): void {
-  const checkTargets = (transitions: Transition[]): void => {
+  const checkTargets = (transitions: Transition[], ownerId?: string): void => {
     for (const t of transitions) {
       if (!t.target) {
         continue;
@@ -77,6 +81,8 @@ function validateTransitionTargets(
             message: `Transition target '${target}' not found. Make sure a state with id="${target}" exists in your SCXML document`,
             code: 'ERR_INVALID_TRANSITION_TARGET',
             severity: 'error',
+            nodeId: ownerId,
+            transitionId: t.id,
           });
         }
       }
@@ -85,7 +91,7 @@ function validateTransitionTargets(
 
   walkStateNodes(doc, (node) => {
     if ('transitions' in node) {
-      checkTargets(node.transitions);
+      checkTargets(node.transitions, node.id);
     }
   });
 }
@@ -99,26 +105,27 @@ function validateInitialReferences(
   diagnostics: ValidationDiagnostic[],
 ): void {
   const root = doc.scxml;
-  const checkInitial = (value: string | undefined, ownerLabel: string): void => {
+  const checkInitial = (value: string | undefined, ownerId?: string): void => {
     if (!value) {
       return;
     }
     for (const id of parseIdList(value)) {
       if (!stateIds.has(id)) {
         diagnostics.push({
-          message: `Initial state '${id}'${ownerLabel} not found. Make sure a state with id="${id}" exists in your SCXML document`,
+          message: `Initial state '${id}'${ownerId ? ` in state '${ownerId}'` : ''} not found. Make sure a state with id="${id}" exists in your SCXML document`,
           code: 'ERR_INITIAL_STATE_NOT_FOUND',
           severity: 'error',
+          nodeId: ownerId,
         });
       }
     }
   };
 
-  checkInitial(root.initial, '');
+  checkInitial(root.initial);
 
   walkStateNodes(doc, (node) => {
     if ('initial' in node && node.initial) {
-      checkInitial(node.initial, ` in state '${node.id}'`);
+      checkInitial(node.initial, node.id);
     }
     // Validate <initial> block default-transition targets when present.
     const initialBlock = (node as unknown as { initialBlock?: InitialBlock }).initialBlock;
@@ -147,6 +154,7 @@ function checkInitialBlockTargets(
             message: `Initial transition target '${id}' not found. Make sure a state with id="${id}" exists in your SCXML document`,
             code: 'ERR_INITIAL_STATE_NOT_FOUND',
             severity: 'error',
+            transitionId: t.id,
           });
         }
       }
@@ -173,6 +181,7 @@ function validateTransitionTypes(doc: SCXMLDocument, diagnostics: ValidationDiag
           message: `Invalid transition type '${t.type}'. Must be 'internal' or 'external'`,
           code: 'ERR_INVALID_TRANSITION_TYPE',
           severity: 'error',
+          transitionId: t.id,
         });
       }
     }
@@ -202,6 +211,7 @@ function validateEventNames(doc: SCXMLDocument, diagnostics: ValidationDiagnosti
             message: `Invalid event name '${event}'. Event names must be valid identifiers`,
             code: 'ERR_INVALID_EVENT_NAME',
             severity: 'warning',
+            transitionId: t.id,
           });
         }
       }
@@ -242,4 +252,59 @@ function validateDuplicateDataIds(doc: SCXMLDocument, diagnostics: ValidationDia
       checkData(node.datamodel);
     }
   });
+}
+
+/**
+ * Validates registered custom-tag children attached to the root, states, and
+ * transitions. For each custom node it enforces the spec's `allowedParents`
+ * scope and runs the spec's custom `validate` hook.
+ */
+function validateCustomChildren(doc: SCXMLDocument, diagnostics: ValidationDiagnostic[]): void {
+  const root = doc.scxml;
+  if (root.customChildren) {
+    for (const custom of root.customChildren) {
+      applyCustomScope(custom, root, 'scxml', diagnostics);
+    }
+  }
+
+  walkStateNodes(doc, (stateLike) => {
+    if ('customChildren' in stateLike && stateLike.customChildren) {
+      for (const custom of stateLike.customChildren) {
+        applyCustomScope(custom, stateLike, 'state', diagnostics);
+      }
+    }
+    const transitions = 'transitions' in stateLike ? stateLike.transitions : [];
+    for (const t of transitions) {
+      if (t.customChildren) {
+        for (const custom of t.customChildren) {
+          applyCustomScope(custom, t, 'transition', diagnostics);
+        }
+      }
+    }
+  });
+}
+
+/**
+ * Applies parent-scope and custom-hook validation to a single custom node.
+ */
+function applyCustomScope(
+  custom: CustomASTNode,
+  parent: CustomParentNode,
+  parentTagName: string,
+  diagnostics: ValidationDiagnostic[],
+): void {
+  const spec = TagRegistry.getInstance().get(custom.tagName);
+  if (!spec) {
+    return;
+  }
+  if (spec.allowedParents && !spec.allowedParents.includes(parentTagName)) {
+    diagnostics.push({
+      severity: 'error',
+      code: 'ERR_CUSTOM_TAG_INVALID_PARENT',
+      message: `<${custom.tagName}> is not allowed inside <${parentTagName}>. Allowed parents: ${spec.allowedParents.join(', ')}`,
+    });
+  }
+  if (spec.validate) {
+    diagnostics.push(...spec.validate(custom, parent));
+  }
 }

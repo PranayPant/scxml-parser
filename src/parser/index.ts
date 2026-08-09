@@ -6,6 +6,7 @@
  * is fully UI-agnostic — it never touches the DOM, Monaco, or any store.
  */
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
+import { TagRegistry } from '../registry/TagRegistry';
 import type {
   ContentElement,
   DataElement,
@@ -22,12 +23,16 @@ import type {
   SCXMLDocument,
   SCXMLElement,
   ScriptElement,
+  ScxmlStringRange,
   SendElement,
   StateNode,
   StateType,
   Transition,
 } from '../types/ast';
-import type { ParseResult, ValidationDiagnostic } from '../types/diagnostics';
+import type { ParseResult, PartialParseResult, ValidationDiagnostic } from '../types/diagnostics';
+import type { CustomASTNode, CustomTagParseContext } from '../types/extensibility';
+import type { ParseOptions } from '../types/options';
+import { type RangeMap, scanElementRanges } from './positions';
 
 /** The raw object-tree shapes emitted by fast-xml-parser. */
 type RawRecord = Record<string, unknown>;
@@ -64,13 +69,105 @@ interface XMLErrorLike {
 }
 
 /**
+ * Module-scoped diagnostics collected during normalization (e.g. misplaced
+ * custom tags that appear outside `<metadata>`). Reset per parse call and
+ * merged into the returned result so deep-normalization warnings surface
+ * without threading a diagnostics array through every normalizer.
+ */
+let parserDiagnostics: ValidationDiagnostic[] = [];
+
+/**
+ * Per-parse counter for deriving unique transition ids. Tracks how many
+ * times each `source:target` key has been generated so the Nth duplicate
+ * becomes `${key}_${n}`. Reset per parse call.
+ */
+let parserTransitionKeyCounts = new Map<string, number>();
+
+/**
+ * Per-parse source-range map populated when `captureStringPositions` is on.
+ * Reset per parse call. See `src/parser/positions.ts`.
+ */
+let parserRangeMap: RangeMap | null = null;
+
+/**
  * Parses a raw SCXML string into an in-memory AST.
  *
  * @param xmlString - Raw SCXML XML content (or any well-formed XML).
+ * @param options - Optional parse options (e.g. captureStringPositions).
  * @returns A ParseResult containing the AST on success and diagnostics.
  */
-export function parseSCXML(xmlString: string): ParseResult {
+export function parseSCXML(xmlString: string, options: ParseOptions = {}): ParseResult {
+  const core = parseCore(xmlString, options);
+  if (core.document === undefined) {
+    return { success: false, errors: core.diagnostics };
+  }
+  const allErrors = [...core.diagnostics, ...parserDiagnostics];
+  return {
+    success: allErrors.every((d) => d.severity !== 'error'),
+    data: core.document,
+    errors: allErrors,
+  };
+}
+
+/**
+ * Best-effort variant of `parseSCXML`. Always returns a `data` tree (a
+ * minimal fallback document when the input is too malformed to parse), so a
+ * consumer (e.g. an editor) always has something to render while typing.
+ * `recoverable` is `false` when the returned tree is a degraded fallback.
+ *
+ * @param xmlString - Raw SCXML XML content (may be transiently malformed).
+ * @param options - Optional parse options (e.g. captureStringPositions).
+ * @returns A PartialParseResult with an always-defined data tree.
+ */
+export function parseSCXMLPartial(
+  xmlString: string,
+  options: ParseOptions = {},
+): PartialParseResult {
+  const core = parseCore(xmlString, options);
+  const document = core.document ?? createEmptyDocument();
+  const allErrors = [...core.diagnostics, ...parserDiagnostics];
+  return {
+    data: document,
+    errors: allErrors,
+    recoverable: core.document !== undefined,
+  };
+}
+
+/**
+ * A minimal, always-safe empty SCXML document used as the fallback tree when
+ * input cannot be parsed at all (so `parseSCXMLPartial.data` is never
+ * undefined).
+ */
+function createEmptyDocument(): SCXMLDocument {
+  return {
+    scxml: {
+      version: '1.0',
+      states: [],
+      parallels: [],
+      finals: [],
+      scripts: [],
+      metadata: [],
+    },
+  };
+}
+
+/**
+ * Shared parse pipeline. Runs the single normalization path and reports
+ * which stage failed. The strict (`parseSCXML`) and best-effort
+ * (`parseSCXMLPartial`) entry points both wrap this; the strict wrapper drops
+ * `document` on failure while the best-effort wrapper substitutes a fallback.
+ */
+function parseCore(
+  xmlString: string,
+  options: ParseOptions,
+): {
+  document?: SCXMLDocument;
+  diagnostics: ValidationDiagnostic[];
+} {
   const diagnostics: ValidationDiagnostic[] = [];
+  parserDiagnostics = [];
+  parserTransitionKeyCounts = new Map<string, number>();
+  parserRangeMap = options.captureStringPositions === true ? scanElementRanges(xmlString) : null;
 
   if (typeof xmlString !== 'string' || xmlString.trim().length === 0) {
     diagnostics.push({
@@ -78,7 +175,7 @@ export function parseSCXML(xmlString: string): ParseResult {
       severity: 'error',
       code: 'ERR_XML_SYNTAX',
     });
-    return { success: false, errors: diagnostics };
+    return { document: undefined, diagnostics };
   }
 
   // Validate XML well-formedness first.
@@ -91,7 +188,7 @@ export function parseSCXML(xmlString: string): ParseResult {
       line: validationResult.err.line,
       column: validationResult.err.col,
     });
-    return { success: false, errors: diagnostics };
+    return { document: undefined, diagnostics };
   }
 
   const parser = new XMLParser(PARSER_CONFIG);
@@ -103,7 +200,7 @@ export function parseSCXML(xmlString: string): ParseResult {
       severity: 'error',
       code: 'ERR_ROOT_NOT_SCXML',
     });
-    return { success: false, errors: diagnostics };
+    return { document: undefined, diagnostics };
   }
 
   // fast-xml-parser yields an empty string for a bare <scxml/> (no children
@@ -111,7 +208,7 @@ export function parseSCXML(xmlString: string): ParseResult {
   const rawScxml =
     typeof parsed.scxml === 'string' ? ({} as RawRecord) : (parsed.scxml as RawRecord);
 
-  const scxml = normalizeSCXMLElement(rawScxml);
+  const scxml = normalizeSCXMLElement(rawScxml, 'scxml');
   const document: SCXMLDocument = { scxml };
 
   // Structural sanity check (non-fatal).
@@ -130,17 +227,27 @@ export function parseSCXML(xmlString: string): ParseResult {
     });
   }
 
-  return {
-    success: diagnostics.every((d) => d.severity !== 'error'),
-    data: document,
-    errors: diagnostics,
-  };
+  return { document, diagnostics };
+}
+
+/**
+ * Attaches the source range for an AST node when captureStringPositions is
+ * on. No-op otherwise, keeping the default pipeline free of range bookkeeping.
+ */
+function attachRange(node: { scxmlStringRange?: ScxmlStringRange }, path: string): void {
+  if (!parserRangeMap) {
+    return;
+  }
+  const range = parserRangeMap.get(path);
+  if (range) {
+    node.scxmlStringRange = range;
+  }
 }
 
 /**
  * Normalizes a raw root <scxml> record into the SCXML AST root shape.
  */
-function normalizeSCXMLElement(raw: RawRecord): SCXMLElement {
+function normalizeSCXMLElement(raw: RawRecord, path: string): SCXMLElement {
   const element: SCXMLElement = {
     name: readAttr(raw, 'name'),
     xmlns: readAttr(raw, 'xmlns'),
@@ -155,10 +262,17 @@ function normalizeSCXMLElement(raw: RawRecord): SCXMLElement {
     datamodelChildren: undefined,
     metadata: [],
   };
+  attachRange(element, path);
 
-  element.states = readChildArray(raw, 'state').map(normalizeStateNode);
-  element.parallels = readChildArray(raw, 'parallel').map(normalizeParallelNode);
-  element.finals = readChildArray(raw, 'final').map(normalizeFinalNode);
+  element.states = readChildArray(raw, 'state').map((t, i) =>
+    normalizeStateNode(t as RawRecord, `${path}/state/${i}`),
+  );
+  element.parallels = readChildArray(raw, 'parallel').map((t, i) =>
+    normalizeParallelNode(t as RawRecord, `${path}/parallel/${i}`),
+  );
+  element.finals = readChildArray(raw, 'final').map((t, i) =>
+    normalizeFinalNode(t as RawRecord, `${path}/final/${i}`),
+  );
   element.scripts = readChildArray(raw, 'script').map(normalizeScriptElement);
 
   const datamodelRaw = raw.datamodel;
@@ -166,8 +280,16 @@ function normalizeSCXMLElement(raw: RawRecord): SCXMLElement {
     element.datamodelChildren = extractDataElements(datamodelRaw as RawRecord);
   }
 
-  // Preserve unrecognized namespace/extension blocks as metadata.
+  // Preserve unrecognized extension/namespace blocks as opaque metadata.
   element.metadata = extractMetadataBlocks(raw);
+
+  // Handle the <metadata> element: registered tags -> customChildren,
+  // everything else -> opaque metadata blocks.
+  applyMetadataToNode(raw, element);
+
+  // Bare registered tags outside <metadata> are reported so the user can fix
+  // their placement (they are preserved as opaque metadata, not dropped).
+  warnMisplacedCustomTags(raw);
 
   return element;
 }
@@ -175,7 +297,7 @@ function normalizeSCXMLElement(raw: RawRecord): SCXMLElement {
 /**
  * Normalizes a raw <state> record into a StateNode.
  */
-function normalizeStateNode(raw: RawRecord): StateNode {
+function normalizeStateNode(raw: RawRecord, path: string): StateNode {
   const state: StateNode = {
     id: readAttr(raw, 'id') ?? '',
     type: readAttr(raw, 'type') as StateType | undefined,
@@ -186,18 +308,34 @@ function normalizeStateNode(raw: RawRecord): StateNode {
     finals: [],
     history: [],
     invoke: [],
+    metadata: [],
   };
+  attachRange(state, path);
 
-  state.transitions = readChildArray(raw, 'transition').map(normalizeTransition);
-  state.states = readChildArray(raw, 'state').map(normalizeStateNode);
-  state.parallels = readChildArray(raw, 'parallel').map(normalizeParallelNode);
-  state.finals = readChildArray(raw, 'final').map(normalizeFinalNode);
-  state.history = readChildArray(raw, 'history').map(normalizeHistoryNode);
+  state.transitions = readChildArray(raw, 'transition').map((t, i) =>
+    normalizeTransition(t as RawRecord, state.id, `${path}/transition/${i}`),
+  );
+  state.states = readChildArray(raw, 'state').map((t, i) =>
+    normalizeStateNode(t as RawRecord, `${path}/state/${i}`),
+  );
+  state.parallels = readChildArray(raw, 'parallel').map((t, i) =>
+    normalizeParallelNode(t as RawRecord, `${path}/parallel/${i}`),
+  );
+  state.finals = readChildArray(raw, 'final').map((t, i) =>
+    normalizeFinalNode(t as RawRecord, `${path}/final/${i}`),
+  );
+  state.history = readChildArray(raw, 'history').map((t, i) =>
+    normalizeHistoryNode(t as RawRecord, `${path}/history/${i}`),
+  );
   state.invoke = readChildArray(raw, 'invoke').map(normalizeInvokeElement);
 
   const initialBlockRaw = raw.initial;
   if (initialBlockRaw && typeof initialBlockRaw === 'object') {
-    state.initialBlock = normalizeInitialBlock(initialBlockRaw as RawRecord);
+    state.initialBlock = normalizeInitialBlock(
+      initialBlockRaw as RawRecord,
+      state.id,
+      `${path}/initial/0`,
+    );
   }
 
   const onentryRaw = raw.onentry;
@@ -214,13 +352,16 @@ function normalizeStateNode(raw: RawRecord): StateNode {
     state.datamodel = extractDataElements(datamodelRaw as RawRecord);
   }
 
+  applyMetadataToNode(raw, state);
+  warnMisplacedCustomTags(raw);
+
   return state;
 }
 
 /**
  * Normalizes a raw <parallel> record into a ParallelNode.
  */
-function normalizeParallelNode(raw: RawRecord): ParallelNode {
+function normalizeParallelNode(raw: RawRecord, path: string): ParallelNode {
   const parallel: ParallelNode = {
     id: readAttr(raw, 'id') ?? '',
     transitions: [],
@@ -229,18 +370,34 @@ function normalizeParallelNode(raw: RawRecord): ParallelNode {
     finals: [],
     history: [],
     invoke: [],
+    metadata: [],
   };
+  attachRange(parallel, path);
 
-  parallel.transitions = readChildArray(raw, 'transition').map(normalizeTransition);
-  parallel.states = readChildArray(raw, 'state').map(normalizeStateNode);
-  parallel.parallels = readChildArray(raw, 'parallel').map(normalizeParallelNode);
-  parallel.finals = readChildArray(raw, 'final').map(normalizeFinalNode);
-  parallel.history = readChildArray(raw, 'history').map(normalizeHistoryNode);
+  parallel.transitions = readChildArray(raw, 'transition').map((t, i) =>
+    normalizeTransition(t as RawRecord, parallel.id, `${path}/transition/${i}`),
+  );
+  parallel.states = readChildArray(raw, 'state').map((t, i) =>
+    normalizeStateNode(t as RawRecord, `${path}/state/${i}`),
+  );
+  parallel.parallels = readChildArray(raw, 'parallel').map((t, i) =>
+    normalizeParallelNode(t as RawRecord, `${path}/parallel/${i}`),
+  );
+  parallel.finals = readChildArray(raw, 'final').map((t, i) =>
+    normalizeFinalNode(t as RawRecord, `${path}/final/${i}`),
+  );
+  parallel.history = readChildArray(raw, 'history').map((t, i) =>
+    normalizeHistoryNode(t as RawRecord, `${path}/history/${i}`),
+  );
   parallel.invoke = readChildArray(raw, 'invoke').map(normalizeInvokeElement);
 
   const initialBlockRaw = raw.initial;
   if (initialBlockRaw && typeof initialBlockRaw === 'object') {
-    parallel.initialBlock = normalizeInitialBlock(initialBlockRaw as RawRecord);
+    parallel.initialBlock = normalizeInitialBlock(
+      initialBlockRaw as RawRecord,
+      parallel.id,
+      `${path}/initial/0`,
+    );
   }
 
   const onentryRaw = raw.onentry;
@@ -257,16 +414,21 @@ function normalizeParallelNode(raw: RawRecord): ParallelNode {
     parallel.datamodel = extractDataElements(datamodelRaw as RawRecord);
   }
 
+  applyMetadataToNode(raw, parallel);
+  warnMisplacedCustomTags(raw);
+
   return parallel;
 }
 
 /**
  * Normalizes a raw <final> record into a FinalNode.
  */
-function normalizeFinalNode(raw: RawRecord): FinalNode {
+function normalizeFinalNode(raw: RawRecord, path: string): FinalNode {
   const final: FinalNode = {
     id: readAttr(raw, 'id') ?? '',
+    metadata: [],
   };
+  attachRange(final, path);
 
   const onentryRaw = raw.onentry;
   if (onentryRaw) {
@@ -282,57 +444,264 @@ function normalizeFinalNode(raw: RawRecord): FinalNode {
     final.donedata = normalizeDoneData(donedataRaw as RawRecord);
   }
 
+  applyMetadataToNode(raw, final);
+  warnMisplacedCustomTags(raw);
+
   return final;
 }
 
 /**
  * Normalizes a raw <history> record into a HistoryNode.
  */
-function normalizeHistoryNode(raw: RawRecord): HistoryNode {
+function normalizeHistoryNode(raw: RawRecord, path: string): HistoryNode {
   const history: HistoryNode = {
     id: readAttr(raw, 'id') ?? '',
     type: (readAttr(raw, 'type') as 'shallow' | 'deep' | undefined) ?? 'shallow',
   };
+  attachRange(history, path);
 
   const transitionRaw = raw.transition;
   if (transitionRaw) {
-    history.transition = normalizeTransition(transitionRaw as RawRecord);
+    history.transition = normalizeTransition(
+      transitionRaw as RawRecord,
+      history.id,
+      `${path}/transition`,
+    );
   }
 
   return history;
 }
 
 /**
- * Normalizes a raw <initial> record into an InitialBlock.
+ * Normalizes a raw <initial> record into an InitialBlock. `source` is the id
+ * of the owning state/parallel, used to derive deterministic transition ids.
  */
-function normalizeInitialBlock(raw: RawRecord): InitialBlock {
+function normalizeInitialBlock(raw: RawRecord, source: string, path: string): InitialBlock {
   const block: InitialBlock = {};
+  attachRange(block, path);
   const transitionRaw = raw.transition;
   if (transitionRaw) {
-    block.transition = readChildArray(raw, 'transition').map(normalizeTransition);
+    block.transition = readChildArray(raw, 'transition').map((t, i) =>
+      normalizeTransition(t as RawRecord, source, `${path}/transition/${i}`),
+    );
   }
   const nestedRaw = raw.initial;
   if (nestedRaw) {
     const nested = Array.isArray(nestedRaw) ? nestedRaw : [nestedRaw];
-    block.blocks = nested.map((b) => normalizeInitialBlock(b as RawRecord));
+    block.blocks = nested.map((b, i) =>
+      normalizeInitialBlock(b as RawRecord, source, `${path}/initial/${i}`),
+    );
   }
   return block;
 }
 
 /**
- * Normalizes a raw <transition> record into a Transition.
+ * Normalizes a raw <transition> record into a Transition. `source` is the id
+ * of the owning element (state/parallel/history, or the enclosing state for
+ * <initial>), used to derive a stable deterministic id when no explicit
+ * `<transitionId>` is present.
  */
-function normalizeTransition(raw: RawRecord): Transition {
+function normalizeTransition(raw: RawRecord, source: string, path: string): Transition {
   const transition: Transition = {
     event: readAttr(raw, 'event'),
     cond: readAttr(raw, 'cond'),
     target: readAttr(raw, 'target'),
     type: readAttr(raw, 'type') as 'internal' | 'external' | undefined,
     executable: [],
+    metadata: [],
   };
+  attachRange(transition, path);
 
   transition.executable = extractTransitionExecutable(raw);
+  applyMetadataToNode(raw, transition);
+
+  const explicitId = readTransitionId(transition.metadata);
+  if (explicitId !== undefined) {
+    transition.id = explicitId;
+  } else {
+    assignDerivedTransitionId(transition, source);
+  }
+
+  warnMisplacedCustomTags(raw);
   return transition;
+}
+
+/**
+ * Reads an explicit transition id from its `transitionId` metadata block
+ * (attribute form `id` or `value`).
+ */
+function readTransitionId(metadata: MetadataBlock[]): string | undefined {
+  const block = metadata.find((b) => b.tag === 'transitionId');
+  if (!block) {
+    return undefined;
+  }
+  const explicit = block.attributes.id ?? block.attributes.value;
+  if (explicit !== undefined) {
+    return String(explicit);
+  }
+  const text = block.text;
+  return text !== undefined ? String(text).trim() || undefined : undefined;
+}
+
+/**
+ * Derives a stable deterministic id for a transition that has no explicit
+ * id, and persists it as a `transitionId` metadata block so it survives
+ * round-trips. Deduplicates transitions between the same `source:target`
+ * pair with `_1`, `_2`, ... suffixes.
+ */
+function assignDerivedTransitionId(transition: Transition, source: string): void {
+  const target = transition.target ?? 'self';
+  const base = `${source}:${target}`;
+  const count = parserTransitionKeyCounts.get(base) ?? 0;
+  parserTransitionKeyCounts.set(base, count + 1);
+  const id = count === 0 ? base : `${base}_${count}`;
+  transition.id = id;
+  // Persist the derived id so it stays stable across parse -> serialize -> parse.
+  transition.metadata.push({ tag: 'transitionId', attributes: {}, text: id });
+}
+
+/**
+ * Extracts <metadata> children from a raw element and attaches them to the
+ * given parent AST node. Registered custom tags are parsed into
+ * `customChildren`; every other metadata child is preserved verbatim as an
+ * opaque `MetadataBlock` (and reported to the user so they know it is not
+ * interpreted).
+ */
+function extractMetadataAndCustom(
+  raw: RawRecord,
+  parent: CustomTagParseContext['parentASTNode'],
+): { metadata: MetadataBlock[]; customChildren: CustomASTNode[] } {
+  const metadata: MetadataBlock[] = [];
+  const customChildren: CustomASTNode[] = [];
+  const registry = TagRegistry.getInstance();
+  const metadataRows = readChildArray(raw, 'metadata');
+  for (const meta of metadataRows) {
+    if (typeof meta !== 'object' || meta === null) {
+      continue;
+    }
+    for (const key of Object.keys(meta)) {
+      if (key.startsWith(ATTR_PREFIX) || key === TEXT_KEY) {
+        continue;
+      }
+      const values = readChildArray(meta, key);
+      for (const value of values) {
+        if (registry.has(key)) {
+          customChildren.push(buildCustomASTNode(key, value as RawRecord, parent));
+        } else {
+          metadata.push(toMetadataBlock(key, value as RawRecord));
+          parserDiagnostics.push({
+            severity: 'warning',
+            code: 'WARN_UNREGISTERED_METADATA_TAG',
+            message: `<${key}> inside <metadata> is not a registered custom tag; it will be preserved as opaque metadata but not interpreted.`,
+          });
+        }
+      }
+    }
+  }
+  return { metadata, customChildren };
+}
+
+/**
+ * Wraps a raw child element as an opaque MetadataBlock (tag + attributes +
+ * text), preserving it verbatim for lossless round-tripping.
+ */
+function toMetadataBlock(tag: string, record: RawRecord): MetadataBlock {
+  // A leaf whose content is plain text (no attributes) is produced by
+  // fast-xml-parser as a string or number rather than an object. Treat the
+  // whole value as the block's text content.
+  if (typeof record !== 'object' || record === null) {
+    return {
+      tag,
+      attributes: {},
+      text: typeof record === 'number' ? record : String(record),
+    };
+  }
+  const attributes: Record<string, string> = {};
+  for (const attrKey of Object.keys(record)) {
+    if (attrKey.startsWith(ATTR_PREFIX)) {
+      attributes[attrKey.slice(2)] = String(record[attrKey]);
+    }
+  }
+  const text = record[TEXT_KEY];
+  return {
+    tag,
+    attributes,
+    text:
+      text !== undefined && text !== null
+        ? typeof text === 'number'
+          ? text
+          : String(text)
+        : undefined,
+  };
+}
+
+/**
+ * Assigns `metadata` / `customChildren` on a node from its <metadata> block,
+ * merging with any blocks already recorded on the node (e.g. bare unknown
+ * root-level elements captured by `extractMetadataBlocks`).
+ */
+function applyMetadataToNode(
+  raw: RawRecord,
+  node: { metadata: MetadataBlock[]; customChildren?: CustomASTNode[] },
+): void {
+  const extracted = extractMetadataAndCustom(raw, node as CustomTagParseContext['parentASTNode']);
+  if (extracted.metadata.length > 0) {
+    node.metadata.push(...extracted.metadata);
+  }
+  if (extracted.customChildren.length > 0) {
+    node.customChildren = extracted.customChildren;
+  }
+}
+
+/**
+ * Warns when a registered custom tag appears as a bare direct child (outside
+ * `<metadata>`). Per the metadata-only convention, custom tags must live
+ * inside a `<metadata>` block to be honored.
+ */
+function warnMisplacedCustomTags(raw: RawRecord): void {
+  const registry = TagRegistry.getInstance();
+  for (const key of Object.keys(raw)) {
+    if (key.startsWith(ATTR_PREFIX) || key === TEXT_KEY || key === 'metadata') {
+      continue;
+    }
+    if (registry.has(key)) {
+      parserDiagnostics.push({
+        severity: 'warning',
+        code: 'WARN_CUSTOM_TAG_OUTSIDE_METADATA',
+        message: `<${key}> is a registered custom tag but must be nested inside a <metadata> block to be honored.`,
+      });
+    }
+  }
+}
+
+/**
+ * Builds a CustomASTNode for a registered tag, delegating to its `parse`
+ * hook. Returns undefined when the tag is not registered.
+ */
+function buildCustomASTNode(
+  tagName: string,
+  raw: RawRecord,
+  parentASTNode: CustomTagParseContext['parentASTNode'],
+): CustomASTNode {
+  const registry = TagRegistry.getInstance();
+  const spec = registry.get(tagName)!;
+  const attributes: Record<string, string> = {};
+  for (const attrKey of Object.keys(raw)) {
+    if (attrKey.startsWith(ATTR_PREFIX)) {
+      attributes[attrKey.slice(2)] = String(raw[attrKey]);
+    }
+  }
+  const text = raw[TEXT_KEY];
+  const ctx: CustomTagParseContext = {
+    tagName: tagName.toLowerCase(),
+    attributes,
+    children: Object.keys(raw)
+      .filter((k) => !k.startsWith(ATTR_PREFIX) && k !== TEXT_KEY)
+      .flatMap((k) => readChildArray(raw, k)),
+    textContent: text !== undefined && text !== null ? String(text) : undefined,
+    parentASTNode,
+  };
+  return spec.parse(ctx);
 }
 
 /**
@@ -584,6 +953,7 @@ function extractMetadataBlocks(raw: RawRecord): MetadataBlock[] {
       continue;
     }
     const knownChildren = [
+      'metadata',
       'state',
       'parallel',
       'final',
@@ -600,26 +970,12 @@ function extractMetadataBlocks(raw: RawRecord): MetadataBlock[] {
     if (knownChildren.includes(key)) {
       continue;
     }
+    // Preserve any other unrecognized / extension / namespace-scoped element
+    // (including bare registered tags outside <metadata>) as an opaque block
+    // so nothing is lost on round-trip.
     const values = readChildArray(raw, key);
     for (const value of values) {
-      const record = value as RawRecord;
-      const attributes: Record<string, string> = {};
-      for (const attrKey of Object.keys(record)) {
-        if (attrKey.startsWith(ATTR_PREFIX)) {
-          attributes[attrKey.slice(2)] = String(record[attrKey]);
-        }
-      }
-      const text = record[TEXT_KEY];
-      metadata.push({
-        tag: key,
-        attributes,
-        text:
-          text !== undefined && text !== null
-            ? typeof text === 'number'
-              ? text
-              : String(text)
-            : undefined,
-      });
+      metadata.push(toMetadataBlock(key, value as RawRecord));
     }
   }
   return metadata;

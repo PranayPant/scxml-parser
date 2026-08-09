@@ -5,6 +5,38 @@
  * and consumed by the validator and serializer. They are intentionally
  * UI-agnostic and map 1:1 to the W3C SCXML element vocabulary.
  */
+import type { CustomASTNode } from './extensibility';
+
+/**
+ * A single position in the raw SCXML source string, expressed three ways so
+ * consumers (e.g. editor code↔canvas sync) can use whichever is convenient.
+ * Line and column are 1-based; offset is a 0-based absolute index.
+ */
+export interface Position {
+  /** 1-based line in the source text buffer. */
+  line: number;
+  /** 1-based character column on that line. */
+  column: number;
+  /** 0-based absolute character index into the source string (UTF-16 code units). */
+  offset: number;
+}
+
+/**
+ * The source span in the raw SCXML string that an AST node was parsed from.
+ *
+ * `scxmlStringRange` is an **in-memory snapshot** of the exact text passed to
+ * `parseSCXML`; it is never serialized back into the XML. It becomes stale
+ * (no longer points at the right text) as soon as the AST is serialized or
+ * mutated — re-parse to refresh. Because it reflects the literal input, the
+ * same logical document formatted differently (pretty vs minified) yields
+ * different ranges.
+ */
+export interface ScxmlStringRange {
+  /** Position of the node's opening text (the '<' of its start tag). */
+  start: Position;
+  /** Position just past the node's closing text (past the '>' of its end/self-close tag). */
+  end: Position;
+}
 
 /**
  * Root of an SCXML document.
@@ -42,6 +74,10 @@ export interface SCXMLElement {
   datamodelChildren?: DataElement[];
   /** Raw unrecognized / extension metadata blocks. Always an array. */
   metadata: MetadataBlock[];
+  /** Registered custom (non-standard) child tags, when present. */
+  customChildren?: CustomASTNode[];
+  /** Source span in the raw SCXML string (opt-in via captureStringPositions). */
+  scxmlStringRange?: ScxmlStringRange;
 }
 
 /**
@@ -98,6 +134,12 @@ export interface StateNode {
   onexit?: ExecutableContent[];
   /** Datamodel invocations. */
   invoke: InvokeElement[];
+  /** Raw unrecognized / extension metadata blocks. Always an array. */
+  metadata: MetadataBlock[];
+  /** Registered custom (non-standard) child tags, when present. */
+  customChildren?: CustomASTNode[];
+  /** Source span in the raw SCXML string (opt-in via captureStringPositions). */
+  scxmlStringRange?: ScxmlStringRange;
 }
 
 /**
@@ -126,6 +168,12 @@ export interface ParallelNode {
   onexit?: ExecutableContent[];
   /** Datamodel invocations. */
   invoke: InvokeElement[];
+  /** Raw unrecognized / extension metadata blocks. Always an array. */
+  metadata: MetadataBlock[];
+  /** Registered custom (non-standard) child tags, when present. */
+  customChildren?: CustomASTNode[];
+  /** Source span in the raw SCXML string (opt-in via captureStringPositions). */
+  scxmlStringRange?: ScxmlStringRange;
 }
 
 /**
@@ -140,6 +188,12 @@ export interface FinalNode {
   onexit?: ExecutableContent[];
   /** Done-data payload. */
   donedata?: DoneDataElement;
+  /** Raw unrecognized / extension metadata blocks. Always an array. */
+  metadata: MetadataBlock[];
+  /** Registered custom (non-standard) child tags, when present. */
+  customChildren?: CustomASTNode[];
+  /** Source span in the raw SCXML string (opt-in via captureStringPositions). */
+  scxmlStringRange?: ScxmlStringRange;
 }
 
 /**
@@ -152,12 +206,21 @@ export interface HistoryNode {
   type?: 'shallow' | 'deep';
   /** Optional default transition. */
   transition?: Transition;
+  /** Source span in the raw SCXML string (opt-in via captureStringPositions). */
+  scxmlStringRange?: ScxmlStringRange;
 }
 
 /**
  * A <transition> element.
  */
 export interface Transition {
+  /**
+   * Stable editor/user-facing identifier for this transition. Not a standard
+   * SCXML attribute — it is persisted inside the transition's `<metadata>` as
+   * a `transitionId` element so it survives round-trips while keeping the
+   * emitted SCXML standard-compliant.
+   */
+  id?: string;
   /** Event trigger (space/comma separated event names, or '*' / absent). */
   event?: string;
   /** Condition expression guard. */
@@ -168,6 +231,12 @@ export interface Transition {
   type?: 'internal' | 'external';
   /** Executable content run when the transition fires. */
   executable: ExecutableContent[];
+  /** Raw unrecognized / extension metadata blocks. Always an array. */
+  metadata: MetadataBlock[];
+  /** Registered custom (non-standard) child tags, when present. */
+  customChildren?: CustomASTNode[];
+  /** Source span in the raw SCXML string (opt-in via captureStringPositions). */
+  scxmlStringRange?: ScxmlStringRange;
 }
 
 /**
@@ -194,6 +263,8 @@ export interface InitialBlock {
   transition?: Transition[];
   /** Nested initial blocks (rare). */
   blocks?: InitialBlock[];
+  /** Source span in the raw SCXML string (opt-in via captureStringPositions). */
+  scxmlStringRange?: ScxmlStringRange;
 }
 
 /**

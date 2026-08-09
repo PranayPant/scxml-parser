@@ -38,10 +38,7 @@
   "keywords": [
     "scxml",
     "state-machine",
-    "scxml-parser",
-    "validator",
-    "serializer",
-    "headless"
+    "scxml-parser"
   ],
   "license": "MIT",
   "dependencies": {

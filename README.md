@@ -57,16 +57,119 @@ ast.scxml.datamodelChildren.push({
 const finalXml = SCXMLEngine.serialize(ast, { pretty: true });
 ```
 
+## How the AST stores a statechart in memory
+
+The AST is a **nested plain-object tree** (TypeScript interfaces) — not a
+`Map`/`Set`-backed structure. The parser first produces a generic object tree
+from the raw XML via `fast-xml-parser`, then normalizes it into this
+strongly-typed graph that `validate`, `serialize`, `print`, and `toMermaid`
+all consume.
+
+### Data structure
+
+- **Root**: `SCXMLDocument` wraps a single `scxml: SCXMLElement`.
+- **Every tag → one interface.** Each SCXML element (`<state>`, `<parallel>`,
+  `<final>`, `<history>`, `<transition>`, `<data>`, …) has a dedicated node
+  type. XML attributes become typed fields (`id`, `name`, `initial`, ...);
+  children become nested arrays/objects.
+- **State hierarchy → a tree of arrays.** `StateNode` and `ParallelNode`
+  recursively hold `states`, `parallels`, `finals`, and `history` arrays for
+  their descendants. `<state>` and `<parallel>` are kept in **separate arrays**
+  (not one mixed list) because they are semantically distinct regions.
+- **Edges are id strings, not pointers.** `Transition.target` is a raw state
+  **id string**; the graph is resolved lazily (e.g. the validator builds a
+  `Map<stateId, parentId>`). This keeps the AST a pure acyclic tree with no
+  circular references.
+- **Polymorphism via `kind`-discriminated unions.** Executable content
+  (`<raise>`, `<if>`, `<log>`, `<assign>`, `<send>`, `<cancel>`, ...) is a
+  single `ExecutableContent[]` where each element carries a `kind` tag.
+- **Extensibility hooks.** Registered non-standard tags land in
+  `customChildren?: CustomASTNode[]`; unrecognized/namespaced extension blocks
+  are preserved verbatim in `metadata: MetadataBlock[]` for lossless
+  round-tripping.
+
+### A worked example
+
+```xml
+<scxml version="1.0" initial="Draft">
+  <state id="Draft">
+    <transition event="SUBMIT" target="Processing"/>
+  </state>
+  <state id="Processing"/>
+</scxml>
+```
+
+becomes (in memory):
+
+```typescript
+{
+  scxml: {
+    version: "1.0",
+    initial: "Draft",
+    states: [
+      {
+        id: "Draft",
+        transitions: [{ event: "SUBMIT", target: "Processing", executable: [] }],
+        states: [], parallels: [], finals: [], history: [], invoke: [],
+      },
+      {
+        id: "Processing",
+        transitions: [], states: [], parallels: [], finals: [], history: [], invoke: [],
+      },
+    ],
+    parallels: [], finals: [], scripts: [], metadata: [],
+  },
+}
+```
+
+Because the serializer walks the same object tree, `parse -> serialize`
+round-trips losslessly. You can also **mutate the AST directly** (e.g. push a
+datamodel rule or a custom child) and re-serialize — the Quick Start above
+shows this pattern.
+
 ## Module API
 
-| Export                       | Signature                                   | Description                                                 |
-| ---------------------------- | ------------------------------------------- | ----------------------------------------------------------- |
-| `parseSCXML(xml)`            | `(string) => ParseResult`                   | Parse XML into an AST + diagnostics.                        |
-| `validateAST(doc)`           | `(SCXMLDocument) => ValidationDiagnostic[]` | Validate a parsed AST.                                      |
-| `serializeSCXML(doc, opts?)` | `(doc, SerializationOptions?) => string`    | Serialize AST to XML.                                       |
-| `printAST(doc, opts?)`       | `(doc, PrintASTOptions?) => string`         | Print a debug tree.                                         |
-| `toMermaid(doc, opts?)`      | `(doc, MermaidOptions?) => string`          | Render a Mermaid state diagram.                             |
-| `SCXMLEngine`                | static facade                               | `parse` / `validate` / `serialize` / `print` / `toMermaid`. |
+| Export                             | Signature                                       | Description                                                                                                     |
+| ---------------------------------- | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `parseSCXML(xml, opts?)`           | `(string, ParseOptions?) => ParseResult`        | Parse XML into an AST + diagnostics.                                                                            |
+| `parseSCXMLPartial(xml, opts?)`    | `(string, ParseOptions?) => PartialParseResult` | Best-effort parse; always returns a tree (`recoverable` flags fallback).                                        |
+| `validateAST(doc)`                 | `(SCXMLDocument) => ValidationDiagnostic[]`     | Validate a parsed AST.                                                                                          |
+| `serializeSCXML(doc, opts?)`       | `(doc, SerializationOptions?) => string`        | Serialize AST to XML.                                                                                           |
+| `printAST(doc, opts?)`             | `(doc, PrintASTOptions?) => string`             | Print a debug tree.                                                                                             |
+| `toMermaid(doc, opts?)`            | `(doc, MermaidOptions?) => string`              | Render a Mermaid state diagram.                                                                                 |
+| `walkStates(doc, visit)`           | `(doc, (stateLike) => void)`                    | Visit every state/parallel/final node.                                                                          |
+| `walkTransitions(doc, visit)`      | `(doc, (transition, parent) => void)`           | Visit every transition, incl. `<initial>`/`<history>` edges.                                                    |
+| `renameState(doc, old, new)`       | `(doc, string, string) => void`                 | Rename a state and cascade target/initial/history refs.                                                         |
+| `removeState(doc, id)`             | `(doc, string) => void`                         | Remove a state; prune dangling transitions.                                                                     |
+| `addState(doc, parent, cfg)`       | `(doc, string\|null, cfg) => StateNode`         | Construct + append a state; returns it.                                                                         |
+| `addTransition(doc, s, t, e?, o?)` | `(...) => Transition`                           | Construct + append a well-formed transition; returns it.                                                        |
+| `removeTransition(doc, id)`        | `(doc, string) => void`                         | Remove a transition by id across parent kinds.                                                                  |
+| `SCXMLEngine`                      | static facade                                   | `parse` / `parsePartial` / `validate` / `serialize` / `print` / `toMermaid` / `walkStates` / `walkTransitions`. |
+
+Each `Transition` carries a stable `id`: either a consumer-provided id (from a
+`<transitionId>` metadata element) or a deterministic `${sourceId}:${targetId}`
+fallback (with `_1`, `_2`, … suffixes for parallel edges between the same pair),
+persisted in `<metadata>` so it survives round-trips. Use `walkTransitions` +
+`transition.id` for reliable edge identity in graph editors.
+
+`validateAST` diagnostics carry optional `nodeId` / `transitionId` (when the
+offending node or edge is known) so editors can color-code specific canvas
+nodes/edges without secondary lookups.
+
+For the **Canvas → Code** direction, the mutation helpers (`renameState`,
+`removeState`, `addState`, `addTransition`, `removeTransition`) bundle the
+cascading AST updates (target/initial/history rewrites and dangling-transition
+pruning) into single in-place calls before re-serializing to text. See
+[`API.md`](./API.md).
+
+> **Full reference:** see [`API.md`](./API.md) for the complete end-to-end API
+> spec — every export, type, option, diagnostic code, and the full AST shape.
+
+### `ParseOptions`
+
+- `captureStringPositions` (`boolean`, default `false`) — record each AST
+  node's `scxmlStringRange` (its source span in the raw string). Adds a
+  source-scanning pass; useful for editor code↔canvas sync (Monaco).
 
 ### `MermaidOptions`
 
@@ -192,6 +295,23 @@ stateDiagram-v2
 
 See [`examples/README.md`](./examples/README.md) for the full list of sample
 flows and CLI options.
+
+## Design Docs
+
+Architecture notes for the extensibility and execution layers live alongside
+the code:
+
+- **[`API.md`](./API.md)** — the complete end-to-end API reference: every
+  export, type, option, diagnostic code, and the full AST shape.
+- **[`CUSTOM_TAG.md`](./CUSTOM_TAG.md)** — Open-Closed extension of the
+  parser/validator/serializer via a custom tag registry. Custom tags are
+  scoped to `<metadata>` blocks so the emitted SCXML stays standards-valid.
+- **[`RUNTIME_ENGINE.md`](./RUNTIME_ENGINE.md)** — design of the derived
+  execution runtime graph (event indexing with wildcards, pre-computed
+  exit/entry sets via least common ancestor, active configuration tracking).
+- **[`LAYOUT-NODES.md`](./LAYOUT-NODES.md)** — visual UI layout capture for a
+  drag-and-drop editor, stored in SCXML `<metadata>` (marked `layout="true"`)
+  so it stays within standard SCXML semantics.
 
 ## Project Layout
 

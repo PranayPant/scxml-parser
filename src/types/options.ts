@@ -1,6 +1,6 @@
 /**
  * Options types for the headless SCXML engine operations
- * (serialization and AST printing).
+ * (parsing, serialization, and AST printing).
  */
 
 /**
@@ -15,6 +15,19 @@ export interface SerializationOptions {
   escapeText?: boolean;
   /** Include detected/annotated state type attributes. Default false. */
   includeStateTypes?: boolean;
+}
+
+/**
+ * Options controlling raw XML -> AST parsing.
+ */
+export interface ParseOptions {
+  /**
+   * When true, the parser records each AST node's `scxmlStringRange` — the
+   * exact span in the raw source string the node was parsed from. Intended
+   * for editor code<->canvas sync (e.g. Monaco cursor/selection mapping).
+   * Default false; enabling it adds a source-scanning pass.
+   */
+  captureStringPositions?: boolean;
 }
 
 /**

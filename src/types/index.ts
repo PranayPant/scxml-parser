@@ -3,4 +3,5 @@
  */
 export * from './ast';
 export * from './diagnostics';
+export * from './extensibility';
 export * from './options';
