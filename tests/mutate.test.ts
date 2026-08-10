@@ -60,6 +60,39 @@ describe('renameState', () => {
     expect(out).toContain('target="bee"');
     expect(out).not.toContain('target="b"');
   });
+
+  it('renames a root-level <final> node and its incoming transition targets', () => {
+    const fxml = `<?xml version="1.0"?>
+<scxml version="1.0" initial="a">
+  <state id="a">
+    <transition event="done" target="finished" />
+  </state>
+  <final id="finished" />
+</scxml>
+`;
+    const doc = parseSCXML(fxml).data!;
+    renameState(doc, 'finished', 'complete');
+    expect(doc.scxml.finals.find((f) => f.id === 'complete')).toBeDefined();
+    expect(doc.scxml.finals.find((f) => f.id === 'finished')).toBeUndefined();
+    // The incoming transition now targets the renamed final.
+    const a = doc.scxml.states.find((s) => s.id === 'a')!;
+    expect(a.transitions[0].target).toBe('complete');
+  });
+
+  it('renames a nested <final> inside a state', () => {
+    const nxml = `<?xml version="1.0"?>
+<scxml version="1.0" initial="a">
+  <state id="a">
+    <final id="end" />
+  </state>
+</scxml>
+`;
+    const doc = parseSCXML(nxml).data!;
+    renameState(doc, 'end', 'terminate');
+    const a = doc.scxml.states.find((s) => s.id === 'a')!;
+    expect(a.finals.find((f) => f.id === 'terminate')).toBeDefined();
+    expect(a.finals.find((f) => f.id === 'end')).toBeUndefined();
+  });
 });
 
 describe('removeState', () => {
