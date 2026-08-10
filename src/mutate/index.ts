@@ -14,6 +14,7 @@
  * rendering layer.
  */
 import type {
+  FinalNode,
   HistoryNode,
   InitialBlock,
   ParallelNode,
@@ -25,6 +26,15 @@ import { parseIdList, walkTransitions } from '../validator/walker';
 
 /** Parent kinds that can hold transitions, for target rewrites. */
 type TransitionContainer = StateNode | ParallelNode;
+
+/** Rename any final whose id matches, in place. */
+function renameFinals(finals: FinalNode[], oldId: string, newId: string): void {
+  for (const f of finals) {
+    if (f.id === oldId) {
+      f.id = newId;
+    }
+  }
+}
 
 /**
  * Renames a state and cascades the change across the whole document so the
@@ -52,6 +62,12 @@ export function renameState(doc: SCXMLDocument, oldId: string, newId: string): v
     root.initial = replaceTargetToken(root.initial, oldId, newId);
   }
   walkNodes(doc, renameInNode);
+
+  // <final> nodes are not transition containers, so `walkNodes` deliberately
+  // doesn't visit them; rename any matching root-level or nested finals so a
+  // final's own id stays consistent with the rewrite above.
+  renameFinals(root.finals, oldId, newId);
+  walkNodes(doc, (node) => renameFinals(node.finals, oldId, newId));
 }
 
 /**
