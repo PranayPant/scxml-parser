@@ -6,6 +6,7 @@
  * Mermaid renderer. Complements the ASCII `printAST` debugger with a
  * standardized graph representation.
  */
+import { parserTracer } from '../tracing';
 import type {
   FinalNode,
   HistoryNode,
@@ -52,25 +53,27 @@ export function toMermaid(doc: SCXMLDocument, options: MermaidOptions = {}): str
   const lines: string[] = [];
   const root = doc.scxml;
 
-  lines.push('stateDiagram-v2');
-  if (includeTitle && root.name) {
-    lines.push(`    title ${escapeLabel(root.name)}`);
-  }
-  lines.push(`    direction ${direction}`);
+  return parserTracer.withSpan('parser.toMermaid', {}, () => {
+    lines.push('stateDiagram-v2');
+    if (includeTitle && root.name) {
+      lines.push(`    title ${escapeLabel(root.name)}`);
+    }
+    lines.push(`    direction ${direction}`);
 
-  // Render the root’s direct children (states, parallels, finals).
-  const rootChildren: ChildNode[] = [...root.states, ...root.parallels, ...root.finals];
-  for (const child of rootChildren) {
-    renderChild(child, 1, lines, includeEdgeLabels);
-  }
+    // Render the root’s direct children (states, parallels, finals).
+    const rootChildren: ChildNode[] = [...root.states, ...root.parallels, ...root.finals];
+    for (const child of rootChildren) {
+      renderChild(child, 1, lines, includeEdgeLabels);
+    }
 
-  // Initial arrow: point at the document initial state (or the first child).
-  const initialId = root.initial?.split(/\s+/)[0] ?? rootChildren[0]?.id;
-  if (initialId) {
-    lines.push(`    [*] --> ${mermaidId(initialId)}`);
-  }
+    // Initial arrow: point at the document initial state (or the first child).
+    const initialId = root.initial?.split(/\s+/)[0] ?? rootChildren[0]?.id;
+    if (initialId) {
+      lines.push(`    [*] --> ${mermaidId(initialId)}`);
+    }
 
-  return `${lines.join('\n')}\n`;
+    return `${lines.join('\n')}\n`;
+  });
 }
 
 /**

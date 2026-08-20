@@ -4,6 +4,7 @@
  * Renders an SCXML AST as an ASCII visual tree for quick inspection during
  * development, scripting, or CLI usage.
  */
+import { parserTracer } from '../tracing';
 import type {
   FinalNode,
   HistoryNode,
@@ -24,56 +25,58 @@ import type { PrintASTOptions } from '../types/options';
 export function printAST(doc: SCXMLDocument, options: PrintASTOptions = {}): string {
   const { includeMetadata = true, includeDatamodel = true, includeTransitions = true } = options;
 
-  const ctx: PrintContext = {
-    includeMetadata,
-    includeDatamodel,
-    includeTransitions,
-  };
+  return parserTracer.withSpan('parser.printAST', {}, () => {
+    const ctx: PrintContext = {
+      includeMetadata,
+      includeDatamodel,
+      includeTransitions,
+    };
 
-  const buffer: string[] = [];
-  const root = doc.scxml;
+    const buffer: string[] = [];
+    const root = doc.scxml;
 
-  buffer.push(
-    `SCXML Root [initial: "${root.initial || 'N/A'}"${root.name ? `, name: "${root.name}"` : ''}]`,
-  );
+    buffer.push(
+      `SCXML Root [initial: "${root.initial || 'N/A'}"${root.name ? `, name: "${root.name}"` : ''}]`,
+    );
 
-  // Datamodel section.
-  if (ctx.includeDatamodel && root.datamodelChildren && root.datamodelChildren.length > 0) {
-    buffer.push(`├── 📦 <datamodel>`);
-    root.datamodelChildren.forEach((data, idx) => {
-      const isLast = idx === root.datamodelChildren!.length - 1;
-      const prefix = isLast ? '│   └──' : '│   ├──';
-      buffer.push(`${prefix} id: "${data.id}" = ${data.expr ?? data.text ?? 'undefined'}`);
-    });
-  }
+    // Datamodel section.
+    if (ctx.includeDatamodel && root.datamodelChildren && root.datamodelChildren.length > 0) {
+      buffer.push(`├── 📦 <datamodel>`);
+      root.datamodelChildren.forEach((data, idx) => {
+        const isLast = idx === root.datamodelChildren!.length - 1;
+        const prefix = isLast ? '│   └──' : '│   ├──';
+        buffer.push(`${prefix} id: "${data.id}" = ${data.expr ?? data.text ?? 'undefined'}`);
+      });
+    }
 
-  // Render root-level state-like children.
-  const rootBlocks: ChildBlock[] = [];
-  for (const s of root.states) {
-    rootBlocks.push(stateToBlock(s));
-  }
-  for (const p of root.parallels) {
-    rootBlocks.push(parallelToBlock(p));
-  }
-  for (const f of root.finals) {
-    rootBlocks.push(finalToBlock(f));
-  }
+    // Render root-level state-like children.
+    const rootBlocks: ChildBlock[] = [];
+    for (const s of root.states) {
+      rootBlocks.push(stateToBlock(s));
+    }
+    for (const p of root.parallels) {
+      rootBlocks.push(parallelToBlock(p));
+    }
+    for (const f of root.finals) {
+      rootBlocks.push(finalToBlock(f));
+    }
 
-  const hasMetadata = ctx.includeMetadata && root.metadata.length > 0;
+    const hasMetadata = ctx.includeMetadata && root.metadata.length > 0;
 
-  for (let i = 0; i < rootBlocks.length; i++) {
-    const block = rootBlocks[i];
-    const isLastRoot = i === rootBlocks.length - 1;
-    const branch = isLastRoot && !hasMetadata ? '└──' : '├──';
-    renderBlock(block, branch, '', buffer, ctx);
-  }
+    for (let i = 0; i < rootBlocks.length; i++) {
+      const block = rootBlocks[i];
+      const isLastRoot = i === rootBlocks.length - 1;
+      const branch = isLastRoot && !hasMetadata ? '└──' : '├──';
+      renderBlock(block, branch, '', buffer, ctx);
+    }
 
-  // Metadata summary.
-  if (hasMetadata) {
-    buffer.push(`└── 🏷️  <metadata> (${root.metadata.length} blocks present)`);
-  }
+    // Metadata summary.
+    if (hasMetadata) {
+      buffer.push(`└── 🏷️  <metadata> (${root.metadata.length} blocks present)`);
+    }
 
-  return buffer.join('\n');
+    return buffer.join('\n');
+  });
 }
 
 /**

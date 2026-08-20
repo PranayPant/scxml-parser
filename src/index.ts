@@ -32,6 +32,8 @@ import {
 } from './validator/walker';
 
 export { TagRegistry } from './registry/TagRegistry';
+// Re-export the OTel tracer helper so hosts can toggle span detail.
+export { parserTracer } from './tracing';
 export * from './types';
 export type { MermaidOptions } from './utils/mermaid';
 export { toMermaid } from './utils/mermaid';

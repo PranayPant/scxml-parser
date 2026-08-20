@@ -33,7 +33,7 @@ await build({
   format: 'cjs',
   target: 'es2020',
   sourcemap: false,
-  external: ['fast-xml-parser'],
+  external: ['fast-xml-parser', '@opentelemetry/api'],
 });
 
 // 3. Bundle ESM
@@ -45,7 +45,7 @@ await build({
   format: 'esm',
   target: 'es2020',
   sourcemap: false,
-  external: ['fast-xml-parser'],
+  external: ['fast-xml-parser', '@opentelemetry/api'],
 });
 
 // 4. Emit TypeScript declarations (declaration-only) into a temp dir, then

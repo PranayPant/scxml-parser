@@ -6,6 +6,7 @@
  * W3C / authoring constraints with a stable diagnostic-code contract.
  */
 import { TagRegistry } from '../registry/TagRegistry';
+import { parserTracer } from '../tracing';
 import type { InitialBlock, SCXMLDocument, Transition } from '../types/ast';
 import type { ValidationDiagnostic } from '../types/diagnostics';
 import type { CustomASTNode, CustomParentNode } from '../types/extensibility';
@@ -24,22 +25,24 @@ import {
  * @returns A list of validation diagnostics (empty when valid).
  */
 export function validateAST(doc: SCXMLDocument): ValidationDiagnostic[] {
-  const diagnostics: ValidationDiagnostic[] = [];
-  const stateIds = new Set<string>();
-  const parentMap = new Map<string, string | null>();
+  return parserTracer.withSpan('parser.validateAST', {}, () => {
+    const diagnostics: ValidationDiagnostic[] = [];
+    const stateIds = new Set<string>();
+    const parentMap = new Map<string, string | null>();
 
-  collectStateIds(doc, stateIds);
-  buildStateHierarchy(doc, parentMap);
+    collectStateIds(doc, stateIds);
+    buildStateHierarchy(doc, parentMap);
 
-  validateDuplicateStateIds(doc, diagnostics);
-  validateTransitionTargets(doc, stateIds, diagnostics);
-  validateInitialReferences(doc, stateIds, diagnostics);
-  validateTransitionTypes(doc, diagnostics);
-  validateEventNames(doc, diagnostics);
-  validateDuplicateDataIds(doc, diagnostics);
-  validateCustomChildren(doc, diagnostics);
+    validateDuplicateStateIds(doc, diagnostics);
+    validateTransitionTargets(doc, stateIds, diagnostics);
+    validateInitialReferences(doc, stateIds, diagnostics);
+    validateTransitionTypes(doc, diagnostics);
+    validateEventNames(doc, diagnostics);
+    validateDuplicateDataIds(doc, diagnostics);
+    validateCustomChildren(doc, diagnostics);
 
-  return diagnostics;
+    return diagnostics;
+  });
 }
 
 /**

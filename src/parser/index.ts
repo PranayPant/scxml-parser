@@ -7,6 +7,7 @@
  */
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
 import { TagRegistry } from '../registry/TagRegistry';
+import { parserTracer } from '../tracing';
 import type {
   ContentElement,
   DataElement,
@@ -97,16 +98,22 @@ let parserRangeMap: RangeMap | null = null;
  * @returns A ParseResult containing the AST on success and diagnostics.
  */
 export function parseSCXML(xmlString: string, options: ParseOptions = {}): ParseResult {
-  const core = parseCore(xmlString, options);
-  if (core.document === undefined) {
-    return { success: false, errors: core.diagnostics };
-  }
-  const allErrors = [...core.diagnostics, ...parserDiagnostics];
-  return {
-    success: allErrors.every((d) => d.severity !== 'error'),
-    data: core.document,
-    errors: allErrors,
-  };
+  return parserTracer.withSpan(
+    'parser.parseSCXML',
+    { 'scxml.input.length': xmlString.length },
+    () => {
+      const core = parseCore(xmlString, options);
+      if (core.document === undefined) {
+        return { success: false, errors: core.diagnostics };
+      }
+      const allErrors = [...core.diagnostics, ...parserDiagnostics];
+      return {
+        success: allErrors.every((d) => d.severity !== 'error'),
+        data: core.document,
+        errors: allErrors,
+      };
+    },
+  );
 }
 
 /**
@@ -123,14 +130,20 @@ export function parseSCXMLPartial(
   xmlString: string,
   options: ParseOptions = {},
 ): PartialParseResult {
-  const core = parseCore(xmlString, options);
-  const document = core.document ?? createEmptyDocument();
-  const allErrors = [...core.diagnostics, ...parserDiagnostics];
-  return {
-    data: document,
-    errors: allErrors,
-    recoverable: core.document !== undefined,
-  };
+  return parserTracer.withSpan(
+    'parser.parseSCXMLPartial',
+    { 'scxml.input.length': xmlString.length },
+    () => {
+      const core = parseCore(xmlString, options);
+      const document = core.document ?? createEmptyDocument();
+      const allErrors = [...core.diagnostics, ...parserDiagnostics];
+      return {
+        data: document,
+        errors: allErrors,
+        recoverable: core.document !== undefined,
+      };
+    },
+  );
 }
 
 /**

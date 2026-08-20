@@ -6,6 +6,7 @@
  * round-tripping (AST -> XML -> AST).
  */
 import { TagRegistry } from '../registry/TagRegistry';
+import { parserTracer } from '../tracing';
 import type {
   ContentElement,
   DataElement,
@@ -52,22 +53,24 @@ const XML_UNESCAPES: Record<string, string> = {
  * @returns The formatted SCXML XML string.
  */
 export function serializeSCXML(doc: SCXMLDocument, options: SerializationOptions = {}): string {
-  const {
-    pretty = true,
-    indent: indentSize = 2,
-    escapeText = true,
-    includeStateTypes = false,
-  } = options;
+  return parserTracer.withSpan('parser.serializeSCXML', {}, () => {
+    const {
+      pretty = true,
+      indent: indentSize = 2,
+      escapeText = true,
+      includeStateTypes = false,
+    } = options;
 
-  const ctx: SerializeContext = {
-    pretty,
-    indentSize,
-    escapeText,
-    includeStateTypes,
-  };
+    const ctx: SerializeContext = {
+      pretty,
+      indentSize,
+      escapeText,
+      includeStateTypes,
+    };
 
-  const root = doc.scxml;
-  return `${renderSCXMLElement(root, ctx, 0)}\n`;
+    const root = doc.scxml;
+    return `${renderSCXMLElement(root, ctx, 0)}\n`;
+  });
 }
 
 /**
