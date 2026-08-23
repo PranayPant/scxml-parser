@@ -185,4 +185,62 @@ describe('validateAST', () => {
     const doc = parseSCXML(xml).data!;
     expect(validateAST(doc)).toHaveLength(0);
   });
+
+  it('warns on a compound state with children but no explicit initial', () => {
+    const xml = `
+      <scxml version="1.0" initial="running">
+        <state id="running">
+          <state id="processing"><transition event="done" target="finished" /></state>
+        </state>
+        <final id="finished" />
+      </scxml>
+    `;
+    const doc = parseSCXML(xml).data!;
+    const diagnostics = validateAST(doc);
+    const match = diagnostics.find((d) => d.code === 'WARN_COMPOUND_STATE_NO_INITIAL');
+    expect(match).toBeDefined();
+    expect(match?.nodeId).toBe('running');
+    expect(match?.severity).toBe('warning');
+    expect(match?.message).toContain('first child');
+  });
+
+  it('does not warn when a compound state declares an explicit initial', () => {
+    const xml = `
+      <scxml version="1.0" initial="running">
+        <state id="running" initial="processing">
+          <state id="processing" />
+        </state>
+      </scxml>
+    `;
+    const doc = parseSCXML(xml).data!;
+    expect(validateAST(doc)).toHaveLength(0);
+  });
+
+  it('does not warn when a compound state uses an <initial> block', () => {
+    const xml = `
+      <scxml version="1.0" initial="running">
+        <state id="running">
+          <initial><transition target="processing" /></initial>
+          <state id="processing" />
+        </state>
+      </scxml>
+    `;
+    const doc = parseSCXML(xml).data!;
+    expect(validateAST(doc)).toHaveLength(0);
+  });
+
+  it('does not warn on atomic states or parallel regions', () => {
+    const xml = `
+      <scxml version="1.0" initial="p">
+        <state id="atomic" />
+        <parallel id="p">
+          <state id="a" />
+          <state id="b" />
+        </parallel>
+      </scxml>
+    `;
+    const doc = parseSCXML(xml).data!;
+    const diagnostics = validateAST(doc);
+    expect(diagnostics.some((d) => d.code === 'WARN_COMPOUND_STATE_NO_INITIAL')).toBe(false);
+  });
 });
