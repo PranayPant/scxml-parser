@@ -14,7 +14,7 @@ const KITCHEN_SINK = `
     <data id="count" expr="0" />
     <data id="name">default</data>
   </datamodel>
-  <state id="root">
+  <state id="root" initial="root_inner">
     <onentry>
       <raise event="START" />
       <log label="enter" expr="'hi'" />
@@ -32,11 +32,11 @@ const KITCHEN_SINK = `
     <onexit><log label="exit" /></onexit>
     <transition event="NEXT" cond="count > 1" target="p1" />
     <transition target="done" />
-    <state id="root_inner">
+    <state id="root_inner" initial="leaf1">
       <history id="root_hist" type="deep" />
       <state id="leaf1" />
       <parallel id="inner_par">
-        <state id="lp1"><state id="lp1_a" /></state>
+        <state id="lp1" initial="lp1_a"><state id="lp1_a" /></state>
         <final id="inner_final"><donedata><content expr="x" /></donedata></final>
       </parallel>
       <final id="inner_done" />

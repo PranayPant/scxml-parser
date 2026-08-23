@@ -7,7 +7,7 @@
  */
 import { TagRegistry } from '../registry/TagRegistry';
 import { parserTracer } from '../tracing';
-import type { InitialBlock, SCXMLDocument, Transition } from '../types/ast';
+import type { InitialBlock, SCXMLDocument, StateNode, Transition } from '../types/ast';
 import type { ValidationDiagnostic } from '../types/diagnostics';
 import type { CustomASTNode, CustomParentNode } from '../types/extensibility';
 import {
@@ -40,6 +40,7 @@ export function validateAST(doc: SCXMLDocument): ValidationDiagnostic[] {
     validateEventNames(doc, diagnostics);
     validateDuplicateDataIds(doc, diagnostics);
     validateCustomChildren(doc, diagnostics);
+    validateCompoundStateInitial(doc, diagnostics);
 
     return diagnostics;
   });
@@ -310,4 +311,42 @@ function applyCustomScope(
   if (spec.validate) {
     diagnostics.push(...spec.validate(custom, parent));
   }
+}
+
+/**
+ * Flags sequential compound `<state>` elements that have child states but
+ * declare no default initial child (neither an `initial` attribute nor an
+ * `<initial>` block).
+ *
+ * Per W3C SCXML §3.3.2 the default initial is the first child in document
+ * order; the runtime engine now honors that fallback. This warning surfaces
+ * the implicit default so authors aren't surprised when a compound state
+ * silently descends into its first child.
+ */
+function validateCompoundStateInitial(
+  doc: SCXMLDocument,
+  diagnostics: ValidationDiagnostic[],
+): void {
+  walkStateNodes(doc, (node) => {
+    // Only sequential <state> nodes (not <parallel> / <final>) carry the
+    // `initial` attribute; guard on that to keep parallel semantics out.
+    if (!('initial' in node)) {
+      return;
+    }
+    const state = node as StateNode;
+
+    const hasChildren =
+      state.states.length > 0 || state.parallels.length > 0 || state.finals.length > 0;
+
+    const hasExplicitInitial = Boolean(state.initial) || Boolean(state.initialBlock);
+
+    if (hasChildren && !hasExplicitInitial) {
+      diagnostics.push({
+        message: `Compound state '${state.id}' has child state(s) but no explicit 'initial'. It will default to the first child in document order`,
+        code: 'WARN_COMPOUND_STATE_NO_INITIAL',
+        severity: 'warning',
+        nodeId: state.id,
+      });
+    }
+  });
 }

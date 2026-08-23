@@ -42,7 +42,7 @@ describe('targeted coverage: history defaults and transitions', () => {
   it('parses a history with a default transition', () => {
     const xml = `
       <scxml version="1.0" initial="a">
-        <state id="a">
+        <state id="a" initial="b">
           <history id="h">
             <transition target="b" />
           </history>
