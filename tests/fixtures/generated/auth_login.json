@@ -1,0 +1,281 @@
+{
+  "scxml": {
+    "name": "AuthFlow",
+    "xmlns": "http://www.w3.org/2005/07/scxml",
+    "version": "1.0",
+    "datamodel": "ecmascript",
+    "initial": "Idle",
+    "states": [
+      {
+        "id": "Idle",
+        "transitions": [
+          {
+            "event": "START_LOGIN",
+            "target": "Login",
+            "executable": [],
+            "metadata": [
+              {
+                "tag": "transitionId",
+                "attributes": {},
+                "text": "Idle:Login"
+              }
+            ],
+            "id": "Idle:Login"
+          }
+        ],
+        "states": [],
+        "parallels": [],
+        "finals": [],
+        "history": [],
+        "invoke": [],
+        "metadata": []
+      },
+      {
+        "id": "Login",
+        "transitions": [],
+        "states": [
+          {
+            "id": "EnterCredentials",
+            "transitions": [
+              {
+                "event": "CREDENTIALS_ENTERED",
+                "target": "Authenticating",
+                "executable": [
+                  {
+                    "kind": "assign",
+                    "location": "username",
+                    "expr": "event.user"
+                  },
+                  {
+                    "kind": "assign",
+                    "location": "password",
+                    "expr": "event.pass"
+                  }
+                ],
+                "metadata": [
+                  {
+                    "tag": "transitionId",
+                    "attributes": {},
+                    "text": "EnterCredentials:Authenticating"
+                  }
+                ],
+                "id": "EnterCredentials:Authenticating"
+              },
+              {
+                "event": "CANCEL",
+                "target": "Idle",
+                "executable": [],
+                "metadata": [
+                  {
+                    "tag": "transitionId",
+                    "attributes": {},
+                    "text": "EnterCredentials:Idle"
+                  }
+                ],
+                "id": "EnterCredentials:Idle"
+              }
+            ],
+            "states": [],
+            "parallels": [],
+            "finals": [],
+            "history": [],
+            "invoke": [],
+            "metadata": [],
+            "onentry": [
+              {
+                "kind": "log",
+                "label": "Auth",
+                "expr": "'prompting for credentials'"
+              }
+            ]
+          },
+          {
+            "id": "Authenticating",
+            "transitions": [
+              {
+                "event": "AUTH_SUCCESS",
+                "cond": "failedAttempts < maxAttempts",
+                "target": "Authenticated",
+                "executable": [
+                  {
+                    "kind": "assign",
+                    "location": "isAuthenticated",
+                    "expr": "true"
+                  }
+                ],
+                "metadata": [
+                  {
+                    "tag": "transitionId",
+                    "attributes": {},
+                    "text": "Authenticating:Authenticated"
+                  }
+                ],
+                "id": "Authenticating:Authenticated"
+              },
+              {
+                "event": "AUTH_FAILURE",
+                "cond": "failedAttempts + 1 < maxAttempts",
+                "target": "EnterCredentials",
+                "executable": [
+                  {
+                    "kind": "assign",
+                    "location": "failedAttempts",
+                    "expr": "failedAttempts + 1"
+                  }
+                ],
+                "metadata": [
+                  {
+                    "tag": "transitionId",
+                    "attributes": {},
+                    "text": "Authenticating:EnterCredentials"
+                  }
+                ],
+                "id": "Authenticating:EnterCredentials"
+              },
+              {
+                "event": "AUTH_FAILURE",
+                "cond": "failedAttempts + 1 >= maxAttempts",
+                "target": "LockedOut",
+                "executable": [
+                  {
+                    "kind": "assign",
+                    "location": "failedAttempts",
+                    "expr": "failedAttempts + 1"
+                  }
+                ],
+                "metadata": [
+                  {
+                    "tag": "transitionId",
+                    "attributes": {},
+                    "text": "Authenticating:LockedOut"
+                  }
+                ],
+                "id": "Authenticating:LockedOut"
+              }
+            ],
+            "states": [],
+            "parallels": [],
+            "finals": [],
+            "history": [],
+            "invoke": [],
+            "metadata": [],
+            "onentry": [
+              {
+                "kind": "log",
+                "label": "Auth",
+                "expr": "'verifying credentials'"
+              }
+            ]
+          },
+          {
+            "id": "Authenticated",
+            "transitions": [
+              {
+                "event": "LOGOUT",
+                "target": "Idle",
+                "executable": [],
+                "metadata": [
+                  {
+                    "tag": "transitionId",
+                    "attributes": {},
+                    "text": "Authenticated:Idle"
+                  }
+                ],
+                "id": "Authenticated:Idle"
+              }
+            ],
+            "states": [],
+            "parallels": [],
+            "finals": [],
+            "history": [
+              {
+                "id": "loginHistory",
+                "type": "shallow"
+              }
+            ],
+            "invoke": [],
+            "metadata": []
+          },
+          {
+            "id": "LockedOut",
+            "transitions": [
+              {
+                "event": "UNLOCK",
+                "target": "loginHistory",
+                "executable": [],
+                "metadata": [
+                  {
+                    "tag": "transitionId",
+                    "attributes": {},
+                    "text": "LockedOut:loginHistory"
+                  }
+                ],
+                "id": "LockedOut:loginHistory"
+              }
+            ],
+            "states": [],
+            "parallels": [],
+            "finals": [],
+            "history": [],
+            "invoke": [],
+            "metadata": [],
+            "onexit": [
+              {
+                "kind": "log",
+                "label": "Auth",
+                "expr": "'unlocking account'"
+              }
+            ]
+          }
+        ],
+        "parallels": [],
+        "finals": [],
+        "history": [],
+        "invoke": [],
+        "metadata": [],
+        "initialBlock": {
+          "transition": [
+            {
+              "target": "EnterCredentials",
+              "executable": [],
+              "metadata": [
+                {
+                  "tag": "transitionId",
+                  "attributes": {},
+                  "text": "Login:EnterCredentials"
+                }
+              ],
+              "id": "Login:EnterCredentials"
+            }
+          ]
+        }
+      }
+    ],
+    "parallels": [],
+    "finals": [],
+    "scripts": [],
+    "datamodelChildren": [
+      {
+        "id": "username",
+        "expr": "''"
+      },
+      {
+        "id": "password",
+        "expr": "''"
+      },
+      {
+        "id": "failedAttempts",
+        "expr": "0"
+      },
+      {
+        "id": "maxAttempts",
+        "expr": "3"
+      },
+      {
+        "id": "isAuthenticated",
+        "expr": "false"
+      }
+    ],
+    "metadata": []
+  }
+}

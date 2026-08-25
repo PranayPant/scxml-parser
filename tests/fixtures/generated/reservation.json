@@ -1,0 +1,320 @@
+{
+  "scxml": {
+    "name": "Reservation",
+    "xmlns": "http://www.w3.org/2005/07/scxml",
+    "version": "1.0",
+    "datamodel": "ecmascript",
+    "initial": "Search",
+    "states": [
+      {
+        "id": "Search",
+        "transitions": [
+          {
+            "event": "SUBMIT_SEARCH",
+            "cond": "partySize >= 1",
+            "target": "SelectSlot",
+            "executable": [
+              {
+                "kind": "assign",
+                "location": "searchCriteria",
+                "expr": "searchCriteria"
+              }
+            ],
+            "metadata": [
+              {
+                "tag": "transitionId",
+                "attributes": {},
+                "text": "Search:SelectSlot"
+              }
+            ],
+            "id": "Search:SelectSlot"
+          },
+          {
+            "event": "CANCEL",
+            "target": "Cancelled",
+            "executable": [],
+            "metadata": [
+              {
+                "tag": "transitionId",
+                "attributes": {},
+                "text": "Search:Cancelled"
+              }
+            ],
+            "id": "Search:Cancelled"
+          }
+        ],
+        "states": [],
+        "parallels": [],
+        "finals": [],
+        "history": [],
+        "invoke": [],
+        "metadata": [],
+        "onentry": [
+          {
+            "kind": "log",
+            "label": "Reservation",
+            "expr": "'searching available slots'"
+          }
+        ]
+      },
+      {
+        "id": "SelectSlot",
+        "transitions": [
+          {
+            "event": "CHOOSE_SLOT",
+            "target": "ConfirmDetails",
+            "executable": [
+              {
+                "kind": "assign",
+                "location": "selectedSlot",
+                "expr": "event.data"
+              }
+            ],
+            "metadata": [
+              {
+                "tag": "transitionId",
+                "attributes": {},
+                "text": "SelectSlot:ConfirmDetails"
+              }
+            ],
+            "id": "SelectSlot:ConfirmDetails"
+          },
+          {
+            "event": "BACK",
+            "target": "Search",
+            "executable": [],
+            "metadata": [
+              {
+                "tag": "transitionId",
+                "attributes": {},
+                "text": "SelectSlot:Search"
+              }
+            ],
+            "id": "SelectSlot:Search"
+          }
+        ],
+        "states": [],
+        "parallels": [],
+        "finals": [],
+        "history": [],
+        "invoke": [],
+        "metadata": []
+      },
+      {
+        "id": "ConfirmDetails",
+        "transitions": [
+          {
+            "event": "EDIT_DETAILS",
+            "target": "SelectSlot",
+            "executable": [],
+            "metadata": [
+              {
+                "tag": "transitionId",
+                "attributes": {},
+                "text": "ConfirmDetails:SelectSlot"
+              }
+            ],
+            "id": "ConfirmDetails:SelectSlot"
+          },
+          {
+            "event": "CONFIRM",
+            "cond": "selectedSlot != null",
+            "target": "ProcessingPayment",
+            "executable": [],
+            "metadata": [
+              {
+                "tag": "transitionId",
+                "attributes": {},
+                "text": "ConfirmDetails:ProcessingPayment"
+              }
+            ],
+            "id": "ConfirmDetails:ProcessingPayment"
+          }
+        ],
+        "states": [],
+        "parallels": [],
+        "finals": [],
+        "history": [],
+        "invoke": [],
+        "metadata": [],
+        "onentry": [
+          {
+            "kind": "log",
+            "label": "Reservation",
+            "expr": "'confirming party of ' + partySize"
+          }
+        ]
+      },
+      {
+        "id": "ProcessingPayment",
+        "transitions": [],
+        "states": [
+          {
+            "id": "AwaitingAuth",
+            "transitions": [
+              {
+                "event": "AUTH_OK",
+                "target": "Authorized",
+                "executable": [],
+                "metadata": [
+                  {
+                    "tag": "transitionId",
+                    "attributes": {},
+                    "text": "AwaitingAuth:Authorized"
+                  }
+                ],
+                "id": "AwaitingAuth:Authorized"
+              },
+              {
+                "event": "AUTH_FAIL",
+                "target": "PaymentFailed",
+                "executable": [],
+                "metadata": [
+                  {
+                    "tag": "transitionId",
+                    "attributes": {},
+                    "text": "AwaitingAuth:PaymentFailed"
+                  }
+                ],
+                "id": "AwaitingAuth:PaymentFailed"
+              }
+            ],
+            "states": [],
+            "parallels": [],
+            "finals": [],
+            "history": [],
+            "invoke": [],
+            "metadata": []
+          },
+          {
+            "id": "Authorized",
+            "transitions": [
+              {
+                "event": "DONE",
+                "target": "BookingConfirmed",
+                "executable": [],
+                "metadata": [
+                  {
+                    "tag": "transitionId",
+                    "attributes": {},
+                    "text": "Authorized:BookingConfirmed"
+                  }
+                ],
+                "id": "Authorized:BookingConfirmed"
+              }
+            ],
+            "states": [],
+            "parallels": [],
+            "finals": [],
+            "history": [],
+            "invoke": [],
+            "metadata": [],
+            "onentry": [
+              {
+                "kind": "assign",
+                "location": "confirmationCode",
+                "expr": "'RES-' + Date.now()"
+              }
+            ]
+          },
+          {
+            "id": "PaymentFailed",
+            "transitions": [
+              {
+                "event": "RETRY_PAYMENT",
+                "target": "AwaitingAuth",
+                "executable": [],
+                "metadata": [
+                  {
+                    "tag": "transitionId",
+                    "attributes": {},
+                    "text": "PaymentFailed:AwaitingAuth"
+                  }
+                ],
+                "id": "PaymentFailed:AwaitingAuth"
+              },
+              {
+                "event": "CANCEL",
+                "target": "Cancelled",
+                "executable": [],
+                "metadata": [
+                  {
+                    "tag": "transitionId",
+                    "attributes": {},
+                    "text": "PaymentFailed:Cancelled"
+                  }
+                ],
+                "id": "PaymentFailed:Cancelled"
+              }
+            ],
+            "states": [],
+            "parallels": [],
+            "finals": [],
+            "history": [],
+            "invoke": [],
+            "metadata": []
+          }
+        ],
+        "parallels": [],
+        "finals": [],
+        "history": [],
+        "invoke": [],
+        "metadata": [],
+        "initialBlock": {
+          "transition": [
+            {
+              "target": "AwaitingAuth",
+              "executable": [],
+              "metadata": [
+                {
+                  "tag": "transitionId",
+                  "attributes": {},
+                  "text": "ProcessingPayment:AwaitingAuth"
+                }
+              ],
+              "id": "ProcessingPayment:AwaitingAuth"
+            }
+          ]
+        }
+      }
+    ],
+    "parallels": [],
+    "finals": [
+      {
+        "id": "BookingConfirmed",
+        "metadata": [],
+        "onentry": [
+          {
+            "kind": "log",
+            "label": "Reservation",
+            "expr": "'confirmed ' + confirmationCode"
+          }
+        ]
+      },
+      {
+        "id": "Cancelled",
+        "metadata": []
+      }
+    ],
+    "scripts": [],
+    "datamodelChildren": [
+      {
+        "id": "searchCriteria",
+        "expr": "{}"
+      },
+      {
+        "id": "selectedSlot",
+        "expr": "null"
+      },
+      {
+        "id": "partySize",
+        "expr": "2"
+      },
+      {
+        "id": "confirmationCode",
+        "expr": "''"
+      }
+    ],
+    "metadata": []
+  }
+}

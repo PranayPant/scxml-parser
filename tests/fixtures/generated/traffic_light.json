@@ -1,0 +1,119 @@
+{
+  "scxml": {
+    "name": "traffic_light",
+    "xmlns": "http://www.w3.org/2005/07/scxml",
+    "version": "1.0",
+    "datamodel": "ecmascript",
+    "initial": "red",
+    "states": [
+      {
+        "id": "red",
+        "transitions": [
+          {
+            "event": "next",
+            "target": "green",
+            "executable": [
+              {
+                "kind": "raise",
+                "event": "tick"
+              }
+            ],
+            "metadata": [
+              {
+                "tag": "transitionId",
+                "attributes": {},
+                "text": "red:green"
+              }
+            ],
+            "id": "red:green"
+          }
+        ],
+        "states": [],
+        "parallels": [],
+        "finals": [],
+        "history": [],
+        "invoke": [],
+        "metadata": [],
+        "onentry": [
+          {
+            "kind": "assign",
+            "location": "data.color",
+            "expr": "'red'"
+          }
+        ]
+      },
+      {
+        "id": "green",
+        "transitions": [
+          {
+            "event": "next",
+            "target": "yellow",
+            "executable": [],
+            "metadata": [
+              {
+                "tag": "transitionId",
+                "attributes": {},
+                "text": "green:yellow"
+              }
+            ],
+            "id": "green:yellow"
+          }
+        ],
+        "states": [],
+        "parallels": [],
+        "finals": [],
+        "history": [],
+        "invoke": [],
+        "metadata": [],
+        "onentry": [
+          {
+            "kind": "assign",
+            "location": "data.color",
+            "expr": "'green'"
+          }
+        ]
+      },
+      {
+        "id": "yellow",
+        "transitions": [
+          {
+            "event": "next",
+            "target": "red",
+            "executable": [],
+            "metadata": [
+              {
+                "tag": "transitionId",
+                "attributes": {},
+                "text": "yellow:red"
+              }
+            ],
+            "id": "yellow:red"
+          }
+        ],
+        "states": [],
+        "parallels": [],
+        "finals": [],
+        "history": [],
+        "invoke": [],
+        "metadata": [],
+        "onentry": [
+          {
+            "kind": "assign",
+            "location": "data.color",
+            "expr": "'yellow'"
+          }
+        ]
+      }
+    ],
+    "parallels": [],
+    "finals": [],
+    "scripts": [],
+    "datamodelChildren": [
+      {
+        "id": "color",
+        "expr": "'red'"
+      }
+    ],
+    "metadata": []
+  }
+}
