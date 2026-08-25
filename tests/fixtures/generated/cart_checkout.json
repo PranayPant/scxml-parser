@@ -1,0 +1,242 @@
+{
+  "scxml": {
+    "name": "CartCheckout",
+    "xmlns": "http://www.w3.org/2005/07/scxml",
+    "version": "1.0",
+    "datamodel": "ecmascript",
+    "initial": "Checkout",
+    "states": [
+      {
+        "id": "OrderPlaced",
+        "transitions": [
+          {
+            "event": "CONFIRM",
+            "target": "Done",
+            "executable": [],
+            "metadata": [
+              {
+                "tag": "transitionId",
+                "attributes": {},
+                "text": "OrderPlaced:Done"
+              }
+            ],
+            "id": "OrderPlaced:Done"
+          }
+        ],
+        "states": [],
+        "parallels": [],
+        "finals": [],
+        "history": [],
+        "invoke": [],
+        "metadata": [],
+        "onentry": [
+          {
+            "kind": "log",
+            "label": "Checkout",
+            "expr": "'order placed: $' + cartTotal"
+          }
+        ]
+      }
+    ],
+    "parallels": [
+      {
+        "id": "Checkout",
+        "transitions": [
+          {
+            "event": "CheckoutReady",
+            "target": "OrderPlaced",
+            "executable": [
+              {
+                "kind": "assign",
+                "location": "cartTotal",
+                "expr": "cartTotal"
+              }
+            ],
+            "metadata": [
+              {
+                "tag": "transitionId",
+                "attributes": {},
+                "text": "Checkout:OrderPlaced"
+              }
+            ],
+            "id": "Checkout:OrderPlaced"
+          }
+        ],
+        "states": [
+          {
+            "id": "ReviewCart",
+            "transitions": [
+              {
+                "event": "UPDATE_QTY",
+                "target": "ReviewCart",
+                "executable": [
+                  {
+                    "kind": "assign",
+                    "location": "cartSubtotal",
+                    "expr": "cartSubtotal + 10"
+                  }
+                ],
+                "metadata": [
+                  {
+                    "tag": "transitionId",
+                    "attributes": {},
+                    "text": "ReviewCart:ReviewCart"
+                  }
+                ],
+                "id": "ReviewCart:ReviewCart"
+              },
+              {
+                "event": "APPLY_COUPON",
+                "cond": "cartSubtotal > 50",
+                "target": "ReviewCart",
+                "executable": [
+                  {
+                    "kind": "assign",
+                    "location": "cartDiscount",
+                    "expr": "cartSubtotal * 0.1"
+                  }
+                ],
+                "metadata": [
+                  {
+                    "tag": "transitionId",
+                    "attributes": {},
+                    "text": "ReviewCart:ReviewCart_1"
+                  }
+                ],
+                "id": "ReviewCart:ReviewCart_1"
+              },
+              {
+                "event": "SubtotalUpdated",
+                "target": "ReviewCart",
+                "executable": [
+                  {
+                    "kind": "assign",
+                    "location": "cartTotal",
+                    "expr": "cartSubtotal - cartDiscount"
+                  }
+                ],
+                "metadata": [
+                  {
+                    "tag": "transitionId",
+                    "attributes": {},
+                    "text": "ReviewCart:ReviewCart_2"
+                  }
+                ],
+                "id": "ReviewCart:ReviewCart_2"
+              }
+            ],
+            "states": [],
+            "parallels": [],
+            "finals": [],
+            "history": [],
+            "invoke": [],
+            "metadata": []
+          },
+          {
+            "id": "SelectPayment",
+            "transitions": [
+              {
+                "event": "CHOOSE_CARD",
+                "target": "SelectPayment",
+                "executable": [
+                  {
+                    "kind": "assign",
+                    "location": "paymentMethod",
+                    "expr": "'card'"
+                  }
+                ],
+                "metadata": [
+                  {
+                    "tag": "transitionId",
+                    "attributes": {},
+                    "text": "SelectPayment:SelectPayment"
+                  }
+                ],
+                "id": "SelectPayment:SelectPayment"
+              },
+              {
+                "event": "CHOOSE_PAYPAL",
+                "target": "SelectPayment",
+                "executable": [
+                  {
+                    "kind": "assign",
+                    "location": "paymentMethod",
+                    "expr": "'paypal'"
+                  }
+                ],
+                "metadata": [
+                  {
+                    "tag": "transitionId",
+                    "attributes": {},
+                    "text": "SelectPayment:SelectPayment_1"
+                  }
+                ],
+                "id": "SelectPayment:SelectPayment_1"
+              },
+              {
+                "event": "CHOOSE_GUEST",
+                "target": "SelectPayment",
+                "executable": [
+                  {
+                    "kind": "assign",
+                    "location": "isGuestCheckout",
+                    "expr": "true"
+                  }
+                ],
+                "metadata": [
+                  {
+                    "tag": "transitionId",
+                    "attributes": {},
+                    "text": "SelectPayment:SelectPayment_2"
+                  }
+                ],
+                "id": "SelectPayment:SelectPayment_2"
+              }
+            ],
+            "states": [],
+            "parallels": [],
+            "finals": [],
+            "history": [],
+            "invoke": [],
+            "metadata": []
+          }
+        ],
+        "parallels": [],
+        "finals": [],
+        "history": [],
+        "invoke": [],
+        "metadata": []
+      }
+    ],
+    "finals": [
+      {
+        "id": "Done",
+        "metadata": []
+      }
+    ],
+    "scripts": [],
+    "datamodelChildren": [
+      {
+        "id": "cartSubtotal",
+        "expr": "0"
+      },
+      {
+        "id": "cartDiscount",
+        "expr": "0"
+      },
+      {
+        "id": "cartTotal",
+        "expr": "0"
+      },
+      {
+        "id": "paymentMethod",
+        "expr": "''"
+      },
+      {
+        "id": "isGuestCheckout",
+        "expr": "false"
+      }
+    ],
+    "metadata": []
+  }
+}

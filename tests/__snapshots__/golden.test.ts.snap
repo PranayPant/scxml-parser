@@ -1,0 +1,1107 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`golden AST snapshots (examples/scxml corpus) > auth-login > matches the golden AST snapshot 1`] = `
+{
+  "scxml": {
+    "binding": undefined,
+    "datamodel": "ecmascript",
+    "datamodelChildren": [
+      {
+        "confType": undefined,
+        "expr": "''",
+        "id": "username",
+        "src": undefined,
+      },
+      {
+        "confType": undefined,
+        "expr": "''",
+        "id": "password",
+        "src": undefined,
+      },
+      {
+        "confType": undefined,
+        "expr": "0",
+        "id": "failedAttempts",
+        "src": undefined,
+      },
+      {
+        "confType": undefined,
+        "expr": "3",
+        "id": "maxAttempts",
+        "src": undefined,
+      },
+      {
+        "confType": undefined,
+        "expr": "false",
+        "id": "isAuthenticated",
+        "src": undefined,
+      },
+    ],
+    "finals": [],
+    "initial": "Idle",
+    "metadata": [],
+    "name": "AuthFlow",
+    "parallels": [],
+    "scripts": [],
+    "states": [
+      {
+        "finals": [],
+        "history": [],
+        "id": "Idle",
+        "initial": undefined,
+        "invoke": [],
+        "metadata": [],
+        "parallels": [],
+        "states": [],
+        "transitions": [
+          {
+            "cond": undefined,
+            "event": "START_LOGIN",
+            "executable": [],
+            "id": "Idle:Login",
+            "metadata": [
+              {
+                "attributes": {},
+                "tag": "transitionId",
+                "text": "Idle:Login",
+              },
+            ],
+            "target": "Login",
+            "type": undefined,
+          },
+        ],
+        "type": undefined,
+      },
+      {
+        "finals": [],
+        "history": [],
+        "id": "Login",
+        "initial": undefined,
+        "initialBlock": {
+          "transition": [
+            {
+              "cond": undefined,
+              "event": undefined,
+              "executable": [],
+              "id": "Login:EnterCredentials",
+              "metadata": [
+                {
+                  "attributes": {},
+                  "tag": "transitionId",
+                  "text": "Login:EnterCredentials",
+                },
+              ],
+              "target": "EnterCredentials",
+              "type": undefined,
+            },
+          ],
+        },
+        "invoke": [],
+        "metadata": [],
+        "parallels": [],
+        "states": [
+          {
+            "finals": [],
+            "history": [],
+            "id": "EnterCredentials",
+            "initial": undefined,
+            "invoke": [],
+            "metadata": [],
+            "onentry": [
+              {
+                "expr": "'prompting for credentials'",
+                "kind": "log",
+                "label": "Auth",
+              },
+            ],
+            "parallels": [],
+            "states": [],
+            "transitions": [
+              {
+                "cond": undefined,
+                "event": "CREDENTIALS_ENTERED",
+                "executable": [
+                  {
+                    "expr": "event.user",
+                    "kind": "assign",
+                    "location": "username",
+                  },
+                  {
+                    "expr": "event.pass",
+                    "kind": "assign",
+                    "location": "password",
+                  },
+                ],
+                "id": "EnterCredentials:Authenticating",
+                "metadata": [
+                  {
+                    "attributes": {},
+                    "tag": "transitionId",
+                    "text": "EnterCredentials:Authenticating",
+                  },
+                ],
+                "target": "Authenticating",
+                "type": undefined,
+              },
+              {
+                "cond": undefined,
+                "event": "CANCEL",
+                "executable": [],
+                "id": "EnterCredentials:Idle",
+                "metadata": [
+                  {
+                    "attributes": {},
+                    "tag": "transitionId",
+                    "text": "EnterCredentials:Idle",
+                  },
+                ],
+                "target": "Idle",
+                "type": undefined,
+              },
+            ],
+            "type": undefined,
+          },
+          {
+            "finals": [],
+            "history": [],
+            "id": "Authenticating",
+            "initial": undefined,
+            "invoke": [],
+            "metadata": [],
+            "onentry": [
+              {
+                "expr": "'verifying credentials'",
+                "kind": "log",
+                "label": "Auth",
+              },
+            ],
+            "parallels": [],
+            "states": [],
+            "transitions": [
+              {
+                "cond": "failedAttempts < maxAttempts",
+                "event": "AUTH_SUCCESS",
+                "executable": [
+                  {
+                    "expr": "true",
+                    "kind": "assign",
+                    "location": "isAuthenticated",
+                  },
+                ],
+                "id": "Authenticating:Authenticated",
+                "metadata": [
+                  {
+                    "attributes": {},
+                    "tag": "transitionId",
+                    "text": "Authenticating:Authenticated",
+                  },
+                ],
+                "target": "Authenticated",
+                "type": undefined,
+              },
+              {
+                "cond": "failedAttempts + 1 < maxAttempts",
+                "event": "AUTH_FAILURE",
+                "executable": [
+                  {
+                    "expr": "failedAttempts + 1",
+                    "kind": "assign",
+                    "location": "failedAttempts",
+                  },
+                ],
+                "id": "Authenticating:EnterCredentials",
+                "metadata": [
+                  {
+                    "attributes": {},
+                    "tag": "transitionId",
+                    "text": "Authenticating:EnterCredentials",
+                  },
+                ],
+                "target": "EnterCredentials",
+                "type": undefined,
+              },
+              {
+                "cond": "failedAttempts + 1 >= maxAttempts",
+                "event": "AUTH_FAILURE",
+                "executable": [
+                  {
+                    "expr": "failedAttempts + 1",
+                    "kind": "assign",
+                    "location": "failedAttempts",
+                  },
+                ],
+                "id": "Authenticating:LockedOut",
+                "metadata": [
+                  {
+                    "attributes": {},
+                    "tag": "transitionId",
+                    "text": "Authenticating:LockedOut",
+                  },
+                ],
+                "target": "LockedOut",
+                "type": undefined,
+              },
+            ],
+            "type": undefined,
+          },
+          {
+            "finals": [],
+            "history": [
+              {
+                "id": "loginHistory",
+                "type": "shallow",
+              },
+            ],
+            "id": "Authenticated",
+            "initial": undefined,
+            "invoke": [],
+            "metadata": [],
+            "parallels": [],
+            "states": [],
+            "transitions": [
+              {
+                "cond": undefined,
+                "event": "LOGOUT",
+                "executable": [],
+                "id": "Authenticated:Idle",
+                "metadata": [
+                  {
+                    "attributes": {},
+                    "tag": "transitionId",
+                    "text": "Authenticated:Idle",
+                  },
+                ],
+                "target": "Idle",
+                "type": undefined,
+              },
+            ],
+            "type": undefined,
+          },
+          {
+            "finals": [],
+            "history": [],
+            "id": "LockedOut",
+            "initial": undefined,
+            "invoke": [],
+            "metadata": [],
+            "onexit": [
+              {
+                "expr": "'unlocking account'",
+                "kind": "log",
+                "label": "Auth",
+              },
+            ],
+            "parallels": [],
+            "states": [],
+            "transitions": [
+              {
+                "cond": undefined,
+                "event": "UNLOCK",
+                "executable": [],
+                "id": "LockedOut:loginHistory",
+                "metadata": [
+                  {
+                    "attributes": {},
+                    "tag": "transitionId",
+                    "text": "LockedOut:loginHistory",
+                  },
+                ],
+                "target": "loginHistory",
+                "type": undefined,
+              },
+            ],
+            "type": undefined,
+          },
+        ],
+        "transitions": [],
+        "type": undefined,
+      },
+    ],
+    "version": "1.0",
+    "xmlns": "http://www.w3.org/2005/07/scxml",
+  },
+}
+`;
+
+exports[`golden AST snapshots (examples/scxml corpus) > cart-checkout > matches the golden AST snapshot 1`] = `
+{
+  "scxml": {
+    "binding": undefined,
+    "datamodel": "ecmascript",
+    "datamodelChildren": [
+      {
+        "confType": undefined,
+        "expr": "0",
+        "id": "cartSubtotal",
+        "src": undefined,
+      },
+      {
+        "confType": undefined,
+        "expr": "0",
+        "id": "cartDiscount",
+        "src": undefined,
+      },
+      {
+        "confType": undefined,
+        "expr": "0",
+        "id": "cartTotal",
+        "src": undefined,
+      },
+      {
+        "confType": undefined,
+        "expr": "''",
+        "id": "paymentMethod",
+        "src": undefined,
+      },
+      {
+        "confType": undefined,
+        "expr": "false",
+        "id": "isGuestCheckout",
+        "src": undefined,
+      },
+    ],
+    "finals": [
+      {
+        "id": "Done",
+        "metadata": [],
+      },
+    ],
+    "initial": "Checkout",
+    "metadata": [],
+    "name": "CartCheckout",
+    "parallels": [
+      {
+        "finals": [],
+        "history": [],
+        "id": "Checkout",
+        "invoke": [],
+        "metadata": [],
+        "parallels": [],
+        "states": [
+          {
+            "finals": [],
+            "history": [],
+            "id": "ReviewCart",
+            "initial": undefined,
+            "invoke": [],
+            "metadata": [],
+            "parallels": [],
+            "states": [],
+            "transitions": [
+              {
+                "cond": undefined,
+                "event": "UPDATE_QTY",
+                "executable": [
+                  {
+                    "expr": "cartSubtotal + 10",
+                    "kind": "assign",
+                    "location": "cartSubtotal",
+                  },
+                ],
+                "id": "ReviewCart:ReviewCart",
+                "metadata": [
+                  {
+                    "attributes": {},
+                    "tag": "transitionId",
+                    "text": "ReviewCart:ReviewCart",
+                  },
+                ],
+                "target": "ReviewCart",
+                "type": undefined,
+              },
+              {
+                "cond": "cartSubtotal > 50",
+                "event": "APPLY_COUPON",
+                "executable": [
+                  {
+                    "expr": "cartSubtotal * 0.1",
+                    "kind": "assign",
+                    "location": "cartDiscount",
+                  },
+                ],
+                "id": "ReviewCart:ReviewCart_1",
+                "metadata": [
+                  {
+                    "attributes": {},
+                    "tag": "transitionId",
+                    "text": "ReviewCart:ReviewCart_1",
+                  },
+                ],
+                "target": "ReviewCart",
+                "type": undefined,
+              },
+              {
+                "cond": undefined,
+                "event": "SubtotalUpdated",
+                "executable": [
+                  {
+                    "expr": "cartSubtotal - cartDiscount",
+                    "kind": "assign",
+                    "location": "cartTotal",
+                  },
+                ],
+                "id": "ReviewCart:ReviewCart_2",
+                "metadata": [
+                  {
+                    "attributes": {},
+                    "tag": "transitionId",
+                    "text": "ReviewCart:ReviewCart_2",
+                  },
+                ],
+                "target": "ReviewCart",
+                "type": undefined,
+              },
+            ],
+            "type": undefined,
+          },
+          {
+            "finals": [],
+            "history": [],
+            "id": "SelectPayment",
+            "initial": undefined,
+            "invoke": [],
+            "metadata": [],
+            "parallels": [],
+            "states": [],
+            "transitions": [
+              {
+                "cond": undefined,
+                "event": "CHOOSE_CARD",
+                "executable": [
+                  {
+                    "expr": "'card'",
+                    "kind": "assign",
+                    "location": "paymentMethod",
+                  },
+                ],
+                "id": "SelectPayment:SelectPayment",
+                "metadata": [
+                  {
+                    "attributes": {},
+                    "tag": "transitionId",
+                    "text": "SelectPayment:SelectPayment",
+                  },
+                ],
+                "target": "SelectPayment",
+                "type": undefined,
+              },
+              {
+                "cond": undefined,
+                "event": "CHOOSE_PAYPAL",
+                "executable": [
+                  {
+                    "expr": "'paypal'",
+                    "kind": "assign",
+                    "location": "paymentMethod",
+                  },
+                ],
+                "id": "SelectPayment:SelectPayment_1",
+                "metadata": [
+                  {
+                    "attributes": {},
+                    "tag": "transitionId",
+                    "text": "SelectPayment:SelectPayment_1",
+                  },
+                ],
+                "target": "SelectPayment",
+                "type": undefined,
+              },
+              {
+                "cond": undefined,
+                "event": "CHOOSE_GUEST",
+                "executable": [
+                  {
+                    "expr": "true",
+                    "kind": "assign",
+                    "location": "isGuestCheckout",
+                  },
+                ],
+                "id": "SelectPayment:SelectPayment_2",
+                "metadata": [
+                  {
+                    "attributes": {},
+                    "tag": "transitionId",
+                    "text": "SelectPayment:SelectPayment_2",
+                  },
+                ],
+                "target": "SelectPayment",
+                "type": undefined,
+              },
+            ],
+            "type": undefined,
+          },
+        ],
+        "transitions": [
+          {
+            "cond": undefined,
+            "event": "CheckoutReady",
+            "executable": [
+              {
+                "expr": "cartTotal",
+                "kind": "assign",
+                "location": "cartTotal",
+              },
+            ],
+            "id": "Checkout:OrderPlaced",
+            "metadata": [
+              {
+                "attributes": {},
+                "tag": "transitionId",
+                "text": "Checkout:OrderPlaced",
+              },
+            ],
+            "target": "OrderPlaced",
+            "type": undefined,
+          },
+        ],
+      },
+    ],
+    "scripts": [],
+    "states": [
+      {
+        "finals": [],
+        "history": [],
+        "id": "OrderPlaced",
+        "initial": undefined,
+        "invoke": [],
+        "metadata": [],
+        "onentry": [
+          {
+            "expr": "'order placed: $' + cartTotal",
+            "kind": "log",
+            "label": "Checkout",
+          },
+        ],
+        "parallels": [],
+        "states": [],
+        "transitions": [
+          {
+            "cond": undefined,
+            "event": "CONFIRM",
+            "executable": [],
+            "id": "OrderPlaced:Done",
+            "metadata": [
+              {
+                "attributes": {},
+                "tag": "transitionId",
+                "text": "OrderPlaced:Done",
+              },
+            ],
+            "target": "Done",
+            "type": undefined,
+          },
+        ],
+        "type": undefined,
+      },
+    ],
+    "version": "1.0",
+    "xmlns": "http://www.w3.org/2005/07/scxml",
+  },
+}
+`;
+
+exports[`golden AST snapshots (examples/scxml corpus) > reservation > matches the golden AST snapshot 1`] = `
+{
+  "scxml": {
+    "binding": undefined,
+    "datamodel": "ecmascript",
+    "datamodelChildren": [
+      {
+        "confType": undefined,
+        "expr": "{}",
+        "id": "searchCriteria",
+        "src": undefined,
+      },
+      {
+        "confType": undefined,
+        "expr": "null",
+        "id": "selectedSlot",
+        "src": undefined,
+      },
+      {
+        "confType": undefined,
+        "expr": "2",
+        "id": "partySize",
+        "src": undefined,
+      },
+      {
+        "confType": undefined,
+        "expr": "''",
+        "id": "confirmationCode",
+        "src": undefined,
+      },
+    ],
+    "finals": [
+      {
+        "id": "BookingConfirmed",
+        "metadata": [],
+        "onentry": [
+          {
+            "expr": "'confirmed ' + confirmationCode",
+            "kind": "log",
+            "label": "Reservation",
+          },
+        ],
+      },
+      {
+        "id": "Cancelled",
+        "metadata": [],
+      },
+    ],
+    "initial": "Search",
+    "metadata": [],
+    "name": "Reservation",
+    "parallels": [],
+    "scripts": [],
+    "states": [
+      {
+        "finals": [],
+        "history": [],
+        "id": "Search",
+        "initial": undefined,
+        "invoke": [],
+        "metadata": [],
+        "onentry": [
+          {
+            "expr": "'searching available slots'",
+            "kind": "log",
+            "label": "Reservation",
+          },
+        ],
+        "parallels": [],
+        "states": [],
+        "transitions": [
+          {
+            "cond": "partySize >= 1",
+            "event": "SUBMIT_SEARCH",
+            "executable": [
+              {
+                "expr": "searchCriteria",
+                "kind": "assign",
+                "location": "searchCriteria",
+              },
+            ],
+            "id": "Search:SelectSlot",
+            "metadata": [
+              {
+                "attributes": {},
+                "tag": "transitionId",
+                "text": "Search:SelectSlot",
+              },
+            ],
+            "target": "SelectSlot",
+            "type": undefined,
+          },
+          {
+            "cond": undefined,
+            "event": "CANCEL",
+            "executable": [],
+            "id": "Search:Cancelled",
+            "metadata": [
+              {
+                "attributes": {},
+                "tag": "transitionId",
+                "text": "Search:Cancelled",
+              },
+            ],
+            "target": "Cancelled",
+            "type": undefined,
+          },
+        ],
+        "type": undefined,
+      },
+      {
+        "finals": [],
+        "history": [],
+        "id": "SelectSlot",
+        "initial": undefined,
+        "invoke": [],
+        "metadata": [],
+        "parallels": [],
+        "states": [],
+        "transitions": [
+          {
+            "cond": undefined,
+            "event": "CHOOSE_SLOT",
+            "executable": [
+              {
+                "expr": "event.data",
+                "kind": "assign",
+                "location": "selectedSlot",
+              },
+            ],
+            "id": "SelectSlot:ConfirmDetails",
+            "metadata": [
+              {
+                "attributes": {},
+                "tag": "transitionId",
+                "text": "SelectSlot:ConfirmDetails",
+              },
+            ],
+            "target": "ConfirmDetails",
+            "type": undefined,
+          },
+          {
+            "cond": undefined,
+            "event": "BACK",
+            "executable": [],
+            "id": "SelectSlot:Search",
+            "metadata": [
+              {
+                "attributes": {},
+                "tag": "transitionId",
+                "text": "SelectSlot:Search",
+              },
+            ],
+            "target": "Search",
+            "type": undefined,
+          },
+        ],
+        "type": undefined,
+      },
+      {
+        "finals": [],
+        "history": [],
+        "id": "ConfirmDetails",
+        "initial": undefined,
+        "invoke": [],
+        "metadata": [],
+        "onentry": [
+          {
+            "expr": "'confirming party of ' + partySize",
+            "kind": "log",
+            "label": "Reservation",
+          },
+        ],
+        "parallels": [],
+        "states": [],
+        "transitions": [
+          {
+            "cond": undefined,
+            "event": "EDIT_DETAILS",
+            "executable": [],
+            "id": "ConfirmDetails:SelectSlot",
+            "metadata": [
+              {
+                "attributes": {},
+                "tag": "transitionId",
+                "text": "ConfirmDetails:SelectSlot",
+              },
+            ],
+            "target": "SelectSlot",
+            "type": undefined,
+          },
+          {
+            "cond": "selectedSlot != null",
+            "event": "CONFIRM",
+            "executable": [],
+            "id": "ConfirmDetails:ProcessingPayment",
+            "metadata": [
+              {
+                "attributes": {},
+                "tag": "transitionId",
+                "text": "ConfirmDetails:ProcessingPayment",
+              },
+            ],
+            "target": "ProcessingPayment",
+            "type": undefined,
+          },
+        ],
+        "type": undefined,
+      },
+      {
+        "finals": [],
+        "history": [],
+        "id": "ProcessingPayment",
+        "initial": undefined,
+        "initialBlock": {
+          "transition": [
+            {
+              "cond": undefined,
+              "event": undefined,
+              "executable": [],
+              "id": "ProcessingPayment:AwaitingAuth",
+              "metadata": [
+                {
+                  "attributes": {},
+                  "tag": "transitionId",
+                  "text": "ProcessingPayment:AwaitingAuth",
+                },
+              ],
+              "target": "AwaitingAuth",
+              "type": undefined,
+            },
+          ],
+        },
+        "invoke": [],
+        "metadata": [],
+        "parallels": [],
+        "states": [
+          {
+            "finals": [],
+            "history": [],
+            "id": "AwaitingAuth",
+            "initial": undefined,
+            "invoke": [],
+            "metadata": [],
+            "parallels": [],
+            "states": [],
+            "transitions": [
+              {
+                "cond": undefined,
+                "event": "AUTH_OK",
+                "executable": [],
+                "id": "AwaitingAuth:Authorized",
+                "metadata": [
+                  {
+                    "attributes": {},
+                    "tag": "transitionId",
+                    "text": "AwaitingAuth:Authorized",
+                  },
+                ],
+                "target": "Authorized",
+                "type": undefined,
+              },
+              {
+                "cond": undefined,
+                "event": "AUTH_FAIL",
+                "executable": [],
+                "id": "AwaitingAuth:PaymentFailed",
+                "metadata": [
+                  {
+                    "attributes": {},
+                    "tag": "transitionId",
+                    "text": "AwaitingAuth:PaymentFailed",
+                  },
+                ],
+                "target": "PaymentFailed",
+                "type": undefined,
+              },
+            ],
+            "type": undefined,
+          },
+          {
+            "finals": [],
+            "history": [],
+            "id": "Authorized",
+            "initial": undefined,
+            "invoke": [],
+            "metadata": [],
+            "onentry": [
+              {
+                "expr": "'RES-' + Date.now()",
+                "kind": "assign",
+                "location": "confirmationCode",
+              },
+            ],
+            "parallels": [],
+            "states": [],
+            "transitions": [
+              {
+                "cond": undefined,
+                "event": "DONE",
+                "executable": [],
+                "id": "Authorized:BookingConfirmed",
+                "metadata": [
+                  {
+                    "attributes": {},
+                    "tag": "transitionId",
+                    "text": "Authorized:BookingConfirmed",
+                  },
+                ],
+                "target": "BookingConfirmed",
+                "type": undefined,
+              },
+            ],
+            "type": undefined,
+          },
+          {
+            "finals": [],
+            "history": [],
+            "id": "PaymentFailed",
+            "initial": undefined,
+            "invoke": [],
+            "metadata": [],
+            "parallels": [],
+            "states": [],
+            "transitions": [
+              {
+                "cond": undefined,
+                "event": "RETRY_PAYMENT",
+                "executable": [],
+                "id": "PaymentFailed:AwaitingAuth",
+                "metadata": [
+                  {
+                    "attributes": {},
+                    "tag": "transitionId",
+                    "text": "PaymentFailed:AwaitingAuth",
+                  },
+                ],
+                "target": "AwaitingAuth",
+                "type": undefined,
+              },
+              {
+                "cond": undefined,
+                "event": "CANCEL",
+                "executable": [],
+                "id": "PaymentFailed:Cancelled",
+                "metadata": [
+                  {
+                    "attributes": {},
+                    "tag": "transitionId",
+                    "text": "PaymentFailed:Cancelled",
+                  },
+                ],
+                "target": "Cancelled",
+                "type": undefined,
+              },
+            ],
+            "type": undefined,
+          },
+        ],
+        "transitions": [],
+        "type": undefined,
+      },
+    ],
+    "version": "1.0",
+    "xmlns": "http://www.w3.org/2005/07/scxml",
+  },
+}
+`;
+
+exports[`golden AST snapshots (examples/scxml corpus) > traffic-light > matches the golden AST snapshot 1`] = `
+{
+  "scxml": {
+    "binding": undefined,
+    "datamodel": "ecmascript",
+    "datamodelChildren": [
+      {
+        "confType": undefined,
+        "expr": "'red'",
+        "id": "color",
+        "src": undefined,
+      },
+    ],
+    "finals": [],
+    "initial": "red",
+    "metadata": [],
+    "name": "traffic_light",
+    "parallels": [],
+    "scripts": [],
+    "states": [
+      {
+        "finals": [],
+        "history": [],
+        "id": "red",
+        "initial": undefined,
+        "invoke": [],
+        "metadata": [],
+        "onentry": [
+          {
+            "expr": "'red'",
+            "kind": "assign",
+            "location": "data.color",
+          },
+        ],
+        "parallels": [],
+        "states": [],
+        "transitions": [
+          {
+            "cond": undefined,
+            "event": "next",
+            "executable": [
+              {
+                "event": "tick",
+                "kind": "raise",
+              },
+            ],
+            "id": "red:green",
+            "metadata": [
+              {
+                "attributes": {},
+                "tag": "transitionId",
+                "text": "red:green",
+              },
+            ],
+            "target": "green",
+            "type": undefined,
+          },
+        ],
+        "type": undefined,
+      },
+      {
+        "finals": [],
+        "history": [],
+        "id": "green",
+        "initial": undefined,
+        "invoke": [],
+        "metadata": [],
+        "onentry": [
+          {
+            "expr": "'green'",
+            "kind": "assign",
+            "location": "data.color",
+          },
+        ],
+        "parallels": [],
+        "states": [],
+        "transitions": [
+          {
+            "cond": undefined,
+            "event": "next",
+            "executable": [],
+            "id": "green:yellow",
+            "metadata": [
+              {
+                "attributes": {},
+                "tag": "transitionId",
+                "text": "green:yellow",
+              },
+            ],
+            "target": "yellow",
+            "type": undefined,
+          },
+        ],
+        "type": undefined,
+      },
+      {
+        "finals": [],
+        "history": [],
+        "id": "yellow",
+        "initial": undefined,
+        "invoke": [],
+        "metadata": [],
+        "onentry": [
+          {
+            "expr": "'yellow'",
+            "kind": "assign",
+            "location": "data.color",
+          },
+        ],
+        "parallels": [],
+        "states": [],
+        "transitions": [
+          {
+            "cond": undefined,
+            "event": "next",
+            "executable": [],
+            "id": "yellow:red",
+            "metadata": [
+              {
+                "attributes": {},
+                "tag": "transitionId",
+                "text": "yellow:red",
+              },
+            ],
+            "target": "red",
+            "type": undefined,
+          },
+        ],
+        "type": undefined,
+      },
+    ],
+    "version": "1.0",
+    "xmlns": "http://www.w3.org/2005/07/scxml",
+  },
+}
+`;

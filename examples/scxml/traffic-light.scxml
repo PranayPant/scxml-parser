@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Classic traffic-light state machine. The canonical fixture used across the
+  orchestrator and server for cross-language AST round-trip testing:
+  `scxml-parser` parses this document, and the generated AST JSON is committed
+  as `test/fixtures/traffic_light.json` in both Elixir repos.
+
+  States rotate red -> green -> yellow on the `next` event.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       version="1.0"
+       datamodel="ecmascript"
+       initial="red"
+       name="traffic_light">
+
+  <datamodel>
+    <data id="color" expr="'red'" />
+  </datamodel>
+
+  <state id="red">
+    <onentry>
+      <assign location="data.color" expr="'red'" />
+    </onentry>
+    <transition id="red_to_green" event="next" target="green">
+      <raise event="tick" />
+    </transition>
+  </state>
+
+  <state id="green">
+    <onentry>
+      <assign location="data.color" expr="'green'" />
+    </onentry>
+    <transition id="green_to_yellow" event="next" target="yellow" />
+  </state>
+
+  <state id="yellow">
+    <onentry>
+      <assign location="data.color" expr="'yellow'" />
+    </onentry>
+    <transition id="yellow_to_red" event="next" target="red" />
+  </state>
+</scxml>

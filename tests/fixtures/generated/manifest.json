@@ -1,0 +1,22 @@
+{
+  "auth_login": {
+    "source": "examples/scxml/auth-login.scxml",
+    "hash": "0386a95af070304a89ad60602484d74b67f32b3c25b4a6d31f155967e3b7ef92",
+    "file": "auth_login.json"
+  },
+  "cart_checkout": {
+    "source": "examples/scxml/cart-checkout.scxml",
+    "hash": "d734235a67444cc4a0ce062625a1e43f0e38b08a690ae5510a9bfa016f8abfab",
+    "file": "cart_checkout.json"
+  },
+  "reservation": {
+    "source": "examples/scxml/reservation.scxml",
+    "hash": "b6c489dbed3c1f9370d614def32497e507530dbb331878e6af2d9395a021e2c7",
+    "file": "reservation.json"
+  },
+  "traffic_light": {
+    "source": "examples/scxml/traffic-light.scxml",
+    "hash": "c1dba0b3ed58fc23ce86783d9e4b9f070c4a9dbd7c89e083a8709ad1cd0809b1",
+    "file": "traffic_light.json"
+  }
+}
