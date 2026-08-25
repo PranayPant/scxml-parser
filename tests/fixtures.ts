@@ -10,7 +10,7 @@
  * each test) means the corpus stays the single source of truth and the suite
  * is robust to where Vitest runs from.
  */
-import { readFileSync, readdirSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
